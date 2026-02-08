@@ -1,0 +1,35 @@
+# Clippy Behavior Configuration
+# This file configures HOW clippy behaves (thresholds, allowed patterns, etc.)
+# For WHICH lints are enabled, see:
+#   - Cargo.toml [lints.clippy] section (project defaults)
+#   - CI runs with --all-targets -- -D warnings (strict enforcement)
+
+# Minimum supported Rust version
+# Since we use edition 2024, we require at least Rust 1.85
+msrv = "1.85"
+
+# Allow more arguments since we have functions with many parameters
+# (e.g., add_document in tantivy.rs has 11 arguments)
+too-many-arguments-threshold = 12
+
+# Don't lint private items - focus on public API
+check-private-items = false
+
+# Allow common patterns in tests
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-dbg-in-tests = true
+
+# Cognitive complexity threshold for functions
+# Default is 25, we use 30 to match our guideline of max 30 lines per function
+cognitive-complexity-threshold = 30
+
+# Warn on TODO/FIXME comments 
+warn-on-all-wildcard-imports = true
+
+# Maximum nesting level for blocks
+# TODO: Enable this after fixing existing violations
+# excessive-nesting-threshold = 4
+
+# Line length for documentation
+doc-valid-idents = ["MCP", "JSON", "AST", "API", "CLI", "HTTP", "HTTPS", "URL", "UTF-8", "XML", "YAML", "UUID", "URI", "TCP", "TLS", "SSL", "SSH", "HTML", "CSS", "CSV", "SQL", "PDF", "PNG", "JPG", "GIF", "SVG", "MP3", "MP4", "CPU", "GPU", "RAM", "ROM", "IDE", "CI", "CD", "CI/CD", "LLM", "AI", "ML", "DL", "NLP", "OCR", "SDK", "OAuth", "JWT", "CORS", "REST", "GraphQL", "gRPC", "WebSocket", "WebSockets", "WebAssembly", "WASM", "IoT", "IPv4", "IPv6", "DNS", "VPN", "CDN", "AWS", "GCP", "Azure", "Docker", "Kubernetes", "K8s", "VM", "VMs", "OS", "iOS", "macOS", "FreeBSD", "OpenBSD", "NetBSD"]

@@ -1,0 +1,203 @@
+# JavaScript Grammar Analysis
+
+*Generated: 2026-02-06 23:55:56 UTC*
+
+## Statistics
+- Total nodes in grammar JSON: 119
+- Nodes found in comprehensive.js: 142
+- Nodes handled by parser: 141
+- Symbol kinds extracted: 6
+
+## Successfully Handled Nodes
+These nodes are in examples and handled by parser:
+- !
+- !==
+- "
+- ${
+- '
+- (
+- )
+- *
+- ++
+- ,
+- .
+- ...
+- /
+- />
+- :
+- ;
+- <
+- </
+- =
+- ===
+- =>
+- >
+- >=
+- ?
+- [
+- ]
+- `
+- arguments
+- array
+- array_pattern
+- arrow_function
+- as
+- assignment_expression
+- assignment_pattern
+- async
+- await
+- await_expression
+- binary_expression
+- break
+- break_statement
+- call_expression
+- case
+- catch
+- catch_clause
+- class
+- class_body
+- class_declaration
+- class_heritage
+- comment
+- const
+- continue
+- continue_statement
+- default
+- export
+- export_clause
+- export_specifier
+- export_statement
+- expression_statement
+- extends
+- false
+- field_definition
+- for
+- for_in_statement
+- for_statement
+- formal_parameters
+- from
+- function
+- function_declaration
+- function_expression
+- generator_function_declaration
+- identifier
+- if
+- if_statement
+- import
+- import_clause
+- import_specifier
+- import_statement
+- jsx_attribute
+- jsx_closing_element
+- jsx_element
+- jsx_expression
+- jsx_opening_element
+- jsx_self_closing_element
+- jsx_text
+- let
+- lexical_declaration
+- member_expression
+- method_definition
+- named_imports
+- namespace_import
+- new
+- new_expression
+- null
+- number
+- object
+- object_assignment_pattern
+- object_pattern
+- of
+- pair
+- parenthesized_expression
+- program
+- property_identifier
+- rest_pattern
+- return
+- return_statement
+- shorthand_property_identifier
+- shorthand_property_identifier_pattern
+- spread_element
+- statement_block
+- static
+- string
+- string_fragment
+- subscript_expression
+- super
+- switch
+- switch_body
+- switch_case
+- switch_default
+- switch_statement
+- template_string
+- template_substitution
+- ternary_expression
+- this
+- throw
+- throw_statement
+- true
+- try
+- try_statement
+- typeof
+- unary_expression
+- undefined
+- update_expression
+- variable_declaration
+- variable_declarator
+- while
+- while_statement
+- yield
+- yield_expression
+- {
+- ||
+- }
+
+## Implementation Gaps
+These nodes appear in comprehensive.js but aren't handled:
+- var
+
+## Missing from Examples
+These grammar nodes aren't in comprehensive.js:
+- augmented_assignment_expression
+- class_static_block
+- computed_property_name
+- debugger_statement
+- declaration
+- decorator
+- do_statement
+- else_clause
+- empty_statement
+- escape_sequence
+- expression
+- finally_clause
+- generator_function
+- hash_bang_line
+- html_character_reference
+- html_comment
+- import_attribute
+- jsx_namespace_name
+- labeled_statement
+- meta_property
+- namespace_export
+- optional_chain
+- pair_pattern
+- pattern
+- primary_expression
+- private_property_identifier
+- regex
+- regex_flags
+- regex_pattern
+- sequence_expression
+- statement
+- statement_identifier
+- using_declaration
+- with_statement
+
+## Symbol Kinds Extracted
+- Class
+- Constant
+- Field
+- Function
+- Method
+- Variable
+

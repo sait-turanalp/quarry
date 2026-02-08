@@ -1,0 +1,223 @@
+# C Grammar Analysis
+
+*Generated: 2026-02-06 23:55:56 UTC*
+
+## Statistics
+- Total nodes in grammar JSON: 132
+- Nodes found in comprehensive.c: 145
+- Nodes handled by parser: 29
+- Symbol kinds extracted: 6
+
+## ✅ Successfully Handled Nodes
+These nodes are in examples and handled by parser:
+- case_statement
+- compound_literal_expression
+- compound_statement
+- continue_statement
+- declaration
+- do_statement
+- enum_specifier
+- enumerator
+- expression_statement
+- field_declaration
+- for_statement
+- function_definition
+- if_statement
+- init_declarator
+- initializer_pair
+- linkage_specification
+- parameter_declaration
+- preproc_call
+- preproc_def
+- preproc_elif
+- preproc_else
+- preproc_if
+- preproc_ifdef
+- preproc_include
+- struct_specifier
+- switch_statement
+- translation_unit
+- union_specifier
+- while_statement
+
+## ⚠️ Implementation Gaps
+These nodes appear in comprehensive.c but aren't handled:
+- 
+
+- !
+- "
+- #define
+- #elif
+- #else
+- #endif
+- #if
+- #ifdef
+- #include
+- %
+- &
+- &&
+- (
+- )
+- *
+- +
+- ++
+- ,
+- -
+- ->
+- .
+- ...
+- :
+- ;
+- <
+- <<
+- =
+- ==
+- >
+- >=
+- ?
+- NULL
+- [
+- ]
+- __attribute__
+- abstract_pointer_declarator
+- argument_list
+- array_declarator
+- assignment_expression
+- attribute_specifier
+- binary_expression
+- break
+- break_statement
+- call_expression
+- case
+- cast_expression
+- comment
+- conditional_expression
+- const
+- continue
+- declaration_list
+- default
+- defined
+- do
+- else
+- else_clause
+- enum
+- enumerator_list
+- escape_sequence
+- extern
+- field_declaration_list
+- field_designator
+- field_expression
+- field_identifier
+- for
+- function_declarator
+- goto
+- goto_statement
+- identifier
+- if
+- initializer_list
+- inline
+- labeled_statement
+- null
+- number_literal
+- parameter_list
+- parenthesized_declarator
+- parenthesized_expression
+- pointer_declarator
+- pointer_expression
+- preproc_arg
+- preproc_defined
+- preproc_directive
+- preproc_function_def
+- preproc_params
+- primitive_type
+- return
+- return_statement
+- sizeof
+- sizeof_expression
+- statement_identifier
+- static
+- storage_class_specifier
+- string_content
+- string_literal
+- struct
+- subscript_designator
+- subscript_expression
+- switch
+- system_lib_string
+- type_definition
+- type_descriptor
+- type_identifier
+- type_qualifier
+- typedef
+- unary_expression
+- union
+- update_expression
+- variadic_parameter
+- volatile
+- while
+- {
+- |=
+- ||
+- }
+
+## 📝 Missing from Examples
+These grammar nodes aren't in comprehensive.c:
+- _abstract_declarator
+- _declarator
+- _field_declarator
+- _type_declarator
+- abstract_array_declarator
+- abstract_function_declarator
+- abstract_parenthesized_declarator
+- alignas_qualifier
+- alignof_expression
+- attribute
+- attribute_declaration
+- attributed_declarator
+- attributed_statement
+- bitfield_clause
+- char_literal
+- character
+- comma_expression
+- concatenated_string
+- expression
+- extension_expression
+- false
+- generic_expression
+- gnu_asm_clobber_list
+- gnu_asm_expression
+- gnu_asm_goto_list
+- gnu_asm_input_operand
+- gnu_asm_input_operand_list
+- gnu_asm_output_operand
+- gnu_asm_output_operand_list
+- gnu_asm_qualifier
+- macro_type_specifier
+- ms_based_modifier
+- ms_call_modifier
+- ms_declspec_modifier
+- ms_pointer_modifier
+- ms_restrict_modifier
+- ms_signed_ptr_modifier
+- ms_unaligned_ptr_modifier
+- ms_unsigned_ptr_modifier
+- offsetof_expression
+- preproc_elifdef
+- seh_except_clause
+- seh_finally_clause
+- seh_leave_statement
+- seh_try_statement
+- sized_type_specifier
+- statement
+- subscript_range_designator
+- true
+- type_specifier
+
+## 🎯 Symbol Kinds Extracted
+- Constant
+- Function
+- Macro
+- Parameter
+- Struct
+- Variable
+

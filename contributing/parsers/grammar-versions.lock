@@ -1,0 +1,84 @@
+{
+  "version": "1.0",
+  "description": "Tracks tree-sitter grammar versions to detect updates",
+  "grammars": {
+    "c": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-c",
+      "commit": "d8d0503aa0152119149ecad76685f37682c0d03f",
+      "updated": "2025-08-28T22:44:32-04:00",
+      "abi_version": "15"
+    },
+    "cpp": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "commit": "e89fbaf0a4d294526c58259c40d5b3c16401f4e9",
+      "updated": "2025-09-09T04:30:50+02:00",
+      "abi_version": "15"
+    },
+    "csharp": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-c-sharp",
+      "commit": "6563c3af3f03ec948d08f9325e4bbd072e4c6b99",
+      "updated": "2025-09-30T09:16:33+01:00",
+      "abi_version": "15"
+    },
+    "gdscript": {
+      "repo": "https://github.com/PrestonKnopp/tree-sitter-gdscript",
+      "commit": "839cd921c8aa8b79c9afe2eb71a6a7bfa809e995",
+      "updated": "2025-10-06T10:52:37-07:00",
+      "abi_version": "15"
+    },
+    "go": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-go",
+      "commit": "9d780544a2226ccd1a2a57299903d51d0d8c8951",
+      "updated": "2025-09-09T04:31:00+02:00",
+      "abi_version": "15"
+    },
+    "java": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-java",
+      "commit": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11",
+      "updated": "2025-09-14T23:45:52-04:00",
+      "abi_version": "15"
+    },
+    "javascript": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-javascript",
+      "commit": "58404d8cf191d69f2674a8fd507bd5776f46cb11",
+      "updated": "2025-09-14T23:42:24-04:00",
+      "abi_version": "15"
+    },
+    "kotlin": {
+      "repo": "https://github.com/bartolli/tree-sitter-kotlin",
+      "commit": "7f675c3e2c60cab4c63eb623b9e669fa27df0419",
+      "updated": "2025-11-03T11:36:46-05:00",
+      "abi_version": "unknown"
+    },
+    "php": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-php",
+      "commit": "9d7d6f649297ee01639e759795793cc57698031b",
+      "updated": "2025-09-08T16:24:30-05:00",
+      "abi_version": "15"
+    },
+    "python": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-python",
+      "commit": "293fdc02038ee2bf0e2e206711b69c90ac0d413f",
+      "updated": "2025-09-11T02:45:17-04:00",
+      "abi_version": "15"
+    },
+    "rust": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-rust",
+      "commit": "2a58b00ed44829eebcbe6f932604093b9396a43b",
+      "updated": "2025-09-09T04:29:59+02:00",
+      "abi_version": "15"
+    },
+    "swift": {
+      "repo": "https://github.com/alex-pinkus/tree-sitter-swift",
+      "commit": "78d84ef82c387fceeb6094038da28717ea052e39",
+      "updated": "2025-07-27T12:20:37-07:00",
+      "abi_version": "15"
+    },
+    "typescript": {
+      "repo": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "commit": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "updated": "2025-01-30T14:11:39-08:00",
+      "abi_version": "15"
+    }
+  }
+}
