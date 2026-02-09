@@ -24,8 +24,8 @@
 //! ```
 
 use crate::chunks::{
-    ActiveRecallBackend, ChunkSearchResult, CodeChunkIndexer, CodeChunkRecord, bm25_recall,
-    build_rerank_text as build_chunk_rerank_text, load_chunk_record_map, vector_recall,
+    bm25_recall, build_rerank_text as build_chunk_rerank_text, load_chunk_record_map,
+    vector_recall, ActiveRecallBackend, ChunkSearchResult, CodeChunkIndexer, CodeChunkRecord,
 };
 use crate::config::{SemanticBackend, Settings};
 use crate::indexing::pipeline::Pipeline;
@@ -72,11 +72,25 @@ impl SyncStats {
 }
 
 #[derive(Debug, Clone, Default)]
+struct ChunkRefreshDelta {
+    changed_files: Vec<PathBuf>,
+    deleted_files: Vec<PathBuf>,
+    force_full: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ChunkSearchOutcome {
     pub results: Vec<ChunkSearchResult>,
     pub weak_count: usize,
     pub pruned_by: Vec<String>,
     pub bm25_only_fallback: bool,
+}
+
+enum RerankExecution {
+    Completed(Vec<(usize, f32)>),
+    Failed,
+    TimedOut,
+    SkippedBusy,
 }
 
 /// IndexFacade - Unified interface for code intelligence operations
@@ -215,18 +229,29 @@ impl IndexFacade {
         (pool_size, max_batch_tokens, max_sequence_length)
     }
 
-    fn refresh_code_chunk_index(&self) -> FacadeResult<()> {
+    fn refresh_code_chunk_index(&self, delta: Option<&ChunkRefreshDelta>) -> FacadeResult<()> {
         if !self.settings.chunk_search.enabled {
             return Ok(());
         }
 
-        let symbol_count = self.document_index.count_symbols().unwrap_or(0);
-        if symbol_count == 0 {
+        let use_incremental = self.settings.indexing.chunk_incremental_rebuild_enabled
+            && delta.is_some_and(|d| !d.force_full);
+        let changed_files = delta.map_or(&[][..], |d| d.changed_files.as_slice());
+        let deleted_files = delta.map_or(&[][..], |d| d.deleted_files.as_slice());
+        if use_incremental && changed_files.is_empty() && deleted_files.is_empty() {
             return Ok(());
         }
 
-        let symbols = self.document_index.get_all_symbols(symbol_count)?;
-        if symbols.is_empty() {
+        let symbol_count = self.document_index.count_symbols().unwrap_or(0);
+        if !use_incremental && symbol_count == 0 {
+            return Ok(());
+        }
+        let symbols = if symbol_count == 0 {
+            Vec::new()
+        } else {
+            self.document_index.get_all_symbols(symbol_count)?
+        };
+        if !use_incremental && symbols.is_empty() {
             return Ok(());
         }
         let workspace_root = self
@@ -234,7 +259,10 @@ impl IndexFacade {
             .workspace_root
             .clone()
             .or_else(|| std::env::current_dir().ok());
-        let indexed_paths = self.document_index.get_all_indexed_paths().unwrap_or_default();
+        let indexed_paths = self
+            .document_index
+            .get_all_indexed_paths()
+            .unwrap_or_default();
 
         let model = self
             .semantic_search
@@ -258,26 +286,49 @@ impl IndexFacade {
         )?;
 
         let chunk_indexer = CodeChunkIndexer::new(&self.index_base);
-        let stats = chunk_indexer.rebuild_from_symbols(
-            &symbols,
-            &recall_backend,
-            workspace_root.as_deref(),
-            Some(self.settings.as_ref()),
-            self.settings.chunk_search.max_snippet_chars,
-            self.settings.chunk_search.snippet_context_lines,
-            self.settings.chunk_search.snippet_min_lines,
-            Some(indexed_paths.as_slice()),
-            self.settings.chunk_search.flow_chunk_enabled,
-            &self.settings.chunk_search.flow_chunk_languages,
-            self.settings.chunk_search.flow_chunk_max_per_symbol,
-            self.settings.chunk_search.chunk_token_target,
-            self.settings.chunk_search.chunk_token_max,
-            self.settings.chunk_search.chunk_token_overlap,
-            self.settings.chunk_search.embedding_dimension,
-        )?;
+        let stats = if use_incremental {
+            chunk_indexer.rebuild_incremental_from_symbols(
+                &symbols,
+                &recall_backend,
+                workspace_root.as_deref(),
+                Some(self.settings.as_ref()),
+                self.settings.chunk_search.max_snippet_chars,
+                self.settings.chunk_search.snippet_context_lines,
+                self.settings.chunk_search.snippet_min_lines,
+                self.settings.chunk_search.flow_chunk_enabled,
+                &self.settings.chunk_search.flow_chunk_languages,
+                self.settings.chunk_search.flow_chunk_max_per_symbol,
+                self.settings.chunk_search.chunk_token_target,
+                self.settings.chunk_search.chunk_token_max,
+                self.settings.chunk_search.chunk_token_overlap,
+                self.settings.chunk_search.embedding_dimension,
+                changed_files,
+                deleted_files,
+                self.settings.chunk_search.rebuild_logging_verbose,
+            )?
+        } else {
+            chunk_indexer.rebuild_from_symbols(
+                &symbols,
+                &recall_backend,
+                workspace_root.as_deref(),
+                Some(self.settings.as_ref()),
+                self.settings.chunk_search.max_snippet_chars,
+                self.settings.chunk_search.snippet_context_lines,
+                self.settings.chunk_search.snippet_min_lines,
+                Some(indexed_paths.as_slice()),
+                self.settings.chunk_search.flow_chunk_enabled,
+                &self.settings.chunk_search.flow_chunk_languages,
+                self.settings.chunk_search.flow_chunk_max_per_symbol,
+                self.settings.chunk_search.chunk_token_target,
+                self.settings.chunk_search.chunk_token_max,
+                self.settings.chunk_search.chunk_token_overlap,
+                self.settings.chunk_search.embedding_dimension,
+            )?
+        };
         tracing::info!(
             target: "chunk_search",
-            "code chunk index rebuilt: chunks={}, embeddings={}",
+            "code chunk index rebuilt (mode={}): chunks={}, embeddings={}",
+            if use_incremental { "incremental" } else { "full" },
             stats.chunks_indexed,
             stats.embeddings_indexed
         );
@@ -407,6 +458,11 @@ impl IndexFacade {
     /// Check if semantic search is enabled.
     pub fn has_semantic_search(&self) -> bool {
         self.semantic_search.is_some()
+    }
+
+    /// Whether this facade uses single-save mode for semantic persistence.
+    pub fn semantic_single_save_mode(&self) -> bool {
+        self.settings.indexing.semantic_single_save_mode
     }
 
     /// Save semantic search data to disk.
@@ -1197,7 +1253,7 @@ impl IndexFacade {
         limit: usize,
         timeout_ms: u64,
         label: &'static str,
-    ) -> Option<Vec<(usize, f32)>> {
+    ) -> RerankExecution {
         if self
             .rerank_inflight
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -1208,7 +1264,7 @@ impl IndexFacade {
                 "{} rerank skipped: previous rerank still running",
                 label
             );
-            return None;
+            return RerankExecution::SkippedBusy;
         }
 
         let inflight = Arc::clone(&self.rerank_inflight);
@@ -1230,10 +1286,10 @@ impl IndexFacade {
         });
 
         match rx.recv_timeout(timeout) {
-            Ok(Ok(reranked)) => Some(reranked),
+            Ok(Ok(reranked)) => RerankExecution::Completed(reranked),
             Ok(Err(e)) => {
                 tracing::warn!(target: "rerank", "{} rerank failed: {}", label, e);
-                None
+                RerankExecution::Failed
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 tracing::warn!(
@@ -1242,7 +1298,7 @@ impl IndexFacade {
                     label,
                     timeout_ms.max(1)
                 );
-                None
+                RerankExecution::TimedOut
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 tracing::warn!(
@@ -1250,7 +1306,7 @@ impl IndexFacade {
                     "{} rerank worker disconnected; using fusion results",
                     label
                 );
-                None
+                RerankExecution::Failed
             }
         }
     }
@@ -1315,7 +1371,13 @@ impl IndexFacade {
                 if !self.settings.reranking.enabled {
                     return None;
                 }
-                match crate::reranking::Reranker::new(&self.settings.reranking.model) {
+                let runtime =
+                    crate::reranking::RerankerRuntimeOptions::from_config(&self.settings.reranking);
+                match crate::reranking::Reranker::new(
+                    &self.settings.reranking.model,
+                    self.settings.reranking.max_length,
+                    runtime,
+                ) {
                     Ok(r) => Some(Arc::new(r)),
                     Err(e) => {
                         tracing::warn!("Reranker init failed: {e}");
@@ -1326,7 +1388,14 @@ impl IndexFacade {
             .as_ref()
         {
             let top_n = self.settings.reranking.top_n.min(merged.len());
-            let candidates: Vec<_> = merged.iter().copied().take(top_n).collect();
+            let base_candidates: Vec<_> = merged.iter().copied().take(top_n).collect();
+            let candidates = apply_rerank_prefilter(
+                &self.settings.reranking,
+                &base_candidates,
+                &bm25_ids,
+                &vector_ids,
+                limit,
+            );
 
             // Build reranker payload from symbol metadata plus BM25 context snippet.
             let rerank_items: Vec<(SymbolId, String)> = candidates
@@ -1343,23 +1412,24 @@ impl IndexFacade {
                 candidates.into_iter().take(limit).collect()
             } else {
                 let rerank_timeout_ms = self.settings.reranking.timeout_ms.max(1);
-                self.run_rerank_with_timeout(
+                match self.run_rerank_with_timeout(
                     Arc::clone(reranker),
                     query,
                     docs,
                     limit,
                     rerank_timeout_ms,
                     "symbol",
-                )
-                .map(|reranked| {
-                    reranked
+                ) {
+                    RerankExecution::Completed(reranked) => reranked
                         .iter()
                         .filter_map(|(idx, score)| {
                             rerank_items.get(*idx).map(|(sid, _)| (*sid, *score))
                         })
-                        .collect()
-                })
-                .unwrap_or_else(|| candidates.into_iter().take(limit).collect())
+                        .collect(),
+                    RerankExecution::Failed
+                    | RerankExecution::TimedOut
+                    | RerankExecution::SkippedBusy => candidates.into_iter().take(limit).collect(),
+                }
             }
         } else {
             merged.iter().copied().take(limit).collect()
@@ -1480,7 +1550,11 @@ impl IndexFacade {
         let vector_ms = vector_start.elapsed().as_millis();
 
         let rrf_start = Instant::now();
-        let merged = rrf_merge_chunk(&bm25_results, &vector_results, self.settings.chunk_search.rrf_k);
+        let merged = rrf_merge_chunk(
+            &bm25_results,
+            &vector_results,
+            self.settings.chunk_search.rrf_k,
+        );
         let rrf_ms = rrf_start.elapsed().as_millis();
 
         if merged.is_empty() {
@@ -1498,15 +1572,28 @@ impl IndexFacade {
             .iter()
             .filter_map(|(id, _)| SymbolId::new(*id))
             .collect();
+        let bm25_chunk_ids: HashSet<u32> = bm25_results.iter().map(|(id, _)| *id).collect();
+        let vector_chunk_ids: HashSet<u32> = vector_results.iter().map(|(id, _)| *id).collect();
 
+        let ranking_cfg = &self.settings.chunk_search;
         let rerank_start = Instant::now();
-        let final_candidates: Vec<(u32, f32)> = if let Some(reranker) = self
+        let (mut final_candidates, rerank_scores_used, rerank_timed_out): (
+            Vec<(u32, f32)>,
+            bool,
+            bool,
+        ) = if let Some(reranker) = self
             .reranker
             .get_or_init(|| {
                 if !self.settings.reranking.enabled {
                     return None;
                 }
-                match crate::reranking::Reranker::new(&self.settings.reranking.model) {
+                let runtime =
+                    crate::reranking::RerankerRuntimeOptions::from_config(&self.settings.reranking);
+                match crate::reranking::Reranker::new(
+                    &self.settings.reranking.model,
+                    self.settings.reranking.max_length,
+                    runtime,
+                ) {
                     Ok(r) => Some(Arc::new(r)),
                     Err(e) => {
                         tracing::warn!("Reranker init failed: {e}");
@@ -1522,7 +1609,14 @@ impl IndexFacade {
                 .top_n
                 .min(self.settings.chunk_search.top_k_fused)
                 .min(merged.len());
-            let candidates: Vec<_> = merged.iter().copied().take(top_n).collect();
+            let base_candidates: Vec<_> = merged.iter().copied().take(top_n).collect();
+            let candidates = apply_rerank_prefilter(
+                &self.settings.reranking,
+                &base_candidates,
+                &bm25_chunk_ids,
+                &vector_chunk_ids,
+                limit,
+            );
 
             let rerank_items: Vec<(u32, String)> = candidates
                 .iter()
@@ -1535,35 +1629,70 @@ impl IndexFacade {
             let docs: Vec<String> = rerank_items.iter().map(|(_, doc)| doc.clone()).collect();
 
             if docs.is_empty() {
-                candidates.into_iter().take(limit).collect()
+                (candidates.into_iter().take(limit).collect(), false, false)
             } else {
                 let rerank_timeout_ms = self.settings.reranking.timeout_ms.max(1);
-                self.run_rerank_with_timeout(
+                match self.run_rerank_with_timeout(
                     Arc::clone(reranker),
                     query,
                     docs,
                     limit,
                     rerank_timeout_ms,
                     "chunk",
-                )
-                .map(|reranked| {
-                    reranked
-                        .iter()
-                        .filter_map(|(idx, score)| {
-                            rerank_items.get(*idx).map(|(id, _)| (*id, *score))
-                        })
-                        .collect()
-                })
-                .unwrap_or_else(|| candidates.into_iter().take(limit).collect())
+                ) {
+                    RerankExecution::Completed(reranked) => (
+                        reranked
+                            .iter()
+                            .filter_map(|(idx, score)| {
+                                rerank_items.get(*idx).map(|(id, _)| (*id, *score))
+                            })
+                            .collect(),
+                        true,
+                        false,
+                    ),
+                    RerankExecution::TimedOut => {
+                        (candidates.into_iter().take(limit).collect(), false, true)
+                    }
+                    RerankExecution::Failed | RerankExecution::SkippedBusy => {
+                        (candidates.into_iter().take(limit).collect(), false, false)
+                    }
+                }
             }
         } else {
-            merged
-                .iter()
-                .copied()
-                .take(self.settings.chunk_search.top_k_fused.min(limit.max(1)))
-                .collect()
+            (
+                merged
+                    .iter()
+                    .copied()
+                    .take(self.settings.chunk_search.top_k_fused.min(limit.max(1)))
+                    .collect(),
+                false,
+                false,
+            )
         };
         let rerank_ms = rerank_start.elapsed().as_millis();
+
+        if rerank_scores_used {
+            match ranking_cfg
+                .rerank_score_normalization
+                .trim()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "none" => {}
+                "sigmoid" => {
+                    for (_, score) in &mut final_candidates {
+                        *score = sigmoid_score(*score);
+                    }
+                }
+                unknown => {
+                    tracing::warn!(
+                        target: "chunk_search",
+                        "unknown rerank_score_normalization='{}' (expected none|sigmoid); using none",
+                        unknown
+                    );
+                }
+            }
+        }
 
         let final_candidates_for_gate: Vec<(SymbolId, f32)> = final_candidates
             .iter()
@@ -1580,6 +1709,10 @@ impl IndexFacade {
             &bm25_ids,
             &vector_ids,
         ) {
+            let mut pruned_by = vec!["confidence_gate".to_string()];
+            if rerank_timed_out {
+                pruned_by.push("rerank_timeout".to_string());
+            }
             tracing::info!(
                 top1_chunk_id = metrics.top1_id.to_u32(),
                 top1_score = metrics.top1_score,
@@ -1590,13 +1723,12 @@ impl IndexFacade {
             );
             return Ok(ChunkSearchOutcome {
                 weak_count: final_candidates.len(),
-                pruned_by: vec!["confidence_gate".to_string()],
+                pruned_by,
                 bm25_only_fallback,
                 ..ChunkSearchOutcome::default()
             });
         }
 
-        let ranking_cfg = &self.settings.chunk_search;
         let trivial_names: HashSet<String> = ranking_cfg
             .symbol_trivial_names
             .iter()
@@ -1604,6 +1736,44 @@ impl IndexFacade {
             .collect();
         let query_terms = extract_query_terms(query);
         let hard_ignore_patterns = compile_glob_patterns(&ranking_cfg.hard_ignore_path_patterns);
+
+        if !ranking_cfg.post_rerank_heuristics_enabled {
+            let mut pruned_by = Vec::new();
+            let mut dropped_hard_ignore = 0usize;
+            let mut direct_candidates = Vec::with_capacity(final_candidates.len());
+            for (chunk_id, score) in final_candidates {
+                let Some(record) = chunk_map.get(&chunk_id) else {
+                    continue;
+                };
+                if path_matches_any_pattern(&record.file_path, &hard_ignore_patterns) {
+                    dropped_hard_ignore += 1;
+                    continue;
+                }
+                direct_candidates.push((chunk_id, score));
+            }
+            if dropped_hard_ignore > 0 {
+                pruned_by.push("hard_ignore".to_string());
+            }
+            if rerank_timed_out {
+                pruned_by.push("rerank_timeout".to_string());
+            }
+            direct_candidates
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            let capped = direct_candidates.len().min(limit.max(1));
+            let mut results = Vec::with_capacity(capped);
+            for (chunk_id, score) in direct_candidates.iter().take(capped) {
+                if let Some(record) = chunk_map.get(chunk_id) {
+                    results.push(ChunkSearchResult::from_record(record, *score));
+                }
+            }
+            let weak_count = direct_candidates.len().saturating_sub(capped) + dropped_hard_ignore;
+            return Ok(ChunkSearchOutcome {
+                results,
+                weak_count,
+                pruned_by,
+                bm25_only_fallback,
+            });
+        }
 
         let mut rescored: Vec<(u32, f32)> = final_candidates
             .into_iter()
@@ -1660,7 +1830,11 @@ impl IndexFacade {
             let Some(record) = chunk_map.get(&chunk_id) else {
                 continue;
             };
-            let key = (record.file_path.as_str(), record.line_start, record.line_end);
+            let key = (
+                record.file_path.as_str(),
+                record.line_start,
+                record.line_end,
+            );
             if !seen.insert(key) {
                 dropped_dedup_diversity += 1;
                 continue;
@@ -1677,6 +1851,9 @@ impl IndexFacade {
         let mut pruned_by = Vec::new();
         if dropped_dedup_diversity > 0 {
             pruned_by.push("dedup_diversity".to_string());
+        }
+        if rerank_timed_out {
+            pruned_by.push("rerank_timeout".to_string());
         }
 
         let mut strong_count = dedup_diversity_filtered.len();
@@ -1714,7 +1891,8 @@ impl IndexFacade {
                 results.push(ChunkSearchResult::from_record(record, *score));
             }
         }
-        let weak_count = dedup_diversity_filtered.len().saturating_sub(capped) + dropped_dedup_diversity;
+        let weak_count =
+            dedup_diversity_filtered.len().saturating_sub(capped) + dropped_dedup_diversity;
 
         tracing::info!(
             search_bm25_ms = bm25_ms,
@@ -1929,7 +2107,12 @@ impl IndexFacade {
             self.embedding_pool.clone(),
         )?;
 
-        if let Err(e) = self.refresh_code_chunk_index() {
+        let delta = ChunkRefreshDelta {
+            changed_files: vec![path.to_path_buf()],
+            deleted_files: Vec::new(),
+            force_full: false,
+        };
+        if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
             tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
         }
 
@@ -1970,7 +2153,12 @@ impl IndexFacade {
         };
 
         cleanup_stage.cleanup_files(&[path.to_path_buf()])?;
-        if let Err(e) = self.refresh_code_chunk_index() {
+        let delta = ChunkRefreshDelta {
+            changed_files: Vec::new(),
+            deleted_files: vec![path.to_path_buf()],
+            force_full: false,
+        };
+        if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
             tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
         }
         Ok(())
@@ -1994,7 +2182,16 @@ impl IndexFacade {
         // Update tracked paths
         self.add_indexed_path(path);
 
-        if let Err(e) = self.refresh_code_chunk_index() {
+        let mut changed_files =
+            Vec::with_capacity(stats.new_file_paths.len() + stats.modified_file_paths.len());
+        changed_files.extend(stats.new_file_paths.iter().cloned());
+        changed_files.extend(stats.modified_file_paths.iter().cloned());
+        let delta = ChunkRefreshDelta {
+            changed_files,
+            deleted_files: stats.deleted_file_paths.clone(),
+            force_full: force,
+        };
+        if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
             tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
         }
 
@@ -2074,7 +2271,17 @@ impl IndexFacade {
         // Update tracked paths
         self.add_indexed_path(dir);
 
-        if let Err(e) = self.refresh_code_chunk_index() {
+        let mut changed_files = Vec::with_capacity(
+            pipeline_stats.new_file_paths.len() + pipeline_stats.modified_file_paths.len(),
+        );
+        changed_files.extend(pipeline_stats.new_file_paths.iter().cloned());
+        changed_files.extend(pipeline_stats.modified_file_paths.iter().cloned());
+        let delta = ChunkRefreshDelta {
+            changed_files,
+            deleted_files: pipeline_stats.deleted_file_paths.clone(),
+            force_full: force,
+        };
+        if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
             tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
         }
 
@@ -2149,7 +2356,7 @@ impl IndexFacade {
         // Update tracked paths
         self.indexed_paths = config_set;
 
-        if let Err(e) = self.refresh_code_chunk_index() {
+        if let Err(e) = self.refresh_code_chunk_index(None) {
             tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
         }
 
@@ -2266,6 +2473,72 @@ fn evaluate_confidence_gate(
     None
 }
 
+fn apply_rerank_prefilter<T>(
+    cfg: &crate::config::RerankingConfig,
+    candidates: &[(T, f32)],
+    bm25_ids: &HashSet<T>,
+    vector_ids: &HashSet<T>,
+    limit: usize,
+) -> Vec<(T, f32)>
+where
+    T: Copy + Eq + std::hash::Hash,
+{
+    if !cfg.prefilter_enabled || candidates.is_empty() {
+        return candidates.to_vec();
+    }
+
+    let min_target = limit.max(1).min(candidates.len());
+    let configured_target = cfg.prefilter_target_top_n.max(1);
+    let target = configured_target.clamp(min_target, candidates.len());
+
+    if candidates.len() <= target {
+        return candidates.to_vec();
+    }
+
+    if cfg.prefilter_fallback_on_small_gap {
+        let top_score = candidates[0].1;
+        let tail_score = candidates[target - 1].1;
+        let score_gap = top_score - tail_score;
+        if score_gap < cfg.prefilter_small_gap_threshold {
+            return candidates.to_vec();
+        }
+    }
+
+    let mut out = Vec::with_capacity(
+        target.saturating_add(
+            cfg.prefilter_dual_source_tail_keep
+                .min(candidates.len().saturating_sub(target)),
+        ),
+    );
+    let mut seen = HashSet::with_capacity(out.capacity());
+
+    for (id, score) in candidates.iter().take(target) {
+        out.push((*id, *score));
+        seen.insert(*id);
+    }
+
+    if cfg.prefilter_dual_source_tail_keep == 0 {
+        return out;
+    }
+
+    let mut tail_kept = 0usize;
+    for (id, score) in candidates.iter().skip(target) {
+        if tail_kept >= cfg.prefilter_dual_source_tail_keep {
+            break;
+        }
+        if seen.contains(id) {
+            continue;
+        }
+        if bm25_ids.contains(id) && vector_ids.contains(id) {
+            out.push((*id, *score));
+            seen.insert(*id);
+            tail_kept += 1;
+        }
+    }
+
+    out
+}
+
 fn softmax_top1_probability(scores: &[f32]) -> f32 {
     if scores.is_empty() {
         return 0.0;
@@ -2294,6 +2567,10 @@ fn downrank_score(score: f32, weight: f32) -> f32 {
     } else {
         score / w
     }
+}
+
+fn sigmoid_score(score: f32) -> f32 {
+    1.0 / (1.0 + (-score).exp())
 }
 
 fn uprank_score(score: f32, factor: f32) -> f32 {
@@ -2398,18 +2675,8 @@ fn source_weight_for_path(cfg: &crate::config::ChunkSearchConfig, path: &str) ->
 
 fn chunk_type_weight(record: &CodeChunkRecord) -> f32 {
     match record.chunk_type.as_str() {
-        "function"
-        | "method"
-        | "class"
-        | "struct"
-        | "module"
-        | "interface"
-        | "enum"
-        | "flow_if_else"
-        | "flow_try_catch"
-        | "flow_switch"
-        | "flow_loop"
-        | "flow_call_chain"
+        "function" | "method" | "class" | "struct" | "module" | "interface" | "enum"
+        | "flow_if_else" | "flow_try_catch" | "flow_switch" | "flow_loop" | "flow_call_chain"
         | "flow_error_path" => 1.0,
         "module_comment" | "inter_symbol_gap" | "imports_gap" => 0.92,
         "doc_chunk" => 0.65,
@@ -2608,6 +2875,82 @@ mod tests {
     }
 
     #[test]
+    fn test_apply_rerank_prefilter_disabled_is_noop() {
+        let cfg = RerankingConfig {
+            prefilter_enabled: false,
+            ..RerankingConfig::default()
+        };
+        let candidates = vec![
+            (SymbolId::new(1).unwrap(), 0.20),
+            (SymbolId::new(2).unwrap(), 0.19),
+            (SymbolId::new(3).unwrap(), 0.18),
+        ];
+        let bm25_ids: HashSet<SymbolId> = candidates.iter().map(|(id, _)| *id).collect();
+        let vector_ids = bm25_ids.clone();
+
+        let filtered = apply_rerank_prefilter(&cfg, &candidates, &bm25_ids, &vector_ids, 2);
+        assert_eq!(filtered, candidates);
+    }
+
+    #[test]
+    fn test_apply_rerank_prefilter_small_gap_falls_back_to_full_set() {
+        let cfg = RerankingConfig {
+            prefilter_enabled: true,
+            prefilter_target_top_n: 2,
+            prefilter_fallback_on_small_gap: true,
+            prefilter_small_gap_threshold: 0.05,
+            prefilter_dual_source_tail_keep: 1,
+            ..RerankingConfig::default()
+        };
+        let candidates = vec![
+            (SymbolId::new(10).unwrap(), 0.200),
+            (SymbolId::new(11).unwrap(), 0.190),
+            (SymbolId::new(12).unwrap(), 0.180),
+        ];
+        let bm25_ids: HashSet<SymbolId> = candidates.iter().map(|(id, _)| *id).collect();
+        let vector_ids = bm25_ids.clone();
+
+        let filtered = apply_rerank_prefilter(&cfg, &candidates, &bm25_ids, &vector_ids, 1);
+        assert_eq!(filtered, candidates);
+    }
+
+    #[test]
+    fn test_apply_rerank_prefilter_trims_and_keeps_dual_source_tail() {
+        let cfg = RerankingConfig {
+            prefilter_enabled: true,
+            prefilter_target_top_n: 2,
+            prefilter_fallback_on_small_gap: true,
+            prefilter_small_gap_threshold: 0.01,
+            prefilter_dual_source_tail_keep: 1,
+            ..RerankingConfig::default()
+        };
+        let candidates = vec![
+            (SymbolId::new(1).unwrap(), 0.30),
+            (SymbolId::new(2).unwrap(), 0.10),
+            (SymbolId::new(3).unwrap(), 0.09),
+            (SymbolId::new(4).unwrap(), 0.08),
+        ];
+        let bm25_ids: HashSet<SymbolId> = [1u32, 2, 3]
+            .into_iter()
+            .map(|id| SymbolId::new(id).unwrap())
+            .collect();
+        let vector_ids: HashSet<SymbolId> = [1u32, 3, 4]
+            .into_iter()
+            .map(|id| SymbolId::new(id).unwrap())
+            .collect();
+
+        let filtered = apply_rerank_prefilter(&cfg, &candidates, &bm25_ids, &vector_ids, 1);
+        assert_eq!(
+            filtered,
+            vec![
+                (SymbolId::new(1).unwrap(), 0.30),
+                (SymbolId::new(2).unwrap(), 0.10),
+                (SymbolId::new(3).unwrap(), 0.09),
+            ]
+        );
+    }
+
+    #[test]
     fn test_downrank_score_is_sign_aware() {
         let pos = downrank_score(1.0, 0.5);
         let neg = downrank_score(-1.0, 0.5);
@@ -2624,14 +2967,27 @@ mod tests {
     }
 
     #[test]
+    fn test_sigmoid_score_maps_logits_to_zero_one() {
+        let low = sigmoid_score(-2.0);
+        let mid = sigmoid_score(0.0);
+        let high = sigmoid_score(2.0);
+        assert!(low > 0.0 && low < 0.5);
+        assert!((mid - 0.5).abs() < 1e-6);
+        assert!(high > 0.5 && high < 1.0);
+    }
+
+    #[test]
     fn test_path_matches_any_pattern_for_eval_paths() {
-        let patterns = compile_glob_patterns(&[
-            "evals/**".to_string(),
-            "**/*.eval.*".to_string(),
-        ]);
-        assert!(path_matches_any_pattern("./evals/answer-vs-act.eval.ts", &patterns));
+        let patterns = compile_glob_patterns(&["evals/**".to_string(), "**/*.eval.*".to_string()]);
+        assert!(path_matches_any_pattern(
+            "./evals/answer-vs-act.eval.ts",
+            &patterns
+        ));
         assert!(path_matches_any_pattern("evals/foo/bar.ts", &patterns));
-        assert!(!path_matches_any_pattern("./packages/core/src/policy.ts", &patterns));
+        assert!(!path_matches_any_pattern(
+            "./packages/core/src/policy.ts",
+            &patterns
+        ));
     }
 
     #[test]

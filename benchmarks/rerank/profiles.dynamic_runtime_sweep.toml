@@ -1,0 +1,43 @@
+# Dynamic runtime-tuning sweep against canonical Jina v1 base profile.
+# baseline_current_default is auto-added by codanna benchmark-rerank.
+
+[defaults]
+model = "JINARerankerV1TurboEn"
+top_n = 30
+timeout_ms = 15000
+max_length = 1024
+top_k_vector = 100
+top_k_bm25 = 100
+top_k_fused = 50
+rerank_score_normalization = "none"
+post_rerank_heuristics_enabled = false
+
+[[profiles]]
+name = "jina_v1_tn30_heur_off_base"
+runtime_tuning_enabled = false
+batch_size = 0
+warmup_pairs = 0
+
+[[profiles]]
+name = "jina_v1_tn30_rt_bs8"
+runtime_tuning_enabled = true
+batch_size = 8
+warmup_pairs = 0
+
+[[profiles]]
+name = "jina_v1_tn30_rt_bs16"
+runtime_tuning_enabled = true
+batch_size = 16
+warmup_pairs = 0
+
+[[profiles]]
+name = "jina_v1_tn30_rt_bs16_warm4"
+runtime_tuning_enabled = true
+batch_size = 16
+warmup_pairs = 4
+
+[[profiles]]
+name = "jina_v1_tn30_rt_bs24_warm4"
+runtime_tuning_enabled = true
+batch_size = 24
+warmup_pairs = 4

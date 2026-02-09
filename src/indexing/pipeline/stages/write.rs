@@ -190,9 +190,9 @@ impl WriteStage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RelationKind;
     use crate::config::Settings;
     use crate::types::SymbolId;
+    use crate::RelationKind;
     use tempfile::TempDir;
 
     fn make_resolved(from: u32, to: u32, kind: RelationKind) -> ResolvedRelationship {

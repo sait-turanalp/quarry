@@ -399,9 +399,9 @@ impl ResolveStage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SymbolKind;
     use crate::parsing::{LanguageId, ResolutionScope, ScopeLevel, ScopeType};
     use crate::types::Range;
+    use crate::SymbolKind;
     use std::sync::Arc as StdArc;
 
     /// No-op resolution scope for testing RESOLVE stage logic.

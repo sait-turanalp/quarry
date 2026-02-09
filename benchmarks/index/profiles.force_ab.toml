@@ -1,0 +1,28 @@
+# Force-index A/B profiles for indexing pipeline optimization.
+#
+# Baseline keeps legacy behavior:
+# - full chunk rebuild
+# - repeated semantic saves
+#
+# Candidate enables:
+# - incremental chunk refresh (for delta-aware runs)
+# - single semantic save mode (removes duplicate save work)
+
+[defaults]
+pipeline_tracing = true
+chunk_incremental_rebuild_enabled = false
+semantic_single_save_mode = false
+rebuild_logging_verbose = true
+rust_log = "warn,pipeline=info,semantic=info,indexing=info,chunk_search=info"
+
+[[profiles]]
+name = "index_force_baseline"
+chunk_incremental_rebuild_enabled = false
+semantic_single_save_mode = false
+rebuild_logging_verbose = true
+
+[[profiles]]
+name = "index_force_opt_v1"
+chunk_incremental_rebuild_enabled = true
+semantic_single_save_mode = true
+rebuild_logging_verbose = true

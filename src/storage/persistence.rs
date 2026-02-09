@@ -162,16 +162,24 @@ impl IndexPersistence {
             );
         }
 
-        // Save semantic search if enabled
+        // Save semantic search if enabled.
+        // In single-save mode, indexing pipeline already persisted semantic state.
         if facade.has_semantic_search() {
-            let semantic_path = self.semantic_path();
-            std::fs::create_dir_all(&semantic_path).map_err(|e| {
-                IndexError::General(format!("Failed to create semantic directory: {e}"))
-            })?;
+            if facade.semantic_single_save_mode() {
+                tracing::debug!(
+                    target: "persistence",
+                    "semantic_single_save_mode=true; skipping duplicate persistence semantic save"
+                );
+            } else {
+                let semantic_path = self.semantic_path();
+                std::fs::create_dir_all(&semantic_path).map_err(|e| {
+                    IndexError::General(format!("Failed to create semantic directory: {e}"))
+                })?;
 
-            facade
-                .save_semantic_search(&semantic_path)
-                .map_err(|e| IndexError::General(format!("Failed to save semantic search: {e}")))?;
+                facade.save_semantic_search(&semantic_path).map_err(|e| {
+                    IndexError::General(format!("Failed to save semantic search: {e}"))
+                })?;
+            }
         }
 
         Ok(())

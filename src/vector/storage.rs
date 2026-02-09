@@ -163,21 +163,16 @@ impl MmapVectorStorage {
         &mut self,
         vectors: &[(VectorId, &[f32])],
     ) -> Result<(), VectorStorageError> {
-        // Convert to owned for validation and writing
-        let owned_vectors: Vec<(VectorId, Vec<f32>)> = vectors
-            .iter()
-            .map(|(id, vec)| (*id, vec.to_vec()))
-            .collect();
-        self.validate_vectors(&owned_vectors)?;
+        self.validate_vectors(vectors)?;
         self.ensure_storage_ready()?;
-        self.append_vectors(&owned_vectors)?;
+        self.append_vectors(vectors)?;
         self.update_metadata(vectors.len())?;
         self.invalidate_cache();
         Ok(())
     }
 
     /// Validates that all vectors have the correct dimension.
-    fn validate_vectors(&self, vectors: &[(VectorId, Vec<f32>)]) -> Result<(), VectorStorageError> {
+    fn validate_vectors(&self, vectors: &[(VectorId, &[f32])]) -> Result<(), VectorStorageError> {
         for (_, vec) in vectors {
             self.dimension.validate_vector(vec)?;
         }
@@ -193,7 +188,7 @@ impl MmapVectorStorage {
     }
 
     /// Appends vectors to the storage file.
-    fn append_vectors(&self, vectors: &[(VectorId, Vec<f32>)]) -> Result<(), VectorStorageError> {
+    fn append_vectors(&self, vectors: &[(VectorId, &[f32])]) -> Result<(), VectorStorageError> {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -204,17 +199,16 @@ impl MmapVectorStorage {
             self.write_header(&mut file)?;
         }
 
-        // Write vectors
+        let dimension = self.dimension.get();
+        let bytes_per_vector = BYTES_PER_ID + (dimension * BYTES_PER_F32);
+        let mut buffer = Vec::with_capacity(vectors.len() * bytes_per_vector);
         for (id, vector) in vectors {
-            // Write vector ID
-            file.write_all(&id.to_bytes())?;
-
-            // Write vector data
-            for &value in vector {
-                file.write_all(&value.to_le_bytes())?;
+            buffer.extend_from_slice(&id.to_bytes());
+            for &value in *vector {
+                buffer.extend_from_slice(&value.to_le_bytes());
             }
         }
-
+        file.write_all(&buffer)?;
         file.flush()?;
         Ok(())
     }

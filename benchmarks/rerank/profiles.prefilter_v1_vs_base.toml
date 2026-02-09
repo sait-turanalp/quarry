@@ -1,0 +1,36 @@
+# Prefilter v1 sweep against the current default Jina TN30 profile.
+# baseline_current_default is auto-added by codanna benchmark-rerank.
+
+[defaults]
+model = "JINARerankerV1TurboEn"
+top_n = 30
+timeout_ms = 15000
+max_length = 1024
+top_k_vector = 100
+top_k_bm25 = 100
+top_k_fused = 50
+rerank_score_normalization = "none"
+post_rerank_heuristics_enabled = false
+runtime_tuning_enabled = false
+batch_size = 0
+warmup_pairs = 0
+
+[[profiles]]
+name = "jina_tn30_heur_off"
+prefilter_enabled = false
+
+[[profiles]]
+name = "jina_tn30_heur_off_prefilter_safe_v1"
+prefilter_enabled = true
+prefilter_target_top_n = 24
+prefilter_fallback_on_small_gap = true
+prefilter_small_gap_threshold = 0.015
+prefilter_dual_source_tail_keep = 4
+
+[[profiles]]
+name = "jina_tn30_heur_off_prefilter_aggressive_v1"
+prefilter_enabled = true
+prefilter_target_top_n = 18
+prefilter_fallback_on_small_gap = true
+prefilter_small_gap_threshold = 0.010
+prefilter_dual_source_tail_keep = 2

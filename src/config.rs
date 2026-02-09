@@ -137,6 +137,14 @@ pub struct IndexingConfig {
     #[serde(default)]
     pub pipeline_tracing: bool,
 
+    /// Enable incremental code-chunk rebuilds when file deltas are available.
+    #[serde(default = "default_false")]
+    pub chunk_incremental_rebuild_enabled: bool,
+
+    /// Avoid duplicate semantic saves during a single indexing run.
+    #[serde(default = "default_false")]
+    pub semantic_single_save_mode: bool,
+
     /// Show progress bars during indexing (default: true)
     #[serde(default = "default_true")]
     pub show_progress: bool,
@@ -431,6 +439,42 @@ pub struct RerankingConfig {
     #[serde(default = "default_rerank_timeout_ms")]
     pub timeout_ms: u64,
 
+    /// Maximum token length for reranker inputs.
+    #[serde(default = "default_rerank_max_length")]
+    pub max_length: usize,
+
+    /// Enable runtime tuning knobs for reranker inference.
+    #[serde(default = "default_false")]
+    pub runtime_tuning_enabled: bool,
+
+    /// Optional reranker batch size override. `0` means model default.
+    #[serde(default = "default_rerank_batch_size")]
+    pub batch_size: usize,
+
+    /// Warmup pair count executed once at reranker init. `0` disables warmup.
+    #[serde(default = "default_rerank_warmup_pairs")]
+    pub warmup_pairs: usize,
+
+    /// Enable candidate prefiltering before expensive reranker inference.
+    #[serde(default = "default_false")]
+    pub prefilter_enabled: bool,
+
+    /// Target candidate count passed to reranker after prefiltering.
+    #[serde(default = "default_rerank_prefilter_target_top_n")]
+    pub prefilter_target_top_n: usize,
+
+    /// Disable prefiltering when score gap indicates an ambiguous query.
+    #[serde(default = "default_true")]
+    pub prefilter_fallback_on_small_gap: bool,
+
+    /// Minimum score gap required to keep prefiltering active.
+    #[serde(default = "default_rerank_prefilter_small_gap_threshold")]
+    pub prefilter_small_gap_threshold: f32,
+
+    /// Number of dual-source tail candidates (BM25+vector) kept after trimming.
+    #[serde(default = "default_rerank_prefilter_dual_source_tail_keep")]
+    pub prefilter_dual_source_tail_keep: usize,
+
     /// Enable confidence-based suppression for low-confidence result lists.
     #[serde(default = "default_confidence_gate_enabled")]
     pub confidence_gate_enabled: bool,
@@ -453,6 +497,10 @@ pub struct ChunkSearchConfig {
     /// Enable code chunk indexing/search pipeline.
     #[serde(default = "default_true")]
     pub enabled: bool,
+
+    /// Emit verbose chunk rebuild phase timing logs.
+    #[serde(default = "default_false")]
+    pub rebuild_logging_verbose: bool,
 
     /// Maximum snippet characters extracted from a symbol range.
     #[serde(default = "default_chunk_max_snippet_chars")]
@@ -590,12 +638,22 @@ pub struct ChunkSearchConfig {
     /// Minimum line count to consider a chunk as a block candidate.
     #[serde(default = "default_chunk_block_chunk_min_lines")]
     pub block_chunk_min_lines: usize,
+
+    /// Apply post-rerank chunk heuristics (source/chunk-type penalties, coherence, diversity, cliff).
+    #[serde(default = "default_false")]
+    pub post_rerank_heuristics_enabled: bool,
+
+    /// Optional rerank score normalization mode before post-rerank processing.
+    /// Supported values: "none", "sigmoid".
+    #[serde(default = "default_chunk_rerank_score_normalization")]
+    pub rerank_score_normalization: String,
 }
 
 impl Default for ChunkSearchConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            rebuild_logging_verbose: false,
             max_snippet_chars: default_chunk_max_snippet_chars(),
             embedding_dimension: None,
             top_k_vector: default_chunk_top_k_vector(),
@@ -630,6 +688,8 @@ impl Default for ChunkSearchConfig {
             block_chunk_boost_enabled: default_true(),
             block_chunk_boost_factor: default_chunk_block_chunk_boost_factor(),
             block_chunk_min_lines: default_chunk_block_chunk_min_lines(),
+            post_rerank_heuristics_enabled: default_false(),
+            rerank_score_normalization: default_chunk_rerank_score_normalization(),
         }
     }
 }
@@ -641,6 +701,15 @@ impl Default for RerankingConfig {
             model: default_reranker_model(),
             top_n: default_rerank_top_n(),
             timeout_ms: default_rerank_timeout_ms(),
+            max_length: default_rerank_max_length(),
+            runtime_tuning_enabled: default_false(),
+            batch_size: default_rerank_batch_size(),
+            warmup_pairs: default_rerank_warmup_pairs(),
+            prefilter_enabled: default_false(),
+            prefilter_target_top_n: default_rerank_prefilter_target_top_n(),
+            prefilter_fallback_on_small_gap: default_true(),
+            prefilter_small_gap_threshold: default_rerank_prefilter_small_gap_threshold(),
+            prefilter_dual_source_tail_keep: default_rerank_prefilter_dual_source_tail_keep(),
             confidence_gate_enabled: default_confidence_gate_enabled(),
             confidence_gate_min_top1_prob: default_confidence_gate_min_top1_prob(),
             confidence_gate_min_rrf: default_confidence_gate_min_rrf(),
@@ -650,14 +719,32 @@ impl Default for RerankingConfig {
 }
 
 fn default_reranker_model() -> String {
-    "BGERerankerBase".to_string()
+    "JINARerankerV1TurboEn".to_string()
 }
 
 fn default_rerank_top_n() -> usize {
     30
 }
 fn default_rerank_timeout_ms() -> u64 {
-    1000
+    15_000
+}
+fn default_rerank_max_length() -> usize {
+    1024
+}
+fn default_rerank_batch_size() -> usize {
+    0
+}
+fn default_rerank_warmup_pairs() -> usize {
+    0
+}
+fn default_rerank_prefilter_target_top_n() -> usize {
+    24
+}
+fn default_rerank_prefilter_small_gap_threshold() -> f32 {
+    0.015
+}
+fn default_rerank_prefilter_dual_source_tail_keep() -> usize {
+    4
 }
 fn default_confidence_gate_enabled() -> bool {
     false
@@ -767,6 +854,9 @@ fn default_chunk_block_chunk_boost_factor() -> f32 {
 }
 fn default_chunk_block_chunk_min_lines() -> usize {
     4
+}
+fn default_chunk_rerank_score_normalization() -> String {
+    "none".to_string()
 }
 
 // Default value functions
@@ -908,6 +998,8 @@ impl Default for IndexingConfig {
             batch_size: default_batch_size(),
             batches_per_commit: default_batches_per_commit(),
             pipeline_tracing: false,
+            chunk_incremental_rebuild_enabled: false,
+            semantic_single_save_mode: false,
             show_progress: true,
         }
     }
@@ -1277,7 +1369,9 @@ impl Settings {
         Figment::new()
             .merge(Serialized::defaults(Settings::default()))
             .merge(Toml::file(path))
-            .merge(Env::prefixed("CI_").split("_"))
+            .merge(Env::prefixed("CI_").map(|key| {
+                key.as_str().to_lowercase().replace("__", ".").into()
+            }))
             .extract()
             .map(|mut settings: Settings| {
                 settings.sync_indexed_path_cache();
@@ -1435,7 +1529,9 @@ impl Settings {
                 result.push_str("# Exponential backoff: 100ms, 200ms, 400ms delays\n");
             } else if line.starts_with("ignore_patterns = ") {
                 result.push_str("\n# Additional patterns to ignore during indexing\n");
-                result.push_str("# Defaults include eval/benchmark artifacts: evals/**, **/*.eval.*\n");
+                result.push_str(
+                    "# Defaults include eval/benchmark artifacts: evals/**, **/*.eval.*\n",
+                );
             } else if line.starts_with("include_tests = ") {
                 result.push_str("\n# Include test files in indexing (default: false)\n");
                 result.push_str(
@@ -1454,6 +1550,16 @@ impl Settings {
                 result.push_str("\n# Enable detailed pipeline stage tracing\n");
                 result.push_str("# Shows timing, throughput, and memory for each stage\n");
                 result.push_str("# Requires: logging.modules.pipeline = \"info\"\n");
+            } else if line.starts_with("chunk_incremental_rebuild_enabled = ") {
+                result.push_str(
+                    "\n# Enable incremental code-chunk refresh using changed/deleted file deltas\n",
+                );
+                result.push_str("# Keep off until A/B benchmarks validate correctness + speedup\n");
+            } else if line.starts_with("semantic_single_save_mode = ") {
+                result.push_str(
+                    "\n# Reduce repeated semantic saves within one indexing command\n",
+                );
+                result.push_str("# Keep off until A/B benchmarks validate correctness + speedup\n");
             } else if line.starts_with("show_progress = ") {
                 result.push_str("\n# Show progress bars during indexing (default: true)\n");
                 result.push_str("# Use --no-progress CLI flag to override\n");
@@ -1564,6 +1670,40 @@ impl Settings {
                 result.push_str("\n# Number of fused candidates sent to reranker\n");
             } else if in_reranking_section && line.starts_with("timeout_ms = ") {
                 result.push_str("\n# Timeout budget for reranking in milliseconds (fallback to fusion on timeout)\n");
+            } else if in_reranking_section && line.starts_with("max_length = ") {
+                result.push_str(
+                    "\n# Maximum token length for reranker pair encoding (query + candidate)\n",
+                );
+            } else if in_reranking_section && line.starts_with("runtime_tuning_enabled = ") {
+                result.push_str(
+                    "\n# Enable runtime tuning knobs (batch size / init warmup) for reranker\n",
+                );
+            } else if in_reranking_section && line.starts_with("batch_size = ") {
+                result.push_str("# Reranker batch size override (0 keeps fastembed default)\n");
+            } else if in_reranking_section && line.starts_with("warmup_pairs = ") {
+                result.push_str(
+                    "# Run this many synthetic pairs once at init to warm tokenizer/session\n",
+                );
+            } else if in_reranking_section && line.starts_with("prefilter_enabled = ") {
+                result.push_str(
+                    "\n# Enable prefilter to reduce reranker candidate count on easy queries\n",
+                );
+            } else if in_reranking_section && line.starts_with("prefilter_target_top_n = ") {
+                result.push_str("# Target reranker candidate count after prefilter trimming\n");
+            } else if in_reranking_section && line.starts_with("prefilter_fallback_on_small_gap = ")
+            {
+                result.push_str(
+                    "# Fallback to full rerank set when score gap indicates ambiguous results\n",
+                );
+            } else if in_reranking_section && line.starts_with("prefilter_small_gap_threshold = ") {
+                result.push_str(
+                    "# Minimum score gap required to keep prefilter active for this query\n",
+                );
+            } else if in_reranking_section && line.starts_with("prefilter_dual_source_tail_keep = ")
+            {
+                result.push_str(
+                    "# Keep this many BM25+vector overlap candidates from the trimmed tail\n",
+                );
             } else if in_reranking_section && line.starts_with("confidence_gate_enabled = ") {
                 result.push_str(
                     "\n# Enable confidence gate to suppress low-confidence retrieval results\n",
@@ -1581,14 +1721,19 @@ impl Settings {
             } else if line == "[chunk_search]" {
                 in_chunk_search_section = true;
                 result.push_str("\n[chunk_search]\n");
+                result
+                    .push_str("# Chunk-level retrieval pipeline (vector + BM25 + RRF + rerank)\n");
                 result.push_str(
-                    "# Chunk-level retrieval pipeline (vector + BM25 + RRF + rerank)\n",
+                    "# Useful for understanding code flow and logic, not only symbol navigation\n",
                 );
-                result.push_str("# Useful for understanding code flow and logic, not only symbol navigation\n");
                 prev_line_was_section = true;
                 continue;
             } else if in_chunk_search_section && line.starts_with("enabled = ") {
                 result.push_str("# Enable chunk indexing/search pipeline\n");
+            } else if in_chunk_search_section
+                && line.starts_with("rebuild_logging_verbose = ")
+            {
+                result.push_str("\n# Print detailed timing for chunk rebuild phases\n");
             } else if in_chunk_search_section && line.starts_with("top_k_vector = ") {
                 result.push_str("\n# Vector recall candidate pool size\n");
             } else if in_chunk_search_section && line.starts_with("top_k_bm25 = ") {
@@ -1610,41 +1755,41 @@ impl Settings {
                     "# Languages for flow extraction (default: typescript/javascript/python/rust)\n",
                 );
             } else if in_chunk_search_section && line.starts_with("flow_chunk_max_per_symbol = ") {
-                result.push_str("# Max flow chunks emitted per symbol (controls index size/noise)\n");
+                result
+                    .push_str("# Max flow chunks emitted per symbol (controls index size/noise)\n");
             } else if in_chunk_search_section && line.starts_with("chunk_token_target = ") {
-                result.push_str(
-                    "\n# Target token size used while splitting/merging long chunks\n",
-                );
+                result.push_str("\n# Target token size used while splitting/merging long chunks\n");
             } else if in_chunk_search_section && line.starts_with("chunk_token_max = ") {
                 result.push_str("# Hard max token size per chunk (default: 4096)\n");
             } else if in_chunk_search_section && line.starts_with("chunk_token_overlap = ") {
                 result.push_str("# Token overlap between adjacent split chunks\n");
-            } else if in_chunk_search_section
-                && line.starts_with("hard_ignore_path_patterns = ")
-            {
+            } else if in_chunk_search_section && line.starts_with("hard_ignore_path_patterns = ") {
                 result.push_str(
                     "\n# Retrieval-time hard-ignore patterns (results matching these paths are dropped)\n",
                 );
-            } else if in_chunk_search_section
-                && line.starts_with("single_line_penalty_enabled = ")
+            } else if in_chunk_search_section && line.starts_with("single_line_penalty_enabled = ")
             {
                 result.push_str("\n# Downrank one-line chunks to reduce noisy hits\n");
-            } else if in_chunk_search_section
-                && line.starts_with("single_line_penalty_factor = ")
-            {
-                result.push_str("# Penalty factor for one-line chunks (0..1, lower = stronger penalty)\n");
-            } else if in_chunk_search_section
-                && line.starts_with("block_chunk_boost_enabled = ")
-            {
+            } else if in_chunk_search_section && line.starts_with("single_line_penalty_factor = ") {
+                result.push_str(
+                    "# Penalty factor for one-line chunks (0..1, lower = stronger penalty)\n",
+                );
+            } else if in_chunk_search_section && line.starts_with("block_chunk_boost_enabled = ") {
                 result.push_str("\n# Boost multi-line implementation/flow chunks\n");
-            } else if in_chunk_search_section
-                && line.starts_with("block_chunk_boost_factor = ")
-            {
+            } else if in_chunk_search_section && line.starts_with("block_chunk_boost_factor = ") {
                 result.push_str("# Boost factor for block chunks (>1 increases rank)\n");
-            } else if in_chunk_search_section
-                && line.starts_with("block_chunk_min_lines = ")
-            {
+            } else if in_chunk_search_section && line.starts_with("block_chunk_min_lines = ") {
                 result.push_str("# Minimum line count to qualify as block chunk\n");
+            } else if in_chunk_search_section
+                && line.starts_with("post_rerank_heuristics_enabled = ")
+            {
+                result.push_str(
+                    "\n# Apply post-rerank heuristic shaping (disable for raw reranker A/B testing)\n",
+                );
+            } else if in_chunk_search_section && line.starts_with("rerank_score_normalization = ") {
+                result.push_str(
+                    "# Normalize reranker score before post-rerank shaping: none | sigmoid\n",
+                );
             } else if line == "[file_watch]" {
                 result.push_str("\n[file_watch]\n");
                 result.push_str("# Enable automatic file watching for indexed files\n");
@@ -2037,6 +2182,8 @@ mod tests {
         let expected_index_path = PathBuf::from(format!("{}/index", crate::init::local_dir_name()));
         assert_eq!(settings.index_path, expected_index_path);
         assert!(settings.indexing.parallelism > 0);
+        assert!(!settings.indexing.chunk_incremental_rebuild_enabled);
+        assert!(!settings.indexing.semantic_single_save_mode);
         assert!(settings.languages.contains_key("rust"));
     }
 
@@ -2120,7 +2267,18 @@ enabled = true
     #[test]
     fn test_reranking_confidence_gate_defaults() {
         let settings = Settings::default();
+        assert_eq!(settings.reranking.model, "JINARerankerV1TurboEn");
         assert_eq!(settings.reranking.top_n, 30);
+        assert_eq!(settings.reranking.timeout_ms, 15_000);
+        assert_eq!(settings.reranking.max_length, 1024);
+        assert!(!settings.reranking.runtime_tuning_enabled);
+        assert_eq!(settings.reranking.batch_size, 0);
+        assert_eq!(settings.reranking.warmup_pairs, 0);
+        assert!(!settings.reranking.prefilter_enabled);
+        assert_eq!(settings.reranking.prefilter_target_top_n, 24);
+        assert!(settings.reranking.prefilter_fallback_on_small_gap);
+        assert!((settings.reranking.prefilter_small_gap_threshold - 0.015).abs() < f32::EPSILON);
+        assert_eq!(settings.reranking.prefilter_dual_source_tail_keep, 4);
         assert!(!settings.reranking.confidence_gate_enabled);
         assert!((settings.reranking.confidence_gate_min_top1_prob - 0.34).abs() < f32::EPSILON);
         assert!((settings.reranking.confidence_gate_min_rrf - 0.018).abs() < f32::EPSILON);
@@ -2137,6 +2295,15 @@ enabled = true
 model = "BGERerankerBase"
 top_n = 25
 timeout_ms = 1500
+max_length = 1536
+runtime_tuning_enabled = true
+batch_size = 16
+warmup_pairs = 4
+prefilter_enabled = true
+prefilter_target_top_n = 22
+prefilter_fallback_on_small_gap = false
+prefilter_small_gap_threshold = 0.02
+prefilter_dual_source_tail_keep = 3
 confidence_gate_enabled = true
 confidence_gate_min_top1_prob = 0.41
 confidence_gate_min_rrf = 0.022
@@ -2147,6 +2314,15 @@ confidence_gate_require_dual_source = false
         let settings = Settings::load_from(&config_path).unwrap();
 
         assert!(settings.reranking.confidence_gate_enabled);
+        assert_eq!(settings.reranking.max_length, 1536);
+        assert!(settings.reranking.runtime_tuning_enabled);
+        assert_eq!(settings.reranking.batch_size, 16);
+        assert_eq!(settings.reranking.warmup_pairs, 4);
+        assert!(settings.reranking.prefilter_enabled);
+        assert_eq!(settings.reranking.prefilter_target_top_n, 22);
+        assert!(!settings.reranking.prefilter_fallback_on_small_gap);
+        assert!((settings.reranking.prefilter_small_gap_threshold - 0.02).abs() < f32::EPSILON);
+        assert_eq!(settings.reranking.prefilter_dual_source_tail_keep, 3);
         assert!((settings.reranking.confidence_gate_min_top1_prob - 0.41).abs() < f32::EPSILON);
         assert!((settings.reranking.confidence_gate_min_rrf - 0.022).abs() < f32::EPSILON);
         assert!(!settings.reranking.confidence_gate_require_dual_source);
@@ -2155,6 +2331,8 @@ confidence_gate_require_dual_source = false
     #[test]
     fn test_chunk_search_ranking_defaults() {
         let settings = Settings::default();
+        assert!(settings.chunk_search.enabled);
+        assert!(!settings.chunk_search.rebuild_logging_verbose);
         assert_eq!(settings.chunk_search.top_k_vector, 100);
         assert_eq!(settings.chunk_search.top_k_bm25, 100);
         assert_eq!(settings.chunk_search.top_k_fused, 50);
@@ -2179,6 +2357,8 @@ confidence_gate_require_dual_source = false
         assert!(settings.chunk_search.block_chunk_boost_enabled);
         assert!((settings.chunk_search.block_chunk_boost_factor - 1.12).abs() < f32::EPSILON);
         assert_eq!(settings.chunk_search.block_chunk_min_lines, 4);
+        assert!(!settings.chunk_search.post_rerank_heuristics_enabled);
+        assert_eq!(settings.chunk_search.rerank_score_normalization, "none");
         assert_eq!(
             settings.chunk_search.flow_chunk_languages,
             vec![
@@ -2188,6 +2368,22 @@ confidence_gate_require_dual_source = false
                 "rust".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn test_chunk_search_rerank_controls_from_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("settings.toml");
+        let toml_content = r#"
+[chunk_search]
+post_rerank_heuristics_enabled = false
+rerank_score_normalization = "sigmoid"
+"#;
+
+        fs::write(&config_path, toml_content).unwrap();
+        let settings = Settings::load_from(&config_path).unwrap();
+        assert!(!settings.chunk_search.post_rerank_heuristics_enabled);
+        assert_eq!(settings.chunk_search.rerank_score_normalization, "sigmoid");
     }
 
     #[test]
@@ -2237,6 +2433,30 @@ default = "info"
             std::env::remove_var("CI_LOGGING__DEFAULT");
         }
         std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_load_from_supports_ci_double_underscore_mapping() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("settings.toml");
+        fs::write(&config_path, "[indexing]\nparallelism = 2\n").unwrap();
+
+        unsafe {
+            std::env::set_var("CI_INDEXING__PIPELINE_TRACING", "true");
+            std::env::set_var("CI_INDEXING__SEMANTIC_SINGLE_SAVE_MODE", "true");
+            std::env::set_var("CI_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE", "true");
+        }
+
+        let settings = Settings::load_from(&config_path).unwrap();
+        assert!(settings.indexing.pipeline_tracing);
+        assert!(settings.indexing.semantic_single_save_mode);
+        assert!(settings.chunk_search.rebuild_logging_verbose);
+
+        unsafe {
+            std::env::remove_var("CI_INDEXING__PIPELINE_TRACING");
+            std::env::remove_var("CI_INDEXING__SEMANTIC_SINGLE_SAVE_MODE");
+            std::env::remove_var("CI_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE");
+        }
     }
 
     #[test]

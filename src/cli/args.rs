@@ -67,6 +67,7 @@ fn create_custom_help() -> String {
     help.push_str("  mcp-test      Test MCP connection\n");
     help.push_str("  mcp           Execute MCP tools directly (one-shot)\n");
     help.push_str("  benchmark     Benchmark parser performance\n");
+    help.push_str("  benchmark-rerank  Persistent reranker benchmark (quality + latency)\n");
     help.push_str("  parse         Output AST nodes in JSONL format\n");
     help.push_str("  plugin        Manage Claude Code plugins\n");
     help.push_str("  documents     Index and search document collections\n");
@@ -301,6 +302,55 @@ pub enum Commands {
         /// Custom file to benchmark
         #[arg(short, long)]
         file: Option<PathBuf>,
+    },
+
+    /// Benchmark reranker quality/latency with persistent in-process execution
+    #[command(
+        name = "benchmark-rerank",
+        about = "Persistent reranker benchmark (quality + latency)",
+        long_about = "Run chunk-search reranker benchmarks in persistent in-process mode (no one-shot model reload per query).\n\nProduces JSON and Markdown reports with quality metrics (Hit@1, MRR@10, nDCG@10, Recall@5/10), cold/warm latency, timeout miss split, and Pareto frontier.",
+        after_help = "Examples:\n  codanna benchmark-rerank --queries ./bench/queries.jsonl --qrels ./bench/qrels.jsonl --profiles ./bench/profiles.toml --out ./bench/out\n  codanna benchmark-rerank --queries ./bench/queries.jsonl --qrels ./bench/qrels.jsonl --profiles ./bench/profiles.toml --cold-runs 1 --warm-runs 3 --limit 10"
+    )]
+    BenchmarkRerank {
+        /// Query set JSONL path ({\"id\":\"...\",\"query\":\"...\"})
+        #[arg(long, value_name = "PATH")]
+        queries: PathBuf,
+
+        /// Qrels JSONL path ({\"query_id\":\"...\",\"chunk_id\":123,\"grade\":2})
+        #[arg(long, value_name = "PATH")]
+        qrels: PathBuf,
+
+        /// Profile matrix TOML path
+        #[arg(long, value_name = "PATH")]
+        profiles: PathBuf,
+
+        /// Output directory for reports
+        #[arg(long, value_name = "DIR")]
+        out: PathBuf,
+
+        /// Number of cold runs per query
+        #[arg(long, default_value_t = 1)]
+        cold_runs: usize,
+
+        /// Number of warm runs per query
+        #[arg(long, default_value_t = 3)]
+        warm_runs: usize,
+
+        /// Retrieval limit (top-k)
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+
+        /// Timeout threshold per query run in milliseconds (0 disables)
+        #[arg(long, default_value_t = 20_000)]
+        query_timeout_ms: u64,
+
+        /// Write checkpoint files every N completed queries per profile
+        #[arg(long, default_value_t = 1)]
+        checkpoint_every: usize,
+
+        /// Skip warm runs for a query when cold run timed out
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        skip_warm_on_timeout: bool,
     },
 
     /// Parse a file and output AST nodes in JSONL format

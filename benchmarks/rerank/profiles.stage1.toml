@@ -1,0 +1,51 @@
+# Stage-1 Jina-only sweep matrix.
+# baseline_current_default is auto-added by the benchmark command.
+
+[defaults]
+model = "JINARerankerV1TurboEn"
+timeout_ms = 15000
+max_length = 1024
+rerank_score_normalization = "none"
+top_k_vector = 100
+top_k_bm25 = 100
+top_k_fused = 50
+
+[[profiles]]
+name = "jina_tn12_heur_on"
+top_n = 12
+post_rerank_heuristics_enabled = true
+
+[[profiles]]
+name = "jina_tn12_heur_off"
+top_n = 12
+post_rerank_heuristics_enabled = false
+
+[[profiles]]
+name = "jina_tn20_heur_on"
+top_n = 20
+post_rerank_heuristics_enabled = true
+
+[[profiles]]
+name = "jina_tn20_heur_off"
+top_n = 20
+post_rerank_heuristics_enabled = false
+
+[[profiles]]
+name = "jina_tn30_heur_on"
+top_n = 30
+post_rerank_heuristics_enabled = true
+
+[[profiles]]
+name = "jina_tn30_heur_off"
+top_n = 30
+post_rerank_heuristics_enabled = false
+
+[[profiles]]
+name = "jina_tn40_heur_on"
+top_n = 40
+post_rerank_heuristics_enabled = true
+
+[[profiles]]
+name = "jina_tn40_heur_off"
+top_n = 40
+post_rerank_heuristics_enabled = false

@@ -11,10 +11,10 @@
 //!
 //! Note: Embedding generation moved to separate EMBED stage (parallel with INDEX).
 
-use crate::indexing::IndexStats;
 use crate::indexing::pipeline::types::{
     IndexBatch, PipelineResult, SymbolLookupCache, UnresolvedRelationship,
 };
+use crate::indexing::IndexStats;
 use crate::io::status_line::ProgressBar;
 use crate::storage::DocumentIndex;
 use crossbeam_channel::Receiver;
@@ -209,12 +209,12 @@ impl IndexStage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SymbolKind;
     use crate::config::Settings;
     use crate::indexing::pipeline::types::FileRegistration;
     use crate::parsing::LanguageId;
     use crate::symbol::Symbol;
     use crate::types::{FileId, Range, SymbolId};
+    use crate::SymbolKind;
     use crossbeam_channel::bounded;
     use std::path::PathBuf;
     use tempfile::TempDir;

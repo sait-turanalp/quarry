@@ -1,0 +1,4 @@
+{"query_id":"q1","chunk_id":1234,"grade":2}
+{"query_id":"q1","chunk_id":5678,"grade":1}
+{"query_id":"q2","chunk_id":2345,"grade":2}
+{"query_id":"q3","chunk_id":3456,"grade":2}

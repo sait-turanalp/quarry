@@ -14,16 +14,16 @@ use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use tantivy::DocId;
 use tantivy::{
+    Index, IndexReader, IndexSettings, IndexWriter, ReloadPolicy, TantivyDocument as Document,
+    Term,
     collector::TopDocs,
     directory::MmapDirectory,
     query::{BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, TermQuery},
     schema::{
-        Field, IndexRecordOption, NumericOptions, Schema, SchemaBuilder, TextFieldIndexing,
-        TextOptions, Value, FAST, STORED, STRING,
+        FAST, Field, IndexRecordOption, NumericOptions, STORED, STRING, Schema, SchemaBuilder,
+        TextFieldIndexing, TextOptions, Value,
     },
     tokenizer::{NgramTokenizer, TextAnalyzer},
-    Index, IndexReader, IndexSettings, IndexWriter, ReloadPolicy, TantivyDocument as Document,
-    Term,
 };
 
 /// Schema fields for the document index
@@ -3243,8 +3243,8 @@ mod tests {
 
     #[test]
     fn test_vector_metadata_tantivy_roundtrip() {
-        use tantivy::schema::{SchemaBuilder, STORED, TEXT};
-        use tantivy::{doc, Index, TantivyDocument};
+        use tantivy::schema::{STORED, SchemaBuilder, TEXT};
+        use tantivy::{Index, TantivyDocument, doc};
 
         // Create a simple schema with a metadata field
         let mut schema_builder = SchemaBuilder::default();

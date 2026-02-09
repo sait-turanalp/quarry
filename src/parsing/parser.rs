@@ -3,8 +3,8 @@
 //! This module defines the common interface that all language parsers
 //! must implement to work with the indexing system.
 
-use crate::parsing::method_call::MethodCall;
 use crate::parsing::FlowBlock;
+use crate::parsing::method_call::MethodCall;
 use crate::types::SymbolCounter;
 use crate::{FileId, Range, Symbol};
 use std::any::Any;

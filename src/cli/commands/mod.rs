@@ -4,6 +4,7 @@
 //! Commands are progressively migrated from main.rs.
 
 pub mod benchmark;
+pub mod benchmark_rerank;
 pub mod directories;
 pub mod documents;
 pub mod index;

@@ -1025,7 +1025,8 @@ mod tests {
         metadata.save(path).unwrap();
 
         // Write storage with only 1 embedding.
-        let mut storage = SemanticVectorStorage::new(path, VectorDimension::new(4).unwrap()).unwrap();
+        let mut storage =
+            SemanticVectorStorage::new(path, VectorDimension::new(4).unwrap()).unwrap();
         storage
             .save_embedding(SymbolId::new(1).unwrap(), &[0.1, 0.2, 0.3, 0.4])
             .unwrap();

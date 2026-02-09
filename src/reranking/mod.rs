@@ -24,6 +24,41 @@ pub enum RerankError {
 /// Cross-encoder reranker using fastembed's TextRerank.
 pub struct Reranker {
     model: Mutex<TextRerank>,
+    batch_size: Option<usize>,
+}
+
+/// Runtime knobs applied to reranker inference.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RerankerRuntimeOptions {
+    pub enabled: bool,
+    pub batch_size: usize,
+    pub warmup_pairs: usize,
+}
+
+impl RerankerRuntimeOptions {
+    pub fn from_config(cfg: &crate::config::RerankingConfig) -> Self {
+        Self {
+            enabled: cfg.runtime_tuning_enabled,
+            batch_size: cfg.batch_size,
+            warmup_pairs: cfg.warmup_pairs,
+        }
+    }
+
+    fn effective_batch_size(self) -> Option<usize> {
+        if self.enabled && self.batch_size > 0 {
+            Some(self.batch_size)
+        } else {
+            None
+        }
+    }
+
+    fn effective_warmup_pairs(self) -> usize {
+        if self.enabled {
+            self.warmup_pairs.clamp(0, 32)
+        } else {
+            0
+        }
+    }
 }
 
 impl Reranker {
@@ -32,24 +67,41 @@ impl Reranker {
     /// Supported model names: "JINARerankerV1TurboEn", "BGERerankerBase",
     /// "BGERerankerV2M3", "JINARerankerV2BaseMultiligual", or
     /// custom user-defined models via `custom:/absolute/or/relative/path`.
-    pub fn new(model_name: &str) -> Result<Self, RerankError> {
+    pub fn new(
+        model_name: &str,
+        max_length: usize,
+        runtime: RerankerRuntimeOptions,
+    ) -> Result<Self, RerankError> {
         if let Some(custom_ref) = model_name.strip_prefix("custom:") {
-            return Self::new_custom(custom_ref.trim());
+            return Self::new_custom(custom_ref.trim(), max_length, runtime);
         }
 
         let model_enum = parse_reranker_model(model_name)?;
 
         let cache_dir = crate::init::models_dir();
-        let reranker =
-            TextRerank::try_new(RerankInitOptions::new(model_enum).with_cache_dir(cache_dir))
-                .map_err(|e| RerankError::InitError(format!("Model '{model_name}': {e}")))?;
+        let mut reranker = TextRerank::try_new(
+            RerankInitOptions::new(model_enum)
+                .with_cache_dir(cache_dir)
+                .with_max_length(max_length.max(1)),
+        )
+        .map_err(|e| RerankError::InitError(format!("Model '{model_name}': {e}")))?;
+
+        let batch_size = runtime.effective_batch_size();
+        if let Err(e) = warmup_model(&mut reranker, runtime.effective_warmup_pairs(), batch_size) {
+            tracing::debug!("Reranker warmup skipped: {e}");
+        }
 
         Ok(Self {
             model: Mutex::new(reranker),
+            batch_size,
         })
     }
 
-    fn new_custom(custom_ref: &str) -> Result<Self, RerankError> {
+    fn new_custom(
+        custom_ref: &str,
+        max_length: usize,
+        runtime: RerankerRuntimeOptions,
+    ) -> Result<Self, RerankError> {
         if custom_ref.is_empty() {
             return Err(RerankError::InitError(
                 "Custom reranker path is empty. Use model = \"custom:/path/to/model-or-dir\""
@@ -63,19 +115,24 @@ impl Reranker {
         let user_model =
             UserDefinedRerankingModel::new(OnnxSource::File(onnx_path), tokenizer_files);
 
-        let reranker = TextRerank::try_new_from_user_defined(
-            user_model,
-            RerankInitOptionsUserDefined::default(),
-        )
-        .map_err(|e| {
-            RerankError::InitError(format!(
-                "Failed to load custom reranker from '{}': {e}",
-                custom_ref
-            ))
-        })?;
+        let mut options = RerankInitOptionsUserDefined::default();
+        options.max_length = max_length.max(1);
+        let mut reranker =
+            TextRerank::try_new_from_user_defined(user_model, options).map_err(|e| {
+                RerankError::InitError(format!(
+                    "Failed to load custom reranker from '{}': {e}",
+                    custom_ref
+                ))
+            })?;
+
+        let batch_size = runtime.effective_batch_size();
+        if let Err(e) = warmup_model(&mut reranker, runtime.effective_warmup_pairs(), batch_size) {
+            tracing::debug!("Custom reranker warmup skipped: {e}");
+        }
 
         Ok(Self {
             model: Mutex::new(reranker),
+            batch_size,
         })
     }
 
@@ -99,7 +156,7 @@ impl Reranker {
 
         let doc_refs: Vec<&str> = documents.iter().map(|s| s.as_str()).collect();
         let results = model
-            .rerank(query, doc_refs, true, None)
+            .rerank(query, doc_refs, true, self.batch_size)
             .map_err(|e| RerankError::RerankFailed(e.to_string()))?;
 
         let mut scored: Vec<(usize, f32)> =
@@ -109,6 +166,22 @@ impl Reranker {
         scored.truncate(limit);
         Ok(scored)
     }
+}
+
+fn warmup_model(
+    reranker: &mut TextRerank,
+    warmup_pairs: usize,
+    batch_size: Option<usize>,
+) -> Result<(), RerankError> {
+    if warmup_pairs == 0 {
+        return Ok(());
+    }
+
+    let docs: Vec<&str> = vec!["warmup candidate snippet"; warmup_pairs];
+    reranker
+        .rerank("warmup query", docs, false, batch_size)
+        .map_err(|e| RerankError::RerankFailed(format!("warmup failed: {e}")))?;
+    Ok(())
 }
 
 /// Parse a model name string into a RerankerModel enum variant.

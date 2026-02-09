@@ -7,7 +7,6 @@
 //! - Converts RawRelationship -> UnresolvedRelationship (resolving from_id)
 //! - Batches output for efficient Tantivy writes
 
-use crate::CompactString;
 use crate::indexing::pipeline::types::{
     EmbeddingBatch, FileRegistration, IndexBatch, ParsedFile, PipelineResult, RawRelationship,
     RawSymbol, UnresolvedRelationship,
@@ -16,6 +15,7 @@ use crate::semantic::SimpleSemanticSearch;
 use crate::symbol::{ScopeContext, Symbol};
 use crate::types::{FileId, Range, SymbolId, SymbolKind};
 use crate::utils::get_utc_timestamp;
+use crate::CompactString;
 use crossbeam_channel::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

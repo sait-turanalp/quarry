@@ -260,7 +260,10 @@ async fn main() {
     // - Full: Index + providers (Retrieve, Mcp, Serve, Index)
     let needs_providers = !matches!(
         &cli.command,
-        Commands::Parse { .. } | Commands::McpTest { .. } | Commands::Benchmark { .. }
+        Commands::Parse { .. }
+            | Commands::McpTest { .. }
+            | Commands::Benchmark { .. }
+            | Commands::BenchmarkRerank { .. }
     );
 
     let needs_indexer = !matches!(
@@ -270,6 +273,7 @@ async fn main() {
             | Commands::Parse { .. }
             | Commands::McpTest { .. }
             | Commands::Benchmark { .. }
+            | Commands::BenchmarkRerank { .. }
             | Commands::AddDir { .. }
             | Commands::RemoveDir { .. }
             | Commands::ListDirs
@@ -752,6 +756,35 @@ async fn main() {
 
         Commands::Benchmark { language, file } => {
             codanna::cli::commands::benchmark::run(&language, file);
+        }
+
+        Commands::BenchmarkRerank {
+            queries,
+            qrels,
+            profiles,
+            out,
+            cold_runs,
+            warm_runs,
+            limit,
+            query_timeout_ms,
+            checkpoint_every,
+            skip_warm_on_timeout,
+        } => {
+            codanna::cli::commands::benchmark_rerank::run(
+                codanna::cli::commands::benchmark_rerank::BenchmarkRerankArgs {
+                    queries,
+                    qrels,
+                    profiles,
+                    out,
+                    cold_runs,
+                    warm_runs,
+                    limit,
+                    query_timeout_ms,
+                    checkpoint_every,
+                    skip_warm_on_timeout,
+                },
+                &config,
+            );
         }
 
         Commands::Plugin { action } => {

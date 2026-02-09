@@ -20,6 +20,7 @@
 pub mod client;
 pub mod http_server;
 pub mod https_server;
+pub mod knowledge;
 pub mod notifications;
 pub mod react_hooks;
 
@@ -1380,7 +1381,8 @@ impl CodeIntelligenceServer {
                     if let Some(lang) = item.language.as_deref() {
                         result.push_str(&format!("   Language: {lang}\n"));
                     }
-                    let preview: String = item.snippet.lines().take(6).collect::<Vec<_>>().join("\n");
+                    let preview: String =
+                        item.snippet.lines().take(6).collect::<Vec<_>>().join("\n");
                     result.push_str("   Snippet:\n");
                     result.push_str(&format!("{}\n\n", preview));
                 }
@@ -1396,13 +1398,11 @@ impl CodeIntelligenceServer {
                     );
                 }
 
-                if let Some(guidance) =
-                    generate_mcp_guidance(
-                        indexer.settings(),
-                        "semantic_search_chunks",
-                        outcome.results.len(),
-                    )
-                {
+                if let Some(guidance) = generate_mcp_guidance(
+                    indexer.settings(),
+                    "semantic_search_chunks",
+                    outcome.results.len(),
+                ) {
                     result.push_str("\n---\n💡 ");
                     result.push_str(&guidance);
                     result.push('\n');
@@ -2247,78 +2247,31 @@ impl CodeIntelligenceServer {
         }
         let indexed_files: Vec<PathBuf> = file_paths.into_iter().collect();
 
+        // Detect primary language and load knowledge base
+        let lang_counts = detect_primary_language(&indexed_files);
+        let primary_language = lang_counts
+            .iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(lang, _)| lang.as_str())
+            .unwrap_or("unknown");
+
+        let knowledge_base = if let Some(ref workspace_root) = indexer.settings().workspace_root {
+            load_knowledge_base(workspace_root)
+        } else {
+            None
+        };
+
         let mut output = String::new();
-        output.push_str("# Project Overview\n\n");
 
-        // Group files by module
-        let modules = group_files_by_module(&indexed_files, module_depth);
+        // Detect workspace packages for monorepo support
+        let workspace_packages = if let Some(ref workspace_root) = indexer.settings().workspace_root
+        {
+            detect_workspace_packages(workspace_root)
+        } else {
+            Vec::new()
+        };
 
-        output.push_str(&format!("**Total Files:** {} | **Modules:** {} (depth: {})\n\n",
-            indexed_files.len(), modules.len(), module_depth));
-
-        // Module structure with stats
-        output.push_str("## Module Structure\n\n");
-
-        let mut sorted_modules: Vec<_> = modules.iter().collect();
-        sorted_modules.sort_by_key(|(path, _)| path.as_path());
-
-        for (module_path, files) in sorted_modules {
-            let stats = count_symbols_by_module(&indexer, files);
-
-            output.push_str(&format!(
-                "### {}\n",
-                module_path.display()
-            ));
-            output.push_str(&format!(
-                "- **Files:** {} | **Symbols:** {}\n",
-                stats.total_files, stats.total_symbols
-            ));
-
-            let mut symbol_types = Vec::new();
-            if stats.functions > 0 {
-                symbol_types.push(format!("{} functions", stats.functions));
-            }
-            if stats.classes > 0 {
-                symbol_types.push(format!("{} classes", stats.classes));
-            }
-            if stats.structs > 0 {
-                symbol_types.push(format!("{} structs", stats.structs));
-            }
-            if stats.interfaces > 0 {
-                symbol_types.push(format!("{} interfaces", stats.interfaces));
-            }
-            if stats.methods > 0 {
-                symbol_types.push(format!("{} methods", stats.methods));
-            }
-
-            if !symbol_types.is_empty() {
-                output.push_str(&format!("- **Types:** {}\n", symbol_types.join(", ")));
-            }
-
-            // Generate module description
-            let description = generate_module_description(module_path, files, &indexer);
-            output.push_str(&format!("- **Description:** {}\n", description));
-
-            output.push('\n');
-        }
-
-        // Entry points detection
-        let entry_points = detect_entry_points(&all_symbols);
-        if !entry_points.is_empty() {
-            output.push_str("## Entry Points\n\n");
-            for ep in entry_points.iter().take(5) {
-                output.push_str(&format!(
-                    "- **{}** `{}` - {}:{} (symbol_id:{})\n",
-                    ep.entry_type, ep.name, ep.file_path, ep.line, ep.symbol_id
-                ));
-            }
-            if entry_points.len() > 5 {
-                output.push_str(&format!("\n*... and {} more*\n", entry_points.len() - 5));
-            }
-            output.push('\n');
-        }
-
-        // Parse dependencies (used for both Dependencies section and layer detection)
+        // Parse dependencies early (needed for header and tech stack)
         let mut dep_info: Option<DependencyInfo> = None;
         if let Some(ref workspace_root) = indexer.settings().workspace_root {
             let package_files = find_package_files(workspace_root);
@@ -2332,58 +2285,256 @@ impl CodeIntelligenceServer {
                     break;
                 }
             }
-        }
 
-        if include_dependencies {
-            output.push_str("## Dependencies\n\n");
-
-            if let Some(ref info) = dep_info {
-                output.push_str(&format!("**{}** ({})\n\n", info.package_name, info.tech_stack));
-
-                if !info.dependencies.is_empty() {
-                    output.push_str("**Production Dependencies:**\n");
-                    for (name, version) in info.dependencies.iter().take(10) {
-                        output.push_str(&format!("- `{}` {}\n", name, version));
+            // Aggregate dependencies from workspace sub-packages
+            if !workspace_packages.is_empty() {
+                if let Some(ref mut info) = dep_info {
+                    let mut pkg_names = Vec::new();
+                    for ws_pkg in &workspace_packages {
+                        let abs_pkg = workspace_root.join(ws_pkg);
+                        let sub_dep = if abs_pkg.join("package.json").exists() {
+                            parse_package_json(&abs_pkg.join("package.json"))
+                        } else if abs_pkg.join("Cargo.toml").exists() {
+                            parse_cargo_toml(&abs_pkg.join("Cargo.toml"))
+                        } else {
+                            None
+                        };
+                        if let Some(sub) = sub_dep {
+                            pkg_names.push(sub.package_name.clone());
+                            // Merge dependencies (deduplicate by name)
+                            for (name, ver) in sub.dependencies {
+                                if !info.dependencies.iter().any(|(n, _)| n == &name) {
+                                    info.dependencies.push((name, ver));
+                                }
+                            }
+                            for (name, ver) in sub.dev_dependencies {
+                                if !info.dev_dependencies.iter().any(|(n, _)| n == &name) {
+                                    info.dev_dependencies.push((name, ver));
+                                }
+                            }
+                        }
                     }
-                    if info.dependencies.len() > 10 {
-                        output.push_str(&format!("- *... and {} more*\n", info.dependencies.len() - 10));
-                    }
-                    output.push('\n');
+                    info.workspace_packages = pkg_names;
                 }
-
-                if !info.dev_dependencies.is_empty() {
-                    output.push_str("**Development Dependencies:**\n");
-                    for (name, version) in info.dev_dependencies.iter().take(5) {
-                        output.push_str(&format!("- `{}` {}\n", name, version));
-                    }
-                    if info.dev_dependencies.len() > 5 {
-                        output.push_str(&format!("- *... and {} more*\n", info.dev_dependencies.len() - 5));
-                    }
-                    output.push('\n');
-                }
-            } else {
-                output.push_str("*No package configuration files found*\n\n");
             }
         }
 
-        if include_graph {
-            output.push_str("## Module Relationships\n\n");
+        // Header with metadata (plain-text, no emoji)
+        output
+            .push_str("╔══════════════════════════════════════════════════════════════════════\n");
 
-            // Build relationship graph
-            let relations = build_module_graph(&modules, &indexer);
+        let project_name = dep_info
+            .as_ref()
+            .map(|d| d.package_name.as_str())
+            .unwrap_or("project");
+        output.push_str(&format!("║ PROJECT: {}\n", project_name));
+
+        // Group files by module (workspace-aware)
+        let modules = group_files_by_module(&indexed_files, module_depth, &workspace_packages);
+
+        output.push_str(&format!(
+            "║ Total Files: {} | Modules: {} (depth: {}) | Symbols: {}\n",
+            indexed_files.len(),
+            modules.len(),
+            module_depth,
+            all_symbols.len()
+        ));
+
+        let lang_dist = format_language_distribution(&lang_counts);
+        output.push_str(&format!("║ Primary Language: {}\n", lang_dist));
+
+        if let Some(ref workspace_root) = indexer.settings().workspace_root {
+            let arch = detect_architecture(workspace_root);
+            if !workspace_packages.is_empty() {
+                output.push_str(&format!(
+                    "║ Architecture: {} ({} packages)\n",
+                    arch,
+                    workspace_packages.len()
+                ));
+            } else {
+                output.push_str(&format!("║ Architecture: {}\n", arch));
+            }
+        }
+
+        let proj_type = detect_project_type(&dep_info);
+        output.push_str(&format!("║ Type: {}\n", proj_type));
+
+        output.push_str(
+            "╚══════════════════════════════════════════════════════════════════════\n\n",
+        );
+
+        // Tech Stack
+        if include_dependencies {
+            output.push_str(
+                "# ── Tech Stack ────────────────────────────────────────────────────────\n\n",
+            );
+            let tech_stack = format_tech_stack(&dep_info, &knowledge_base, primary_language);
+            if !tech_stack.is_empty() {
+                output.push_str(&tech_stack);
+            } else if dep_info.is_some() {
+                // Show basic tech stack info even without KB categorization
+                let info = dep_info.as_ref().unwrap();
+                output.push_str(&format!("  Stack: {}\n", info.tech_stack));
+                let dep_count = info.dependencies.len() + info.dev_dependencies.len();
+                if dep_count > 0 {
+                    let top_deps: Vec<_> = info
+                        .dependencies
+                        .iter()
+                        .take(10)
+                        .map(|(name, ver)| format!("{} {}", name, ver))
+                        .collect();
+                    output.push_str(&format!("  Dependencies: {}\n", top_deps.join(", ")));
+                    if info.dependencies.len() > 10 {
+                        output.push_str(&format!(
+                            "  (+{} more deps, {} dev deps)\n",
+                            info.dependencies.len() - 10,
+                            info.dev_dependencies.len()
+                        ));
+                    }
+                }
+                output.push('\n');
+            } else {
+                output.push_str("  No dependencies detected.\n\n");
+            }
+        }
+
+        // Entry points detection
+        let mut entry_points = detect_entry_points(&all_symbols);
+
+        // Add workspace bin entry points from package.json
+        if let Some(ref workspace_root) = indexer.settings().workspace_root {
+            detect_workspace_entry_points(
+                workspace_root,
+                &workspace_packages,
+                &all_symbols,
+                &mut entry_points,
+            );
+        }
+
+        // Add Cargo.toml [[bin]] entry points
+        detect_cargo_bin_entry_points(&indexer, &all_symbols, &mut entry_points);
+
+        if !entry_points.is_empty() {
+            output.push_str(
+                "# ── Entry Points ──────────────────────────────────────────────────────\n\n",
+            );
+            for ep in entry_points.iter().take(10) {
+                output.push_str(&format!(
+                    "  [{}] {}  {}:{}\n",
+                    ep.entry_type, ep.name, ep.file_path, ep.line
+                ));
+            }
+            if entry_points.len() > 10 {
+                output.push_str(&format!("  ... and {} more\n", entry_points.len() - 10));
+            }
+            output.push('\n');
+        }
+
+        // Module structure with stats (using tree-like format)
+        output.push_str(
+            "# ── Module Structure ──────────────────────────────────────────────────\n\n",
+        );
+
+        let mut sorted_modules: Vec<_> = modules.iter().collect();
+        sorted_modules.sort_by_key(|(path, _)| path.as_path());
+
+        // Calculate max widths for alignment
+        let max_module_len = sorted_modules
+            .iter()
+            .map(|(path, _)| path.display().to_string().len())
+            .max()
+            .unwrap_or(0);
+
+        for (idx, (module_path, files)) in sorted_modules.iter().enumerate() {
+            let stats = count_symbols_by_module(&indexer, files);
+            let is_last = idx == sorted_modules.len() - 1;
+            let branch = if is_last { "└─" } else { "├─" };
+
+            // Generate module description using knowledge base
+            let description = generate_module_description_with_kb(
+                module_path,
+                files,
+                &indexer,
+                &knowledge_base,
+                primary_language,
+            );
+
+            let module_str = format!("{}/", module_path.display());
+            let padding = max_module_len.saturating_sub(module_str.len()) + 2;
+            let stats_str = format_module_stats(&stats);
+
+            if description.is_empty() {
+                output.push_str(&format!(
+                    "{} {}{:width$}{}\n",
+                    branch,
+                    module_str,
+                    "",
+                    stats_str,
+                    width = padding
+                ));
+            } else {
+                output.push_str(&format!(
+                    "{} {}{:width$}{} — {}\n",
+                    branch,
+                    module_str,
+                    "",
+                    stats_str,
+                    description,
+                    width = padding
+                ));
+            }
+        }
+        output.push('\n');
+
+        // Module Relationships (graph)
+        let relations = build_module_graph(&modules, &indexer);
+
+        if include_graph {
+            output.push_str(
+                "# ── Module Dependencies ───────────────────────────────────────────────\n\n",
+            );
 
             if relations.is_empty() {
-                output.push_str("*No inter-module relationships detected*\n\n");
+                output.push_str("  No inter-module relationships detected.\n\n");
             } else {
-                let threshold = 3; // Minimum call count to show
-                let graph_output = format_relationship_graph(&modules, &relations, &dep_info, threshold);
+                let threshold = 20;
+                let graph_output =
+                    format_relationship_graph(&relations, threshold);
                 output.push_str(&graph_output);
             }
         }
 
-        // Add guidance
-        if let Some(guidance) = generate_mcp_guidance(indexer.settings(), "get_project_overview", 1) {
-            output.push_str("\n💡 ");
+        // Blast Radius section
+        if !relations.is_empty() {
+            output.push_str(
+                "# ── Blast Radius ──────────────────────────────────────────────────────\n\n",
+            );
+            let blast_output = format_blast_radius(&modules, &indexer);
+            output.push_str(&blast_output);
+        }
+
+        // Critical Paths section
+        if !entry_points.is_empty() {
+            output.push_str(
+                "# ── Critical Paths ────────────────────────────────────────────────────\n\n",
+            );
+            let paths_output = format_critical_paths(&entry_points, &indexer);
+            output.push_str(&paths_output);
+        }
+
+        // Layer detection
+        if !relations.is_empty() {
+            output.push_str(
+                "# ── Architecture Layers ───────────────────────────────────────────────\n\n",
+            );
+            let layers_output = format_layer_table(&modules, &relations);
+            output.push_str(&layers_output);
+        }
+
+        // Add guidance (without emoji)
+        if let Some(guidance) = generate_mcp_guidance(indexer.settings(), "get_project_overview", 1)
+        {
+            output.push_str("\n[INFO] ");
             output.push_str(&guidance);
             output.push('\n');
         }
@@ -3065,16 +3216,67 @@ impl Default for ModuleStats {
 /// - src/api/routes/users.rs → src/api/
 /// - src/api/routes/posts.rs → src/api/
 /// - src/auth/login.rs → src/auth/
+///
+/// When workspace_packages is non-empty, files belonging to a workspace package
+/// use the package path as prefix, then apply depth to the remaining path.
 fn group_files_by_module(
     paths: &[PathBuf],
     depth: u32,
+    workspace_packages: &[PathBuf],
 ) -> HashMap<PathBuf, Vec<PathBuf>> {
     let mut modules: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
 
     for path in paths {
-        // Extract module path based on depth
-        let module_path = get_module_path(path, depth as usize);
+        let module_path = if !workspace_packages.is_empty() {
+            // Find which workspace package this file belongs to
+            if let Some(pkg) = workspace_packages.iter().find(|pkg| path.starts_with(pkg)) {
+                // Strip the package prefix, apply depth to the remainder
+                if let Ok(remainder) = path.strip_prefix(pkg) {
+                    let sub_module = get_module_path(remainder, depth as usize);
+                    pkg.join(sub_module)
+                } else {
+                    get_module_path(path, depth as usize)
+                }
+            } else {
+                // File doesn't belong to any workspace package — use standard depth
+                get_module_path(path, depth as usize)
+            }
+        } else {
+            get_module_path(path, depth as usize)
+        };
+
         modules.entry(module_path).or_default().push(path.clone());
+    }
+
+    // Merge single-file modules into their parent module or remove them
+    let single_file_keys: Vec<PathBuf> = modules
+        .iter()
+        .filter(|(_, files)| files.len() == 1)
+        .map(|(k, _)| k.clone())
+        .collect();
+
+    for key in single_file_keys {
+        let key_str = key.to_string_lossy();
+        // Remove standalone config/setup files that aren't real modules
+        let is_config_file = key_str.ends_with(".js")
+            || key_str.ends_with(".ts")
+            || key_str.ends_with(".mjs")
+            || key_str.ends_with(".cjs")
+            || key_str.ends_with(".json");
+        if is_config_file {
+            modules.remove(&key);
+            continue;
+        }
+
+        if let Some(parent) = key.parent() {
+            let parent_path = parent.to_path_buf();
+            // Merge into parent module if it exists
+            if parent_path != key && modules.contains_key(&parent_path) {
+                if let Some(files) = modules.remove(&key) {
+                    modules.get_mut(&parent_path).unwrap().extend(files);
+                }
+            }
+        }
     }
 
     modules
@@ -3101,10 +3303,7 @@ fn get_module_path(path: &Path, depth: usize) -> PathBuf {
 }
 
 /// Count symbols by kind for a module
-fn count_symbols_by_module(
-    facade: &IndexFacade,
-    module_files: &[PathBuf],
-) -> ModuleStats {
+fn count_symbols_by_module(facade: &IndexFacade, module_files: &[PathBuf]) -> ModuleStats {
     let mut stats = ModuleStats::default();
     stats.total_files = module_files.len();
 
@@ -3132,6 +3331,27 @@ fn count_symbols_by_module(
     stats
 }
 
+/// Format module stats as a readable string
+fn format_module_stats(stats: &ModuleStats) -> String {
+    let mut parts = vec![format!("{} files", stats.total_files)];
+    if stats.functions > 0 {
+        parts.push(format!("{} functions", stats.functions));
+    }
+    if stats.classes > 0 {
+        parts.push(format!("{} classes", stats.classes));
+    }
+    if stats.structs > 0 {
+        parts.push(format!("{} structs", stats.structs));
+    }
+    if stats.interfaces > 0 {
+        parts.push(format!("{} interfaces", stats.interfaces));
+    }
+    if stats.methods > 0 {
+        parts.push(format!("{} methods", stats.methods));
+    }
+    format!("({})", parts.join(", "))
+}
+
 /// Entry point information
 #[derive(Debug, Clone)]
 struct EntryPoint {
@@ -3140,11 +3360,18 @@ struct EntryPoint {
     file_path: String,
     line: u32,
     entry_type: String, // "main", "server", "test", etc.
+    priority: u8,       // 0=manifest, 1=language convention, 2=framework, 3=auxiliary
 }
 
-/// Detect entry points in the codebase (STRICT - only real entry points)
+/// Detect entry points in the codebase (priority-based, project-agnostic)
 fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
     let mut entry_points = Vec::new();
+
+    // Generic auxiliary keywords — universal test/mock/script/CI patterns
+    let auxiliary_keywords = [
+        "test", "spec", "mock", "fixture", "example", "script", "bench",
+        "eval", ".github", "ci", "integration-test", "__test",
+    ];
 
     for symbol in symbols {
         // Only function-type symbols
@@ -3155,7 +3382,12 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
         let file_path_lower = symbol.file_path.to_lowercase();
         let symbol_name = symbol.name.as_ref();
 
-        // Pattern 1: main() function (Rust, Go, C, etc.)
+        // Determine if auxiliary path (low priority, not skipped)
+        let is_auxiliary = auxiliary_keywords
+            .iter()
+            .any(|kw| file_path_lower.contains(kw));
+
+        // P1: main() function (Rust, Go, C, Java, Python, etc.)
         if symbol_name == "main" {
             entry_points.push(EntryPoint {
                 symbol_id: symbol.id.value(),
@@ -3163,11 +3395,12 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
                 file_path: symbol.file_path.to_string(),
                 line: symbol.range.start_line + 1,
                 entry_type: "main".to_string(),
+                priority: if is_auxiliary { 3 } else { 1 },
             });
             continue;
         }
 
-        // Pattern 2: bin/ directory executables (CLI tools)
+        // P1: bin/ directory executables (CLI tools)
         if file_path_lower.contains("/bin/") || file_path_lower.starts_with("bin/") {
             if matches!(symbol.visibility, crate::symbol::Visibility::Public) {
                 entry_points.push(EntryPoint {
@@ -3176,14 +3409,24 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
                     file_path: symbol.file_path.to_string(),
                     line: symbol.range.start_line + 1,
                     entry_type: "cli".to_string(),
+                    priority: if is_auxiliary { 3 } else { 1 },
                 });
                 break; // Only first public function in bin files
             }
         }
 
-        // Pattern 3: Server bootstrap (app.listen, server.start, etc.)
-        if (symbol_name.contains("listen") || symbol_name.contains("bootstrap") || symbol_name == "start")
-            && (file_path_lower.contains("server") || file_path_lower.contains("main") || file_path_lower.contains("index"))
+        // Skip auxiliary paths for framework patterns (P2)
+        if is_auxiliary {
+            continue;
+        }
+
+        // P2: Server bootstrap (app.listen, server.start, etc.)
+        if (symbol_name.contains("listen")
+            || symbol_name.contains("bootstrap")
+            || symbol_name == "start")
+            && (file_path_lower.contains("server")
+                || file_path_lower.contains("main")
+                || file_path_lower.contains("index"))
         {
             entry_points.push(EntryPoint {
                 symbol_id: symbol.id.value(),
@@ -3191,15 +3434,232 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
                 file_path: symbol.file_path.to_string(),
                 line: symbol.range.start_line + 1,
                 entry_type: "server".to_string(),
+                priority: 2,
+            });
+        }
+
+        // P2: React entry points (createRoot, render, ReactDOM.render)
+        if (symbol_name == "createRoot"
+            || symbol_name == "render"
+            || symbol_name == "hydrateRoot")
+            && (file_path_lower.contains("index.tsx")
+                || file_path_lower.contains("index.jsx")
+                || file_path_lower.contains("index.ts")
+                || file_path_lower.contains("index.js")
+                || file_path_lower.contains("main.tsx")
+                || file_path_lower.contains("main.jsx"))
+        {
+            entry_points.push(EntryPoint {
+                symbol_id: symbol.id.value(),
+                name: symbol_name.to_string(),
+                file_path: symbol.file_path.to_string(),
+                line: symbol.range.start_line + 1,
+                entry_type: "react".to_string(),
+                priority: 2,
             });
         }
     }
+
+    // Sort by priority (P0/P1/P2 first, P3 auxiliary last)
+    entry_points.sort_by(|a, b| a.priority.cmp(&b.priority));
 
     // Deduplicate by file to avoid multiple entries from same file
     let mut seen_files = std::collections::HashSet::new();
     entry_points.retain(|ep| seen_files.insert(ep.file_path.clone()));
 
+    // Filter: only show P0-P2 entry points (hide auxiliary)
+    entry_points.retain(|ep| ep.priority <= 2);
+
     entry_points
+}
+
+/// Detect entry points from workspace package.json bin fields and index files
+fn detect_workspace_entry_points(
+    workspace_root: &Path,
+    workspace_packages: &[PathBuf],
+    all_symbols: &[crate::Symbol],
+    entry_points: &mut Vec<EntryPoint>,
+) {
+    let existing_files: std::collections::HashSet<String> =
+        entry_points.iter().map(|ep| ep.file_path.clone()).collect();
+
+    // Check root package.json bin field
+    let mut bin_entries: Vec<(String, String)> = Vec::new();
+    let root_pkg = workspace_root.join("package.json");
+    if root_pkg.exists() {
+        if let Ok(content) = std::fs::read_to_string(&root_pkg) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                collect_bin_entries(&json, &mut bin_entries);
+            }
+        }
+    }
+
+    // Check each workspace package's package.json bin field
+    for ws_pkg in workspace_packages {
+        let pkg_json = workspace_root.join(ws_pkg).join("package.json");
+        if pkg_json.exists() {
+            if let Ok(content) = std::fs::read_to_string(&pkg_json) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    collect_bin_entries(&json, &mut bin_entries);
+                }
+            }
+        }
+    }
+
+    // For each bin entry, find the source file in the index
+    for (bin_name, bin_path) in &bin_entries {
+        // bin_path is like "bundle/gemini.js" or "dist/index.js"
+        // Try to find matching source: replace dist/bundle with src, .js with .ts
+        let source_candidates = infer_source_from_bin(bin_path);
+        for candidate in &source_candidates {
+            // Check if any indexed symbol lives in this file
+            if let Some(symbol) = all_symbols.iter().find(|s| {
+                let fp = s.file_path.as_ref();
+                fp.ends_with(candidate.as_str()) && !existing_files.contains(fp)
+            }) {
+                entry_points.push(EntryPoint {
+                    symbol_id: symbol.id.value(),
+                    name: bin_name.clone(),
+                    file_path: symbol.file_path.to_string(),
+                    line: 1,
+                    entry_type: "bin".to_string(),
+                    priority: 0, // P0: manifest-driven
+                });
+                break;
+            }
+        }
+    }
+
+    // Add workspace package src/index.ts|js files as bootstrap entry points
+    for ws_pkg in workspace_packages {
+        let pkg_str = ws_pkg.to_string_lossy();
+        for ext in &["index.ts", "index.tsx", "index.js"] {
+            let index_path = format!("{}/src/{}", pkg_str, ext);
+            if existing_files.contains(&index_path) {
+                continue;
+            }
+            if let Some(symbol) = all_symbols
+                .iter()
+                .find(|s| s.file_path.as_ref() == index_path.as_str())
+            {
+                let pkg_name = ws_pkg
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("package");
+                entry_points.push(EntryPoint {
+                    symbol_id: symbol.id.value(),
+                    name: format!("{} bootstrap", pkg_name),
+                    file_path: symbol.file_path.to_string(),
+                    line: 1,
+                    entry_type: "bootstrap".to_string(),
+                    priority: 2, // P2: framework pattern
+                });
+                break;
+            }
+        }
+    }
+
+    // Deduplicate by file
+    let mut seen_files = std::collections::HashSet::new();
+    entry_points.retain(|ep| seen_files.insert(ep.file_path.clone()));
+}
+
+/// Detect entry points from Cargo.toml [[bin]] targets
+fn detect_cargo_bin_entry_points(
+    indexer: &IndexFacade,
+    all_symbols: &[crate::Symbol],
+    entry_points: &mut Vec<EntryPoint>,
+) {
+    let existing_files: std::collections::HashSet<String> =
+        entry_points.iter().map(|ep| ep.file_path.clone()).collect();
+
+    // Find Cargo.toml in workspace or indexed root
+    let cargo_path = if let Some(ref ws_root) = indexer.settings().workspace_root {
+        ws_root.join("Cargo.toml")
+    } else {
+        PathBuf::from("Cargo.toml")
+    };
+
+    if !cargo_path.exists() {
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&cargo_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    let toml_val: toml::Value = match toml::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    // Check [[bin]] targets
+    if let Some(bins) = toml_val.get("bin").and_then(|b| b.as_array()) {
+        for bin in bins {
+            let name = bin.get("name").and_then(|n| n.as_str()).unwrap_or("main");
+            let path = bin.get("path").and_then(|p| p.as_str());
+
+            if let Some(bin_path) = path {
+                // Find matching main() symbol in the bin source file
+                if let Some(symbol) = all_symbols.iter().find(|s| {
+                    let fp = s.file_path.as_ref();
+                    fp.ends_with(bin_path) && s.name.as_ref() == "main" && !existing_files.contains(fp)
+                }) {
+                    entry_points.push(EntryPoint {
+                        symbol_id: symbol.id.value(),
+                        name: name.to_string(),
+                        file_path: symbol.file_path.to_string(),
+                        line: symbol.range.start_line + 1,
+                        entry_type: "bin".to_string(),
+                        priority: 0, // P0: manifest-driven
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Collect bin entries from package.json
+fn collect_bin_entries(json: &serde_json::Value, entries: &mut Vec<(String, String)>) {
+    if let Some(bin) = json.get("bin") {
+        match bin {
+            serde_json::Value::String(path) => {
+                // "bin": "path/to/file" — use package name
+                let name = json
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("main");
+                entries.push((name.to_string(), path.clone()));
+            }
+            serde_json::Value::Object(map) => {
+                // "bin": { "gemini": "bundle/gemini.js" }
+                for (name, path) in map {
+                    if let Some(p) = path.as_str() {
+                        entries.push((name.clone(), p.to_string()));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Infer source file path from a bin/dist output path
+fn infer_source_from_bin(bin_path: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    // bundle/gemini.js → src/index.ts, src/gemini.ts
+    // dist/index.js → src/index.ts
+    let filename = std::path::Path::new(bin_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("index");
+
+    candidates.push(format!("src/{}.ts", filename));
+    candidates.push(format!("src/{}.tsx", filename));
+    candidates.push("src/index.ts".to_string());
+    candidates.push("src/index.tsx".to_string());
+    candidates
 }
 
 /// Package/dependency information
@@ -3209,6 +3669,7 @@ struct DependencyInfo {
     tech_stack: String,
     dependencies: Vec<(String, String)>, // (name, version)
     dev_dependencies: Vec<(String, String)>,
+    workspace_packages: Vec<String>, // workspace sub-package names
 }
 
 /// Find package configuration files
@@ -3265,7 +3726,10 @@ fn parse_package_json(path: &Path) -> Option<DependencyInfo> {
     // Detect tech stack from dependencies
     let tech_stack = if dev_dependencies.iter().any(|(n, _)| n.contains("electron")) {
         "Electron/Node.js"
-    } else if dependencies.iter().any(|(n, _)| n == "react" || n == "react-dom") {
+    } else if dependencies
+        .iter()
+        .any(|(n, _)| n == "react" || n == "react-dom")
+    {
         "React/JavaScript"
     } else if dependencies.iter().any(|(n, _)| n == "vue") {
         "Vue.js"
@@ -3280,6 +3744,7 @@ fn parse_package_json(path: &Path) -> Option<DependencyInfo> {
         tech_stack: tech_stack.to_string(),
         dependencies,
         dev_dependencies,
+        workspace_packages: Vec::new(),
     })
 }
 
@@ -3335,6 +3800,7 @@ fn parse_cargo_toml(path: &Path) -> Option<DependencyInfo> {
         tech_stack: "Rust".to_string(),
         dependencies,
         dev_dependencies,
+        workspace_packages: Vec::new(),
     })
 }
 
@@ -3347,73 +3813,264 @@ struct ModuleRelation {
 }
 
 /// Layer classification for architectural analysis
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Layer {
-    Presentation,
-    Business,
+    Interface,
+    Processing,
     Data,
-    Unknown,
+    Infrastructure,
 }
 
 impl Layer {
     fn as_str(&self) -> &str {
         match self {
-            Layer::Presentation => "Presentation",
-            Layer::Business => "Business Logic",
-            Layer::Data => "Data/Storage",
-            Layer::Unknown => "Core",
+            Layer::Interface => "Interface",
+            Layer::Processing => "Processing",
+            Layer::Data => "Data",
+            Layer::Infrastructure => "Infrastructure",
         }
     }
 }
 
-/// Detect architectural layer from module path and dependencies
-fn detect_layer(module_path: &Path, dep_info: &Option<DependencyInfo>) -> Layer {
+/// Detect architectural layer using fan-in/fan-out metrics (project-agnostic)
+fn detect_layer_enhanced(module_path: &Path, fan_in: usize, fan_out: usize) -> Layer {
     let path_str = module_path.to_string_lossy().to_lowercase();
 
-    // Presentation layer indicators
-    if path_str.contains("api")
-        || path_str.contains("routes")
-        || path_str.contains("controllers")
-        || path_str.contains("handlers")
-        || path_str.contains("views")
-        || path_str.contains("components")
-        || path_str.contains("pages")
-    {
-        return Layer::Presentation;
+    // Infrastructure tie-breaker: universal test/mock/script/CI patterns only
+    let infra_keywords = [
+        "test", "mock", "fixture", "script", ".github", "ci", "spec", "bench",
+        "example", "third_party", "third-party", "vendor",
+    ];
+    if infra_keywords.iter().any(|kw| path_str.contains(kw)) {
+        return Layer::Infrastructure;
     }
 
-    // Data layer indicators
-    if path_str.contains("db")
-        || path_str.contains("database")
-        || path_str.contains("storage")
-        || path_str.contains("cache")
-        || path_str.contains("repository")
-        || path_str.contains("repositories")
-        || path_str.contains("models")
-    {
-        return Layer::Data;
+    // Metric-driven classification
+    let total = fan_in + fan_out;
+    if total == 0 {
+        return Layer::Infrastructure; // orphan module
     }
 
-    // Check dependencies for data layer
-    if let Some(info) = dep_info {
-        let all_deps: Vec<_> = info.dependencies.iter()
-            .chain(info.dev_dependencies.iter())
-            .map(|(n, _)| n.as_str())
-            .collect();
+    let ratio = fan_in as f64 / total as f64;
+    // ratio ~1.0 → heavily called, rarely calls out → Data/shared
+    // ratio ~0.0 → rarely called, calls many → Interface/entry
+    // ratio ~0.5 → balanced → Processing
 
-        let has_db = all_deps.iter().any(|n| {
-            n.contains("pg") || n.contains("mysql") || n.contains("mongodb")
-                || n.contains("redis") || n.contains("sqlite")
-        });
+    if ratio > 0.65 {
+        Layer::Data
+    } else if ratio < 0.35 {
+        Layer::Interface
+    } else {
+        Layer::Processing
+    }
+}
 
-        if has_db && path_str.contains("data") {
-            return Layer::Data;
+/// Calculate fan-in and fan-out for a module from relations
+fn calculate_fan_metrics(
+    module_path: &Path,
+    relations: &[ModuleRelation],
+) -> (usize, usize) {
+    let fan_out: usize = relations
+        .iter()
+        .filter(|r| r.from_module == module_path)
+        .map(|r| r.call_count)
+        .sum();
+
+    let fan_in: usize = relations
+        .iter()
+        .filter(|r| r.to_module == module_path)
+        .map(|r| r.call_count)
+        .sum();
+
+    (fan_in, fan_out)
+}
+
+/// Format layer table with box drawing
+fn format_layer_table(
+    modules: &HashMap<PathBuf, Vec<PathBuf>>,
+    relations: &[ModuleRelation],
+) -> String {
+    let mut output = String::new();
+
+    // Classify all modules
+    let mut layers: std::collections::BTreeMap<Layer, Vec<String>> =
+        std::collections::BTreeMap::new();
+
+    for module_path in modules.keys() {
+        let (fan_in, fan_out) = calculate_fan_metrics(module_path, relations);
+        let layer = detect_layer_enhanced(module_path, fan_in, fan_out);
+        layers
+            .entry(layer)
+            .or_default()
+            .push(module_path.display().to_string());
+    }
+
+    // Sort module names within each layer
+    for modules_in_layer in layers.values_mut() {
+        modules_in_layer.sort();
+    }
+
+    let layer_order = [
+        Layer::Interface,
+        Layer::Processing,
+        Layer::Data,
+        Layer::Infrastructure,
+    ];
+
+    for layer in &layer_order {
+        if let Some(mods) = layers.get(layer) {
+            output.push_str(&format!("  [{}] ({} modules)\n", layer.as_str(), mods.len()));
+            for m in mods {
+                output.push_str(&format!("    {}\n", m));
+            }
+            output.push('\n');
         }
     }
 
-    // Default to business logic
-    Layer::Business
+    output
 }
+
+/// Format blast radius section showing high-impact modules
+fn format_blast_radius(
+    modules: &HashMap<PathBuf, Vec<PathBuf>>,
+    facade: &IndexFacade,
+) -> String {
+    let mut output = String::new();
+    let mut results: Vec<(PathBuf, usize, usize)> = Vec::new();
+
+    for (module_path, files) in modules {
+        let mut total_callers = 0usize;
+        let mut calling_modules: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        for file_path in files {
+            if let Some(file_path_str) = file_path.to_str() {
+                if let Some(file_id) = facade.get_file_id_for_path(file_path_str) {
+                    let symbols = facade.get_symbols_by_file(file_id);
+                    for symbol in &symbols {
+                        let callers = facade.get_calling_functions(symbol.id);
+                        total_callers += callers.len();
+
+                        for caller in &callers {
+                            // Extract module from caller file path
+                            let caller_path = PathBuf::from(caller.file_path.as_ref());
+                            if let Some(parent) = caller_path.parent() {
+                                calling_modules.insert(parent.display().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if total_callers > 0 {
+            results.push((module_path.clone(), total_callers, calling_modules.len()));
+        }
+    }
+
+    // Sort by total callers descending
+    results.sort_by(|a, b| b.1.cmp(&a.1));
+
+    if results.is_empty() {
+        output.push_str("  No reverse dependencies detected.\n\n");
+        return output;
+    }
+
+    for (module, rev_deps, calling_mods) in results.iter().take(5) {
+        let risk = if *rev_deps > 1000 || *calling_mods > 20 {
+            "CRITICAL"
+        } else if *rev_deps > 500 || *calling_mods > 10 {
+            "HIGH"
+        } else if *rev_deps > 100 || *calling_mods > 5 {
+            "MEDIUM"
+        } else {
+            "LOW"
+        };
+
+        let warning = match risk {
+            "CRITICAL" => "Changes here cascade across the entire codebase",
+            "HIGH" => "Changes may affect many dependent modules",
+            "MEDIUM" => "Changes affect several modules",
+            _ => "Localized impact",
+        };
+
+        output.push_str(&format!("  {}\n", module.display()));
+        output.push_str(&format!(
+            "  ├─ Called by: {} modules ({} total incoming calls)\n",
+            calling_mods, rev_deps
+        ));
+        output.push_str(&format!("  ├─ Risk: {}\n", risk));
+        output.push_str(&format!("  └─ {}\n\n", warning));
+    }
+
+    output
+}
+
+/// Format critical paths section showing execution flows from entry points
+fn format_critical_paths(entry_points: &[EntryPoint], facade: &IndexFacade) -> String {
+    let mut output = String::new();
+
+    if entry_points.is_empty() {
+        output.push_str("  No entry points detected.\n\n");
+        return output;
+    }
+
+    for (idx, ep) in entry_points.iter().take(3).enumerate() {
+        output.push_str(&format!(
+            "  [Flow {}] {} ({})\n",
+            idx + 1,
+            ep.name,
+            ep.entry_type
+        ));
+        output.push_str(&format!("  {}:{}\n", ep.file_path, ep.line));
+
+        // Trace hottest path: at each step, follow the callee with highest fan-in
+        let mut current_id = crate::SymbolId(ep.symbol_id);
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(current_id);
+        let mut path_nodes: Vec<(String, String, u32)> = Vec::new(); // (name, file, line)
+
+        for _ in 0..6 {
+            let callees = facade.get_called_functions(current_id);
+            if callees.is_empty() {
+                break;
+            }
+
+            // Find callee with highest fan-in (most important downstream symbol)
+            let best = callees
+                .iter()
+                .filter(|c| !visited.contains(&c.id))
+                .max_by_key(|c| facade.get_calling_functions(c.id).len());
+
+            if let Some(next) = best {
+                visited.insert(next.id);
+                path_nodes.push((
+                    next.name.to_string(),
+                    next.file_path.to_string(),
+                    next.range.start_line + 1,
+                ));
+                current_id = next.id;
+            } else {
+                break;
+            }
+        }
+
+        // Format path
+        for (i, (name, file, line)) in path_nodes.iter().enumerate() {
+            let branch = if i == path_nodes.len() - 1 { "└─>" } else { "├─>" };
+            output.push_str(&format!("    {} {}  {}:{}\n", branch, name, file, line));
+        }
+
+        if path_nodes.is_empty() {
+            output.push_str("    └─ (no downstream calls detected)\n");
+        }
+        output.push('\n');
+    }
+
+    output
+}
+
+
 
 /// Build module relationship graph
 fn build_module_graph(
@@ -3442,7 +4099,8 @@ fn build_module_graph(
                                 if to_files.contains(&called_file_path) {
                                     // Don't count calls within the same module
                                     if from_module != to_module {
-                                        *relations.entry((from_module.clone(), to_module.clone()))
+                                        *relations
+                                            .entry((from_module.clone(), to_module.clone()))
                                             .or_insert(0) += 1;
                                     }
                                     break;
@@ -3466,81 +4124,56 @@ fn build_module_graph(
         .collect()
 }
 
-/// Format relationship graph with layer grouping
+/// Format relationship graph with compact arrow format
 fn format_relationship_graph(
-    modules: &HashMap<PathBuf, Vec<PathBuf>>,
     relations: &[ModuleRelation],
-    dep_info: &Option<DependencyInfo>,
     threshold: usize,
 ) -> String {
     let mut output = String::new();
 
-    // Classify modules by layer
-    let mut layers: HashMap<Layer, Vec<PathBuf>> = HashMap::new();
-    for module_path in modules.keys() {
-        let layer = detect_layer(module_path, dep_info);
-        layers.entry(layer).or_default().push(module_path.clone());
+    // Filter by threshold and collect edges
+    let mut filtered_relations: Vec<_> = relations
+        .iter()
+        .filter(|r| r.call_count >= threshold)
+        .collect();
+
+    if filtered_relations.is_empty() {
+        return output;
     }
 
-    // Sort layers for consistent output
-    let layer_order = vec![Layer::Presentation, Layer::Business, Layer::Data, Layer::Unknown];
+    // Sort by call count descending and take top 15
+    filtered_relations.sort_by(|a, b| b.call_count.cmp(&a.call_count));
+    filtered_relations.truncate(15);
 
-    for layer in layer_order {
-        if let Some(module_paths) = layers.get(&layer) {
-            if module_paths.is_empty() {
-                continue;
-            }
+    output.push_str(&format!(
+        "  Internal Call Graph (threshold: {}+ calls)\n\n",
+        threshold
+    ));
 
-            output.push_str(&format!("\n**{} Layer:**\n\n", layer.as_str()));
+    // Calculate max source module length for alignment
+    let max_source_len = filtered_relations
+        .iter()
+        .map(|r| r.from_module.display().to_string().len())
+        .max()
+        .unwrap_or(0);
 
-            for module_path in module_paths {
-                output.push_str(&format!("### {}\n", module_path.display()));
+    // Format as: source_module → target_module (count×)
+    for rel in &filtered_relations {
+        let source = rel.from_module.display().to_string();
+        let target = rel.to_module.display().to_string();
+        let padding = max_source_len.saturating_sub(source.len()) + 2;
 
-                // Find outgoing calls (what this module calls)
-                let outgoing: Vec<_> = relations
-                    .iter()
-                    .filter(|r| &r.from_module == module_path && r.call_count >= threshold)
-                    .collect();
-
-                if !outgoing.is_empty() {
-                    output.push_str("**Calls:**\n");
-                    for rel in outgoing.iter().take(5) {
-                        output.push_str(&format!(
-                            "- ↓ `{}` ({}×)\n",
-                            rel.to_module.display(),
-                            rel.call_count
-                        ));
-                    }
-                    if outgoing.len() > 5 {
-                        output.push_str(&format!("- *... and {} more*\n", outgoing.len() - 5));
-                    }
-                }
-
-                // Find incoming calls (what calls this module)
-                let incoming: Vec<_> = relations
-                    .iter()
-                    .filter(|r| &r.to_module == module_path && r.call_count >= threshold)
-                    .collect();
-
-                if !incoming.is_empty() {
-                    output.push_str("**Called by:**\n");
-                    for rel in incoming.iter().take(5) {
-                        output.push_str(&format!(
-                            "- ↑ `{}` ({}×)\n",
-                            rel.from_module.display(),
-                            rel.call_count
-                        ));
-                    }
-                    if incoming.len() > 5 {
-                        output.push_str(&format!("- *... and {} more*\n", incoming.len() - 5));
-                    }
-                }
-
-                output.push('\n');
-            }
-        }
+        output.push_str(&format!(
+            "  {}{:width$}→ {:30} ({}×)\n",
+            source,
+            "",
+            target,
+            rel.call_count,
+            width = padding
+        ));
     }
 
+    output.push('\n');
     output
 }
 
@@ -3551,20 +4184,87 @@ fn extract_keywords_from_symbols(symbols: &[crate::Symbol]) -> Vec<String> {
     // Stop words to filter out (verbs, UI generics, common terms)
     let stop_words: std::collections::HashSet<&str> = [
         // Generic verbs
-        "get", "set", "new", "create", "handle", "process", "validate",
-        "generate", "build", "make", "init", "initialize", "setup",
-        "update", "delete", "add", "remove", "is", "has", "can",
-        "should", "will", "do", "does", "to", "from", "with", "without",
-        "show", "hide", "toggle", "open", "close", "render", "mount",
+        "get",
+        "set",
+        "new",
+        "create",
+        "handle",
+        "process",
+        "validate",
+        "generate",
+        "build",
+        "make",
+        "init",
+        "initialize",
+        "setup",
+        "update",
+        "delete",
+        "add",
+        "remove",
+        "is",
+        "has",
+        "can",
+        "should",
+        "will",
+        "do",
+        "does",
+        "to",
+        "from",
+        "with",
+        "without",
+        "show",
+        "hide",
+        "toggle",
+        "open",
+        "close",
+        "render",
+        "mount",
         // UI/React boilerplate
-        "props", "state", "ref", "component", "element", "node",
-        "children", "child", "parent", "root", "container", "wrapper",
-        "icon", "button", "input", "form", "field", "label", "text",
-        "item", "list", "menu", "modal", "dialog", "popup", "tooltip",
+        "props",
+        "state",
+        "ref",
+        "component",
+        "element",
+        "node",
+        "children",
+        "child",
+        "parent",
+        "root",
+        "container",
+        "wrapper",
+        "icon",
+        "button",
+        "input",
+        "form",
+        "field",
+        "label",
+        "text",
+        "item",
+        "list",
+        "menu",
+        "modal",
+        "dialog",
+        "popup",
+        "tooltip",
         // Generic programming terms
-        "data", "value", "result", "response", "request", "error",
-        "callback", "handler", "listener", "event", "action", "type",
-        "interface", "class", "function", "method", "property", "field",
+        "data",
+        "value",
+        "result",
+        "response",
+        "request",
+        "error",
+        "callback",
+        "handler",
+        "listener",
+        "event",
+        "action",
+        "type",
+        "interface",
+        "class",
+        "function",
+        "method",
+        "property",
+        "field",
     ]
     .iter()
     .copied()
@@ -3649,62 +4349,56 @@ fn keywords_to_domains(keywords: &[(String, usize)]) -> Vec<String> {
     for (keyword, _) in keywords {
         let domain = match keyword.as_str() {
             // Authentication & Security
-            "jwt" | "token" | "bearer" | "refresh" | "auth" | "login" | "signin" | "session"
-                => Some("Authentication"),
-            "oauth" | "oauth2" | "openid" | "oidc" | "authorize" | "consent"
-                => Some("OAuth2"),
-            "encrypt" | "decrypt" | "hash" | "crypto" | "secret" | "key" | "cipher"
-                => Some("Security"),
-            "password" | "credential" | "passphrase"
-                => Some("Password Management"),
-            "permission" | "role" | "access" | "rbac" | "acl"
-                => Some("Authorization"),
+            "jwt" | "token" | "bearer" | "refresh" | "auth" | "login" | "signin" | "session" => {
+                Some("Authentication")
+            }
+            "oauth" | "oauth2" | "openid" | "oidc" | "authorize" | "consent" => Some("OAuth2"),
+            "encrypt" | "decrypt" | "hash" | "crypto" | "secret" | "key" | "cipher" => {
+                Some("Security")
+            }
+            "password" | "credential" | "passphrase" => Some("Password Management"),
+            "permission" | "role" | "access" | "rbac" | "acl" => Some("Authorization"),
 
             // Data & Storage
-            "sql" | "query" | "migration" | "schema" | "table" | "column" | "index" | "seed" | "database" | "db"
-                => Some("Database"),
-            "cache" | "ttl" | "invalidate" | "redis" | "memcached"
-                => Some("Caching"),
-            "upload" | "download" | "blob" | "storage" | "bucket" | "file" | "s3"
-                => Some("File Storage"),
+            "sql" | "query" | "migration" | "schema" | "table" | "column" | "index" | "seed"
+            | "database" | "db" => Some("Database"),
+            "cache" | "ttl" | "invalidate" | "redis" | "memcached" => Some("Caching"),
+            "upload" | "download" | "blob" | "storage" | "bucket" | "file" | "s3" => {
+                Some("File Storage")
+            }
 
             // Communication
-            "smtp" | "mail" | "email" | "mailer" | "inbox" | "newsletter"
-                => Some("Email"),
-            "socket" | "websocket" | "realtime" | "broadcast" | "emit"
-                => Some("WebSocket"),
-            "route" | "endpoint" | "middleware" | "controller" | "handler" | "request" | "response" | "api"
-                => Some("HTTP/API"),
+            "smtp" | "mail" | "email" | "mailer" | "inbox" | "newsletter" => Some("Email"),
+            "socket" | "websocket" | "realtime" | "broadcast" | "emit" => Some("WebSocket"),
+            "route" | "endpoint" | "middleware" | "controller" | "handler" | "request"
+            | "response" | "api" => Some("HTTP/API"),
 
             // Business Logic
-            "payment" | "invoice" | "billing" | "checkout" | "subscription" | "charge" | "stripe"
-                => Some("Payments"),
-            "worker" | "job" | "queue" | "background" | "cron" | "scheduler"
-                => Some("Job Queue"),
+            "payment" | "invoice" | "billing" | "checkout" | "subscription" | "charge"
+            | "stripe" => Some("Payments"),
+            "worker" | "job" | "queue" | "background" | "cron" | "scheduler" => Some("Job Queue"),
 
             // Development & Testing
-            "test" | "spec" | "mock" | "stub" | "assert" | "fixture" | "expect"
-                => Some("Testing"),
-            "log" | "logger" | "trace" | "metric" | "monitor" | "alert" | "span"
-                => Some("Logging/Monitoring"),
-            "validate" | "constraint" | "rule" | "sanitize"
-                => Some("Validation"),
+            "test" | "spec" | "mock" | "stub" | "assert" | "fixture" | "expect" => Some("Testing"),
+            "log" | "logger" | "trace" | "metric" | "monitor" | "alert" | "span" => {
+                Some("Logging/Monitoring")
+            }
+            "validate" | "constraint" | "rule" | "sanitize" => Some("Validation"),
 
             // AI/ML
-            "llm" | "embedding" | "prompt" | "completion" | "model" | "inference" | "vector" | "openai" | "anthropic"
-                => Some("AI/LLM"),
+            "llm" | "embedding" | "prompt" | "completion" | "model" | "inference" | "vector"
+            | "openai" | "anthropic" => Some("AI/LLM"),
 
             // User Management
-            "user" | "profile" | "account"
-                => Some("User Management"),
-            "notification" | "message" | "notify"
-                => Some("Notifications"),
+            "user" | "profile" | "account" => Some("User Management"),
+            "notification" | "message" | "notify" => Some("Notifications"),
 
             // Infrastructure
-            "deploy" | "deployment" | "infra" | "infrastructure" | "terraform" | "docker" | "kubernetes"
-                => Some("Infrastructure"),
-            "config" | "configuration" | "settings" | "env" | "environment"
-                => Some("Configuration"),
+            "deploy" | "deployment" | "infra" | "infrastructure" | "terraform" | "docker"
+            | "kubernetes" => Some("Infrastructure"),
+            "config" | "configuration" | "settings" | "env" | "environment" => {
+                Some("Configuration")
+            }
 
             _ => None,
         };
@@ -3720,10 +4414,8 @@ fn keywords_to_domains(keywords: &[(String, usize)]) -> Vec<String> {
 }
 
 /// Detect external library calls (calls to symbols outside indexed files)
-fn detect_external_calls(
-    module_files: &[PathBuf],
-    facade: &IndexFacade,
-) -> Vec<String> {
+#[allow(dead_code)]
+fn detect_external_calls(module_files: &[PathBuf], facade: &IndexFacade) -> Vec<String> {
     let mut external_calls = Vec::new();
 
     for file_path in module_files {
@@ -3738,9 +4430,9 @@ fn detect_external_calls(
                         let called_file_path = called_symbol.file_path.as_ref();
 
                         // Check if called symbol is external (not in our module files)
-                        let is_external = !module_files.iter().any(|f| {
-                            f.to_str().map_or(false, |s| s == called_file_path)
-                        });
+                        let is_external = !module_files
+                            .iter()
+                            .any(|f| f.to_str().map_or(false, |s| s == called_file_path));
 
                         if is_external {
                             // Extract library/package name from symbol name or file path
@@ -3760,6 +4452,7 @@ fn detect_external_calls(
 }
 
 /// Extract library/package name from symbol name
+#[allow(dead_code)]
 fn extract_library_name(symbol_name: &str) -> Option<String> {
     // Common patterns for library calls
     // JavaScript: axios.get, fs.readFile, express.Router
@@ -3782,106 +4475,79 @@ fn extract_library_name(symbol_name: &str) -> Option<String> {
 }
 
 /// Map common library calls to behavior descriptions (comprehensive package mapping)
+#[allow(dead_code)]
 fn map_external_call_to_behavior(lib_name: &str) -> Option<&'static str> {
     match lib_name {
         // Authentication
-        "jsonwebtoken" | "jose" | "passport" | "next-auth" | "lucia" | "clerk"
-            => Some("Authentication"),
-        "passport-google-oauth20" | "passport-github" | "openid-client"
-            => Some("OAuth2"),
-        "bcrypt" | "argon2" | "scrypt"
-            => Some("Password hashing"),
+        "jsonwebtoken" | "jose" | "passport" | "next-auth" | "lucia" | "clerk" => {
+            Some("Authentication")
+        }
+        "passport-google-oauth20" | "passport-github" | "openid-client" => Some("OAuth2"),
+        "bcrypt" | "argon2" | "scrypt" => Some("Password hashing"),
 
         // Email
-        "nodemailer" | "sendgrid" | "resend" | "postmark"
-            => Some("Email delivery"),
-        "@aws-sdk/client-ses"
-            => Some("AWS SES email"),
+        "nodemailer" | "sendgrid" | "resend" | "postmark" => Some("Email delivery"),
+        "@aws-sdk/client-ses" => Some("AWS SES email"),
 
         // Databases
-        "pg" | "mysql2" | "sqlite3" | "oracledb"
-            => Some("SQL database"),
-        "prisma" | "drizzle-orm" | "knex" | "sequelize" | "typeorm"
-            => Some("ORM"),
-        "mongodb" | "mongoose"
-            => Some("MongoDB"),
-        "sqlx" | "diesel"
-            => Some("Rust SQL"),
+        "pg" | "mysql2" | "sqlite3" | "oracledb" => Some("SQL database"),
+        "prisma" | "drizzle-orm" | "knex" | "sequelize" | "typeorm" => Some("ORM"),
+        "mongodb" | "mongoose" => Some("MongoDB"),
+        "sqlx" | "diesel" => Some("Rust SQL"),
 
         // Caching
-        "ioredis" | "redis" | "node-cache" | "lru-cache"
-            => Some("Caching"),
+        "ioredis" | "redis" | "node-cache" | "lru-cache" => Some("Caching"),
 
         // Storage
-        "@aws-sdk/client-s3" | "minio"
-            => Some("S3 storage"),
-        "multer" | "@google-cloud/storage"
-            => Some("File uploads"),
+        "@aws-sdk/client-s3" | "minio" => Some("S3 storage"),
+        "multer" | "@google-cloud/storage" => Some("File uploads"),
 
         // HTTP/API Frameworks
-        "express" | "hono" | "fastify" | "koa" | "@nestjs/core"
-            => Some("HTTP server"),
-        "axios" | "node-fetch" | "undici" | "got"
-            => Some("HTTP client"),
-        "axum" | "actix-web" | "rocket" | "warp"
-            => Some("Rust HTTP server"),
-        "reqwest" | "hyper"
-            => Some("Rust HTTP client"),
-        "gin" | "fiber" | "echo"
-            => Some("Go HTTP server"),
+        "express" | "hono" | "fastify" | "koa" | "@nestjs/core" => Some("HTTP server"),
+        "axios" | "node-fetch" | "undici" | "got" => Some("HTTP client"),
+        "axum" | "actix-web" | "rocket" | "warp" => Some("Rust HTTP server"),
+        "reqwest" | "hyper" => Some("Rust HTTP client"),
+        "gin" | "fiber" | "echo" => Some("Go HTTP server"),
 
         // WebSocket
-        "socket.io" | "ws" | "@nestjs/websockets" | "sockjs"
-            => Some("WebSocket"),
+        "socket.io" | "ws" | "@nestjs/websockets" | "sockjs" => Some("WebSocket"),
 
         // Job Queue
-        "bull" | "bullmq" | "bee-queue" | "agenda"
-            => Some("Job queue"),
+        "bull" | "bullmq" | "bee-queue" | "agenda" => Some("Job queue"),
 
         // Payments
-        "stripe" | "@stripe/stripe-js" | "paypal-rest-sdk" | "square"
-            => Some("Payment processing"),
+        "stripe" | "@stripe/stripe-js" | "paypal-rest-sdk" | "square" => Some("Payment processing"),
 
         // Testing
-        "jest" | "vitest" | "mocha" | "chai" | "pytest" | "rspec"
-            => Some("Testing"),
-        "cypress" | "playwright" | "@playwright/test"
-            => Some("E2E testing"),
+        "jest" | "vitest" | "mocha" | "chai" | "pytest" | "rspec" => Some("Testing"),
+        "cypress" | "playwright" | "@playwright/test" => Some("E2E testing"),
 
         // Logging/Monitoring
-        "winston" | "pino" | "bunyan"
-            => Some("Logging"),
-        "sentry" | "@sentry/node"
-            => Some("Error tracking"),
-        "datadog" | "newrelic"
-            => Some("Monitoring"),
-        "tracing" | "log"
-            => Some("Rust logging"),
+        "winston" | "pino" | "bunyan" => Some("Logging"),
+        "sentry" | "@sentry/node" => Some("Error tracking"),
+        "datadog" | "newrelic" => Some("Monitoring"),
+        "tracing" | "log" => Some("Rust logging"),
 
         // Validation
-        "zod" | "joi" | "yup" | "class-validator" | "ajv"
-            => Some("Validation"),
+        "zod" | "joi" | "yup" | "class-validator" | "ajv" => Some("Validation"),
 
         // AI/LLM
-        "openai" | "@anthropic-ai/sdk" | "langchain" | "llamaindex"
-            => Some("AI/LLM"),
-        "transformers" | "@huggingface/inference"
-            => Some("ML models"),
+        "openai" | "@anthropic-ai/sdk" | "langchain" | "llamaindex" => Some("AI/LLM"),
+        "transformers" | "@huggingface/inference" => Some("ML models"),
 
         // Async/Runtime
-        "tokio" | "async-std"
-            => Some("Async runtime"),
+        "tokio" | "async-std" => Some("Async runtime"),
 
         // Serialization
-        "serde" | "serde_json" | "serde_yaml"
-            => Some("Serialization"),
+        "serde" | "serde_json" | "serde_yaml" => Some("Serialization"),
 
         _ => None,
     }
 }
 
-/// Generate module description using waterfall strategy
+/// Generate module description using waterfall strategy (legacy, replaced by KB-based version)
 /// Priority: doc comments → external calls → keyword analysis
+#[allow(dead_code)]
 fn generate_module_description(
     module_path: &Path,
     module_files: &[PathBuf],
@@ -3958,7 +4624,8 @@ fn infer_description_from_dependencies(
     let path_str = module_path.to_string_lossy().to_lowercase();
 
     // Map dependencies to domain descriptions
-    let all_deps: Vec<_> = info.dependencies
+    let all_deps: Vec<_> = info
+        .dependencies
         .iter()
         .chain(info.dev_dependencies.iter())
         .map(|(n, _)| n.as_str())
@@ -3968,29 +4635,43 @@ fn infer_description_from_dependencies(
     let mut domains = Vec::new();
 
     // Authentication
-    if all_deps.iter().any(|n| n.contains("jwt") || n.contains("passport") || n.contains("bcrypt")) {
+    if all_deps
+        .iter()
+        .any(|n| n.contains("jwt") || n.contains("passport") || n.contains("bcrypt"))
+    {
         domains.push("Authentication");
     }
 
     // Database
-    if all_deps.iter().any(|n| n.contains("pg") || n.contains("mysql") || n.contains("mongodb") || n.contains("sqlite")) {
+    if all_deps.iter().any(|n| {
+        n.contains("pg") || n.contains("mysql") || n.contains("mongodb") || n.contains("sqlite")
+    }) {
         domains.push("Database");
     }
 
     // HTTP/API
-    if all_deps.iter().any(|n| n.contains("express") || n.contains("axios") || n.contains("fetch")) {
+    if all_deps
+        .iter()
+        .any(|n| n.contains("express") || n.contains("axios") || n.contains("fetch"))
+    {
         if path_str.contains("api") || path_str.contains("route") {
             domains.push("HTTP API");
         }
     }
 
     // Email
-    if all_deps.iter().any(|n| n.contains("nodemailer") || n.contains("sendgrid")) {
+    if all_deps
+        .iter()
+        .any(|n| n.contains("nodemailer") || n.contains("sendgrid"))
+    {
         domains.push("Email");
     }
 
     // Testing
-    if all_deps.iter().any(|n| n.contains("jest") || n.contains("mocha") || n.contains("test")) {
+    if all_deps
+        .iter()
+        .any(|n| n.contains("jest") || n.contains("mocha") || n.contains("test"))
+    {
         if path_str.contains("test") {
             domains.push("Testing");
         }
@@ -4640,4 +5321,511 @@ impl CodeIntelligenceServer {
         }
         Ok(())
     }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Enhanced Project Overview Helpers
+// ═══════════════════════════════════════════════════════════════
+
+/// Detect primary language from file extensions
+fn detect_primary_language(file_paths: &[PathBuf]) -> HashMap<String, usize> {
+    let mut lang_counts: HashMap<String, usize> = HashMap::new();
+
+    for path in file_paths {
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            let language = match ext {
+                "rs" => "Rust",
+                "ts" | "tsx" => "TypeScript",
+                "js" | "jsx" => "JavaScript",
+                "py" => "Python",
+                "go" => "Go",
+                "java" => "Java",
+                "cpp" | "cc" | "cxx" => "C++",
+                "c" | "h" => "C",
+                "php" => "PHP",
+                "rb" => "Ruby",
+                "swift" => "Swift",
+                "kt" | "kts" => "Kotlin",
+                "cs" => "C#",
+                _ => continue,
+            };
+            *lang_counts.entry(language.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    lang_counts
+}
+
+/// Format language distribution as percentage string
+fn format_language_distribution(lang_counts: &HashMap<String, usize>) -> String {
+    let total: usize = lang_counts.values().sum();
+    if total == 0 {
+        return "Unknown".to_string();
+    }
+
+    let mut langs: Vec<_> = lang_counts.iter().collect();
+    langs.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
+
+    langs
+        .iter()
+        .take(3)
+        .map(|(lang, count)| {
+            let pct = (**count as f64 / total as f64 * 100.0).round() as u32;
+            format!("{} ({}%)", lang, pct)
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Detect project architecture type
+fn detect_architecture(workspace_root: &Path) -> &'static str {
+    // Check for monorepo indicators
+    if workspace_root.join("package.json").exists() {
+        if let Ok(content) = std::fs::read_to_string(workspace_root.join("package.json")) {
+            if content.contains("\"workspaces\"") {
+                return "Monorepo (npm workspaces)";
+            }
+        }
+    }
+
+    if workspace_root.join("lerna.json").exists() {
+        return "Monorepo (Lerna)";
+    }
+
+    if workspace_root.join("Cargo.toml").exists() {
+        if let Ok(content) = std::fs::read_to_string(workspace_root.join("Cargo.toml")) {
+            if content.contains("[workspace]") {
+                return "Workspace (Cargo)";
+            }
+        }
+    }
+
+    "Single project"
+}
+
+/// Detect workspace packages in monorepo setups
+///
+/// Supports npm workspaces (package.json), Cargo workspaces (Cargo.toml), and Lerna (lerna.json).
+/// Returns list of workspace package directories relative to workspace_root.
+fn detect_workspace_packages(workspace_root: &Path) -> Vec<PathBuf> {
+    let mut packages = Vec::new();
+
+    // npm workspaces: package.json → "workspaces" array
+    let pkg_json_path = workspace_root.join("package.json");
+    if pkg_json_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&pkg_json_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(workspaces) = json.get("workspaces").and_then(|v| v.as_array()) {
+                    for ws in workspaces {
+                        if let Some(pattern) = ws.as_str() {
+                            expand_workspace_glob(workspace_root, pattern, &mut packages);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Cargo workspace: Cargo.toml → [workspace] members
+    if packages.is_empty() {
+        let cargo_path = workspace_root.join("Cargo.toml");
+        if cargo_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&cargo_path) {
+                if let Ok(toml_val) = toml::from_str::<toml::Value>(&content) {
+                    if let Some(members) = toml_val
+                        .get("workspace")
+                        .and_then(|w| w.get("members"))
+                        .and_then(|m| m.as_array())
+                    {
+                        for member in members {
+                            if let Some(pattern) = member.as_str() {
+                                expand_workspace_glob(workspace_root, pattern, &mut packages);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Lerna: lerna.json → "packages" array
+    if packages.is_empty() {
+        let lerna_path = workspace_root.join("lerna.json");
+        if lerna_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&lerna_path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(pkgs) = json.get("packages").and_then(|v| v.as_array()) {
+                        for pkg in pkgs {
+                            if let Some(pattern) = pkg.as_str() {
+                                expand_workspace_glob(workspace_root, pattern, &mut packages);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    packages
+}
+
+/// Expand a workspace glob pattern like "packages/*" into actual directories
+fn expand_workspace_glob(workspace_root: &Path, pattern: &str, results: &mut Vec<PathBuf>) {
+    if let Some(prefix) = pattern.strip_suffix("/*") {
+        // "packages/*" → list directories under workspace_root/packages/
+        let dir = workspace_root.join(prefix);
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    // Store as relative path from workspace_root (no ./ prefix)
+                    if let Ok(rel) = entry.path().strip_prefix(workspace_root) {
+                        results.push(rel.to_path_buf());
+                    }
+                }
+            }
+        }
+    } else {
+        // Direct path like "packages/core" — just check if it exists
+        let dir = workspace_root.join(pattern);
+        if dir.is_dir() {
+            results.push(PathBuf::from(pattern));
+        }
+    }
+}
+
+/// Detect project type from dependencies and structure
+fn detect_project_type(dep_info: &Option<DependencyInfo>) -> &'static str {
+    if let Some(info) = dep_info {
+        // Check for specific tech patterns
+        if info
+            .dev_dependencies
+            .iter()
+            .any(|(n, _)| n.contains("electron"))
+        {
+            return "Desktop App (Electron)";
+        }
+
+        if info
+            .dependencies
+            .iter()
+            .any(|(n, _)| n == "react" || n == "react-dom")
+        {
+            if info.dependencies.iter().any(|(n, _)| n == "next") {
+                return "Web App (Next.js)";
+            }
+            return "Web App (React)";
+        }
+
+        if info.dependencies.iter().any(|(n, _)| n == "vue") {
+            return "Web App (Vue)";
+        }
+
+        if info
+            .dependencies
+            .iter()
+            .any(|(n, _)| n == "express" || n == "fastify" || n == "koa" || n.contains("@nestjs"))
+        {
+            return "Backend Service";
+        }
+
+        if info.tech_stack.contains("Rust") {
+            return "System Tool/Library";
+        }
+    }
+
+    "Application"
+}
+
+/// Load knowledge base from .codanna/knowledge directory
+fn load_knowledge_base(workspace_root: &Path) -> Option<knowledge::KnowledgeBase> {
+    let knowledge_path = workspace_root.join(".codanna").join("knowledge");
+    knowledge::KnowledgeBase::load_from_dir(&knowledge_path).ok()
+}
+
+/// Generate enhanced module description using knowledge base
+fn generate_module_description_with_kb(
+    module_path: &Path,
+    module_files: &[PathBuf],
+    facade: &IndexFacade,
+    kb: &Option<knowledge::KnowledgeBase>,
+    primary_language: &str,
+) -> String {
+    // Strategy 1: Keyword extraction → domain mapping via knowledge base
+    let mut all_symbols = Vec::new();
+    for file_path in module_files {
+        if let Some(file_path_str) = file_path.to_str() {
+            if let Some(file_id) = facade.get_file_id_for_path(file_path_str) {
+                all_symbols.extend(facade.get_symbols_by_file(file_id));
+            }
+        }
+    }
+
+    if !all_symbols.is_empty() {
+        let keywords = extract_keywords_from_symbols(&all_symbols);
+
+        // Filter stop words using knowledge base if available
+        let filtered_keywords = if let Some(knowledge_base) = kb {
+            let stop_words = knowledge_base.get_stop_words(primary_language);
+            let stop_set: std::collections::HashSet<_> =
+                stop_words.iter().map(|s| s.to_lowercase()).collect();
+            keywords
+                .into_iter()
+                .filter(|k| !stop_set.contains(&k.to_lowercase()))
+                .collect()
+        } else {
+            keywords
+        };
+
+        let top_keywords = analyze_keyword_frequency(&filtered_keywords, 10);
+
+        // Map keywords to domains using knowledge base (returns behavior text)
+        if let Some(knowledge_base) = kb {
+            let mut keyword_strs: Vec<String> =
+                top_keywords.iter().map(|(k, _)| k.clone()).collect();
+
+            // Add module name as keyword hint (skip generic root names)
+            let module_name = module_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_lowercase())
+                .filter(|s| !matches!(s.as_str(), "src" | "lib" | "app" | "bin"));
+            if let Some(ref name) = module_name {
+                if !keyword_strs.contains(name) {
+                    keyword_strs.insert(0, name.clone());
+                }
+            }
+
+            let mut domain_matches =
+                knowledge_base.match_keywords_to_domains(primary_language, &keyword_strs);
+
+            // Boost domains whose keywords match the module name
+            if let Some(ref name) = module_name {
+                for entry in &mut domain_matches {
+                    // entry = (domain_name, behavior, priority, match_count)
+                    // Check if any domain keyword matches the module name
+                    if let Some(eco) = knowledge_base.get_for_language(primary_language) {
+                        for domain in &eco.domain {
+                            if domain.name == entry.0
+                                && domain.keywords.iter().any(|dk| {
+                                    name.contains(&dk.to_lowercase())
+                                        || dk.to_lowercase().contains(name.as_str())
+                                })
+                            {
+                                entry.3 += 5; // Strong boost for module name match
+                            }
+                        }
+                    }
+                }
+                // Re-sort after boosting
+                domain_matches.sort_by(|a, b| b.3.cmp(&a.3).then(b.2.cmp(&a.2)));
+            }
+
+            if !domain_matches.is_empty() {
+                // Use behavior text from the best match
+                let best_behavior = &domain_matches[0].1;
+                let mut desc = best_behavior.clone();
+                // Truncate to 60 chars
+                if desc.len() > 60 {
+                    desc.truncate(57);
+                    desc.push_str("...");
+                }
+                return desc;
+            }
+        } else {
+            // Fallback to hardcoded mapping if KB not available
+            let domains = keywords_to_domains(&top_keywords);
+            if !domains.is_empty() {
+                return domains.join(", ");
+            }
+        }
+
+        // No domain match: fall through to symbol name fallback
+    }
+
+    // Fallback: show top 3 most-referenced exported symbols (fan-in sorted)
+    let kind_priority = |s: &crate::Symbol| -> u8 {
+        match s.kind {
+            crate::SymbolKind::Class => 0,
+            crate::SymbolKind::Interface => 1,
+            crate::SymbolKind::Struct => 1,
+            crate::SymbolKind::Enum => 2,
+            crate::SymbolKind::Function => 3,
+            _ => 4,
+        }
+    };
+
+    // Take top 20 candidates by kind priority first (avoid fan-in lookup for all)
+    let mut candidates: Vec<&crate::Symbol> = all_symbols
+        .iter()
+        .filter(|s| matches!(s.visibility, crate::symbol::Visibility::Public))
+        .filter(|s| matches!(s.kind,
+            crate::SymbolKind::Class | crate::SymbolKind::Interface |
+            crate::SymbolKind::Struct | crate::SymbolKind::Enum |
+            crate::SymbolKind::Function
+        ))
+        .collect();
+    candidates.sort_by(|a, b| kind_priority(a).cmp(&kind_priority(b)).then(a.name.cmp(&b.name)));
+    candidates.dedup_by(|a, b| a.name == b.name);
+    candidates.truncate(20);
+
+    // Compute fan-in only for the 20 candidates
+    let mut with_fan_in: Vec<(&str, u8, usize)> = candidates
+        .iter()
+        .map(|s| {
+            let fan_in = facade.get_calling_functions(s.id).len();
+            (s.name.as_ref(), kind_priority(s), fan_in)
+        })
+        .collect();
+
+    // Sort: kind priority, then fan-in desc, then alphabetical
+    with_fan_in.sort_by(|a, b| a.1.cmp(&b.1).then(b.2.cmp(&a.2)).then(a.0.cmp(b.0)));
+    let top_names: Vec<&str> = with_fan_in.iter().take(3).map(|(n, _, _)| *n).collect();
+    if !top_names.is_empty() {
+        return top_names.join(", ");
+    }
+
+    String::new()
+}
+
+/// Format tech stack section using knowledge base categorization
+fn format_tech_stack(
+    dep_info: &Option<DependencyInfo>,
+    kb: &Option<knowledge::KnowledgeBase>,
+    primary_language: &str,
+) -> String {
+    let mut output = String::new();
+
+    if let Some(info) = dep_info {
+        // Extract all package names
+        let all_packages: Vec<String> = info
+            .dependencies
+            .iter()
+            .chain(info.dev_dependencies.iter())
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        // Categorize using knowledge base
+        // Try primary language first, then detect from package files
+        let categorized = if let Some(knowledge_base) = kb {
+            let mut cat_map: HashMap<String, (Vec<String>, bool)> = HashMap::new();
+
+            // Determine which language KBs to try
+            let lang_to_try = if knowledge_base.get_for_language(primary_language).is_some() {
+                primary_language.to_string()
+            } else {
+                // Detect from dep_info tech_stack or package type
+                if info.tech_stack.contains("React")
+                    || info.tech_stack.contains("JavaScript")
+                    || info.tech_stack.contains("Vue")
+                    || info.tech_stack.contains("Node")
+                    || info.tech_stack.contains("Express")
+                    || info.tech_stack.contains("Electron")
+                {
+                    "typescript".to_string()
+                } else if info.tech_stack.contains("Rust") {
+                    "rust".to_string()
+                } else {
+                    primary_language.to_string()
+                }
+            };
+
+            if let Some(eco) = knowledge_base.get_for_language(&lang_to_try) {
+                for stack in &eco.stack {
+                    let matched: Vec<String> = all_packages
+                        .iter()
+                        .filter(|pkg| {
+                            stack
+                                .packages
+                                .iter()
+                                .any(|sp| pkg.to_lowercase().contains(&sp.to_lowercase()))
+                        })
+                        .cloned()
+                        .collect();
+
+                    if !matched.is_empty() {
+                        cat_map.insert(
+                            stack.category.clone(),
+                            (matched, stack.is_utility.unwrap_or(false)),
+                        );
+                    }
+                }
+            }
+            cat_map
+        } else {
+            HashMap::new()
+        };
+
+        if !categorized.is_empty() {
+            let category_order = [
+                "runtime", "frontend", "backend", "ai_ml", "protocol",
+                "cli_tools", "parsing", "search", "database",
+                "services", "testing", "build", "infrastructure",
+            ];
+
+            for category in category_order {
+                if let Some((packages, is_utility)) = categorized.get(category) {
+                    // Skip utility categories
+                    if *is_utility || packages.is_empty() {
+                        continue;
+                    }
+
+                    let category_name = capitalize_category(category);
+
+                    // Inline format: Category: pkg1, pkg2, pkg3
+                    let pkg_list: Vec<String> = packages
+                        .iter()
+                        .take(8)
+                        .map(|pkg| {
+                            let version = info
+                                .dependencies
+                                .iter()
+                                .chain(info.dev_dependencies.iter())
+                                .find(|(name, _)| name == pkg)
+                                .map(|(_, ver)| ver.as_str())
+                                .unwrap_or("");
+                            if version.is_empty() {
+                                pkg.clone()
+                            } else {
+                                format!("{} {}", pkg, version)
+                            }
+                        })
+                        .collect();
+
+                    let suffix = if packages.len() > 8 {
+                        format!(" (+{} more)", packages.len() - 8)
+                    } else {
+                        String::new()
+                    };
+
+                    output.push_str(&format!(
+                        "  {:<14} {}{}\n",
+                        format!("{}:", category_name),
+                        pkg_list.join(", "),
+                        suffix
+                    ));
+                }
+            }
+
+            if !output.is_empty() {
+                output.push('\n');
+            }
+        }
+    }
+
+    output
+}
+
+/// Capitalize a category name (e.g. "runtime" → "Runtime")
+fn capitalize_category(category: &str) -> String {
+    category
+        .split('_')
+        .map(|word| {
+            let mut c = word.chars();
+            match c.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

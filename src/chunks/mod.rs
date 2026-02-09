@@ -8,10 +8,10 @@
 //! - Provides vector/BM25 recall helpers for hybrid retrieval
 
 use crate::config::SemanticBackend;
-use crate::parsing::{FlowKind, get_registry};
-use crate::semantic::SimpleSemanticSearch;
+use crate::parsing::{get_registry, FlowKind};
+use crate::semantic::{SemanticVectorStorage, SimpleSemanticSearch};
 use crate::symbol::ScopeContext;
-use crate::vector::{EmbeddingRuntimeConfig, create_text_embedding_with_runtime};
+use crate::vector::{create_text_embedding_with_runtime, EmbeddingRuntimeConfig};
 use crate::{IndexError, Settings, Symbol, SymbolId, SymbolKind};
 use fastembed::TextEmbedding;
 use fs2::FileExt;
@@ -21,16 +21,15 @@ use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Instant;
 use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery};
 use tantivy::schema::{
-    FAST, Field, IndexRecordOption, NumericOptions, STORED, STRING, Schema, SchemaBuilder,
-    TextFieldIndexing, TextOptions, Value,
+    Field, IndexRecordOption, NumericOptions, Schema, SchemaBuilder, TextFieldIndexing,
+    TextOptions, Value, FAST, STORED, STRING,
 };
-use tantivy::{
-    Index, IndexReader, IndexSettings, ReloadPolicy, TantivyDocument as Document, Term,
-};
+use tantivy::{Index, IndexReader, IndexSettings, ReloadPolicy, TantivyDocument as Document, Term};
 
 /// Backend abstraction for chunk embedding generation.
 ///
@@ -92,13 +91,14 @@ impl ActiveRecallBackend {
             }
             SemanticBackend::Model2vec => {
                 let source = model_name.strip_prefix("model2vec:").unwrap_or(model_name);
-                let model = StaticModel::from_pretrained(source, None, None, None).map_err(|e| {
-                    IndexError::ConfigError {
-                        reason: format!(
-                            "failed to initialize model2vec backend '{source}': {e}"
-                        ),
-                    }
-                })?;
+                let model =
+                    StaticModel::from_pretrained(source, None, None, None).map_err(|e| {
+                        IndexError::ConfigError {
+                            reason: format!(
+                                "failed to initialize model2vec backend '{source}': {e}"
+                            ),
+                        }
+                    })?;
                 let dims = model.encode_single("test").len();
                 Ok(Self {
                     model_name: model_name.to_string(),
@@ -128,7 +128,9 @@ impl RecallBackend for ActiveRecallBackend {
             ActiveModel::Fastembed(model) => model
                 .embed(texts.to_vec(), None)
                 .map_err(|e| IndexError::General(format!("fastembed encode failed: {e}"))),
-            ActiveModel::Model2Vec(model) => Ok(texts.iter().map(|t| model.encode_single(t)).collect()),
+            ActiveModel::Model2Vec(model) => {
+                Ok(texts.iter().map(|t| model.encode_single(t)).collect())
+            }
         }
     }
 }
@@ -188,6 +190,14 @@ struct ChunkIndexManifest {
 pub struct ChunkIndexStats {
     pub chunks_indexed: usize,
     pub embeddings_indexed: usize,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ChunkIncrementalStats {
+    pub retained_chunks: usize,
+    pub removed_chunks: usize,
+    pub encoded_chunks: usize,
+    pub reused_embeddings: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -259,9 +269,9 @@ impl ChunkTantivySchema {
 
     fn from_schema(schema: &Schema) -> Result<Self, IndexError> {
         let field = |name: &str| {
-            schema
-                .get_field(name)
-                .map_err(|e| IndexError::General(format!("chunk schema missing field '{name}': {e}")))
+            schema.get_field(name).map_err(|e| {
+                IndexError::General(format!("chunk schema missing field '{name}': {e}"))
+            })
         };
 
         Ok(Self {
@@ -428,6 +438,443 @@ impl CodeChunkIndexer {
             embeddings_indexed,
         })
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn rebuild_incremental_from_symbols(
+        &self,
+        symbols: &[Symbol],
+        backend: &dyn RecallBackend,
+        workspace_root: Option<&Path>,
+        settings: Option<&Settings>,
+        max_snippet_chars: usize,
+        snippet_context_lines: usize,
+        snippet_min_lines: usize,
+        flow_chunk_enabled: bool,
+        flow_chunk_languages: &[String],
+        flow_chunk_max_per_symbol: usize,
+        chunk_token_target: usize,
+        chunk_token_max: usize,
+        chunk_token_overlap: usize,
+        configured_dimension: Option<usize>,
+        changed_files: &[PathBuf],
+        deleted_files: &[PathBuf],
+        verbose_logging: bool,
+    ) -> Result<ChunkIndexStats, IndexError> {
+        if let Some(expected_dim) = configured_dimension {
+            if expected_dim != backend.dimensions() {
+                return Err(IndexError::ConfigError {
+                    reason: format!(
+                        "chunk_search.embedding_dimension={} does not match active backend dimension={}",
+                        expected_dim,
+                        backend.dimensions()
+                    ),
+                });
+            }
+        }
+
+        let matcher = ChunkPathMatcher::new(changed_files, deleted_files, workspace_root);
+        if !matcher.has_any() {
+            return Ok(ChunkIndexStats::default());
+        }
+
+        std::fs::create_dir_all(&self.root)?;
+        let semantic_path = self.root.join("semantic");
+        let chunks_path = self.root.join("chunks.json");
+        let manifest_path = self.root.join("manifest.json");
+
+        let start = Instant::now();
+        let existing_chunks = load_chunk_records(&self.root)?;
+        let mut retained_chunks = Vec::with_capacity(existing_chunks.len());
+        let mut removed_chunks = 0usize;
+        for chunk in existing_chunks {
+            if !matcher.matches_chunk_path(&chunk.file_path, workspace_root) {
+                retained_chunks.push(chunk);
+            } else {
+                removed_chunks += 1;
+            }
+        }
+
+        let mut changed_symbols: Vec<Symbol> = symbols
+            .iter()
+            .filter(|s| matcher.matches_symbol_path(s.file_path.as_ref(), workspace_root))
+            .cloned()
+            .collect();
+        changed_symbols.sort_by_key(|s| {
+            (
+                s.file_path.to_string(),
+                s.range.start_line,
+                s.range.end_line,
+                s.id.to_u32(),
+            )
+        });
+
+        let mut source_cache: HashMap<PathBuf, Vec<String>> = HashMap::new();
+        let mut new_chunks = Vec::with_capacity(changed_symbols.len());
+        for symbol in &changed_symbols {
+            if let Some(chunk) = build_chunk_record(
+                symbol,
+                workspace_root,
+                max_snippet_chars,
+                snippet_context_lines,
+                snippet_min_lines,
+                &mut source_cache,
+            ) {
+                new_chunks.push(chunk);
+            }
+        }
+
+        let mut next_chunk_id = retained_chunks
+            .iter()
+            .map(|c| c.chunk_id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
+
+        append_symbol_file_mixed_chunks(
+            &changed_symbols,
+            workspace_root,
+            max_snippet_chars,
+            &mut source_cache,
+            &mut new_chunks,
+            &mut next_chunk_id,
+        );
+        append_config_doc_chunks_for_paths(
+            changed_files,
+            workspace_root,
+            max_snippet_chars,
+            &mut source_cache,
+            &mut new_chunks,
+            &mut next_chunk_id,
+        );
+        if flow_chunk_enabled {
+            append_flow_chunks(
+                &changed_symbols,
+                settings,
+                workspace_root,
+                max_snippet_chars,
+                flow_chunk_languages,
+                flow_chunk_max_per_symbol,
+                &mut source_cache,
+                &mut new_chunks,
+                &mut next_chunk_id,
+            );
+        }
+        apply_token_budget_to_chunks(
+            &mut new_chunks,
+            &mut next_chunk_id,
+            max_snippet_chars,
+            chunk_token_target,
+            chunk_token_max,
+            chunk_token_overlap,
+        );
+        dedup_chunk_records(&mut new_chunks);
+
+        let new_chunk_ids: HashSet<u32> = new_chunks.iter().map(|c| c.chunk_id).collect();
+        let mut merged_chunks = retained_chunks;
+        merged_chunks.extend(new_chunks);
+
+        let existing_embeddings = load_existing_chunk_embeddings(&semantic_path);
+        let mut items: Vec<(SymbolId, Vec<f32>, String)> = Vec::with_capacity(merged_chunks.len());
+        let mut to_encode: Vec<(u32, String, String)> = Vec::new();
+        let mut reused_embeddings = 0usize;
+
+        for chunk in &merged_chunks {
+            if !new_chunk_ids.contains(&chunk.chunk_id) {
+                if let Some(embedding) = existing_embeddings.get(&chunk.chunk_id) {
+                    if let Some(sid) = SymbolId::new(chunk.chunk_id) {
+                        items.push((
+                            sid,
+                            embedding.clone(),
+                            chunk
+                                .language
+                                .clone()
+                                .unwrap_or_else(|| "unknown".to_string()),
+                        ));
+                        reused_embeddings += 1;
+                        continue;
+                    }
+                }
+            }
+            to_encode.push((
+                chunk.chunk_id,
+                chunk.embedding_text.clone(),
+                chunk
+                    .language
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string()),
+            ));
+        }
+
+        if !to_encode.is_empty() {
+            let texts: Vec<String> = to_encode.iter().map(|(_, text, _)| text.clone()).collect();
+            let embeddings = backend.encode(&texts)?;
+            for ((chunk_id, _, language), embedding) in to_encode.into_iter().zip(embeddings) {
+                if let Some(sid) = SymbolId::new(chunk_id) {
+                    items.push((sid, embedding, language));
+                }
+            }
+        }
+
+        if semantic_path.exists() {
+            std::fs::remove_dir_all(&semantic_path)?;
+        }
+        std::fs::create_dir_all(&semantic_path)?;
+
+        let mut semantic = SimpleSemanticSearch::from_model_name(backend.model_name())?;
+        let embeddings_indexed = semantic.store_embeddings(items);
+        semantic.save(&semantic_path)?;
+
+        let chunks_json = serde_json::to_string_pretty(&merged_chunks)
+            .map_err(|e| IndexError::General(format!("failed to serialize chunk metadata: {e}")))?;
+        std::fs::write(&chunks_path, chunks_json)?;
+
+        write_tantivy_chunk_index(&self.root, &merged_chunks)?;
+
+        let manifest = ChunkIndexManifest {
+            model_name: backend.model_name().to_string(),
+            dimension: backend.dimensions(),
+            chunk_count: merged_chunks.len(),
+            generated_at_utc_secs: current_unix_time_secs(),
+        };
+        let manifest_json = serde_json::to_string_pretty(&manifest)
+            .map_err(|e| IndexError::General(format!("failed to serialize chunk manifest: {e}")))?;
+        std::fs::write(&manifest_path, manifest_json)?;
+
+        if verbose_logging {
+            let incremental = ChunkIncrementalStats {
+                retained_chunks: merged_chunks.len().saturating_sub(new_chunk_ids.len()),
+                removed_chunks,
+                encoded_chunks: merged_chunks.len().saturating_sub(reused_embeddings),
+                reused_embeddings,
+            };
+            tracing::info!(
+                target: "chunk_search",
+                "chunk incremental rebuild: retained={}, removed={}, encoded={}, reused={}, total={} ({:?})",
+                incremental.retained_chunks,
+                incremental.removed_chunks,
+                incremental.encoded_chunks,
+                incremental.reused_embeddings,
+                merged_chunks.len(),
+                start.elapsed()
+            );
+        }
+
+        Ok(ChunkIndexStats {
+            chunks_indexed: merged_chunks.len(),
+            embeddings_indexed,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ChunkPathMatcher {
+    changed: HashSet<PathBuf>,
+    deleted: HashSet<PathBuf>,
+}
+
+impl ChunkPathMatcher {
+    fn new(
+        changed_files: &[PathBuf],
+        deleted_files: &[PathBuf],
+        workspace_root: Option<&Path>,
+    ) -> Self {
+        let changed: HashSet<PathBuf> = changed_files
+            .iter()
+            .map(|p| normalize_match_path(p, workspace_root))
+            .collect();
+        let deleted: HashSet<PathBuf> = deleted_files
+            .iter()
+            .map(|p| normalize_match_path(p, workspace_root))
+            .collect();
+        Self { changed, deleted }
+    }
+
+    fn has_any(&self) -> bool {
+        !(self.changed.is_empty() && self.deleted.is_empty())
+    }
+
+    fn matches_symbol_path(&self, symbol_path: &str, workspace_root: Option<&Path>) -> bool {
+        let normalized = normalize_match_path(Path::new(symbol_path), workspace_root);
+        self.changed.contains(&normalized)
+    }
+
+    fn matches_chunk_path(&self, chunk_path: &str, workspace_root: Option<&Path>) -> bool {
+        let normalized = normalize_match_path(Path::new(chunk_path), workspace_root);
+        self.changed.contains(&normalized) || self.deleted.contains(&normalized)
+    }
+}
+
+fn normalize_match_path(path: &Path, workspace_root: Option<&Path>) -> PathBuf {
+    let base = if path.is_absolute() {
+        path.to_path_buf()
+    } else if let Some(root) = workspace_root {
+        root.join(path)
+    } else {
+        path.to_path_buf()
+    };
+    normalize_components(&base)
+}
+
+fn normalize_components(path: &Path) -> PathBuf {
+    use std::path::Component;
+
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+fn append_symbol_file_mixed_chunks(
+    symbols: &[Symbol],
+    workspace_root: Option<&Path>,
+    max_snippet_chars: usize,
+    source_cache: &mut HashMap<PathBuf, Vec<String>>,
+    chunks: &mut Vec<CodeChunkRecord>,
+    next_chunk_id: &mut u32,
+) {
+    let mut by_file: HashMap<&str, Vec<&Symbol>> = HashMap::new();
+    for symbol in symbols {
+        by_file
+            .entry(symbol.file_path.as_ref())
+            .or_default()
+            .push(symbol);
+    }
+
+    for (file_path, mut file_symbols) in by_file {
+        file_symbols.sort_by_key(|s| (s.range.start_line, s.range.end_line));
+        append_module_comment_chunk(
+            file_path,
+            &file_symbols,
+            workspace_root,
+            max_snippet_chars,
+            source_cache,
+            chunks,
+            next_chunk_id,
+        );
+        append_inter_symbol_gap_chunks(
+            file_path,
+            &file_symbols,
+            workspace_root,
+            max_snippet_chars,
+            source_cache,
+            chunks,
+            next_chunk_id,
+        );
+    }
+}
+
+fn append_config_doc_chunks_for_paths(
+    changed_files: &[PathBuf],
+    workspace_root: Option<&Path>,
+    max_snippet_chars: usize,
+    source_cache: &mut HashMap<PathBuf, Vec<String>>,
+    chunks: &mut Vec<CodeChunkRecord>,
+    next_chunk_id: &mut u32,
+) {
+    const OVERLAP_LINES: usize = 2;
+    const MIN_DOC_CHUNK_CHARS: usize = 80;
+    const MIN_CONFIG_CHUNK_CHARS: usize = 20;
+    const MAX_CHUNKS_PER_FILE: usize = 24;
+    const MAX_TEXT_FILE_BYTES: u64 = 512 * 1024;
+
+    let mut seen_resolved: HashSet<PathBuf> = HashSet::new();
+    for raw_path in changed_files {
+        let resolved = resolve_indexed_path(raw_path, workspace_root);
+        let Some(kind) = classify_mixed_file_kind(&resolved) else {
+            continue;
+        };
+        if !seen_resolved.insert(resolved.clone()) {
+            continue;
+        }
+        if std::fs::metadata(&resolved).map(|m| m.len()).unwrap_or(0) > MAX_TEXT_FILE_BYTES {
+            continue;
+        }
+        let Some(lines) = load_source_lines(&resolved, source_cache) else {
+            continue;
+        };
+        if lines.is_empty() {
+            continue;
+        }
+
+        let file_path = normalize_chunk_file_path(raw_path, workspace_root);
+        let language = detect_text_language(raw_path);
+        let chunks_for_file = split_text_file_chunks(
+            lines,
+            max_snippet_chars.max(256),
+            OVERLAP_LINES,
+            match kind {
+                MixedFileKind::Doc => MIN_DOC_CHUNK_CHARS,
+                MixedFileKind::Config => MIN_CONFIG_CHUNK_CHARS,
+            },
+            MAX_CHUNKS_PER_FILE,
+        );
+        let chunk_type = match kind {
+            MixedFileKind::Doc => "doc_chunk",
+            MixedFileKind::Config => "config_chunk",
+        };
+
+        for (line_start, line_end, snippet) in chunks_for_file {
+            let title = snippet
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .map(|l| truncate_chars(l.trim(), 96))
+                .unwrap_or_else(|| "content".to_string());
+            let embedding_text =
+                build_embedding_text(&file_path, None, chunk_type, &title, None, &snippet);
+            chunks.push(CodeChunkRecord {
+                chunk_id: *next_chunk_id,
+                symbol_id: 0,
+                file_path: file_path.clone(),
+                language: language.clone(),
+                chunk_type: chunk_type.to_string(),
+                parent_scope: None,
+                line_start: line_start as u32,
+                line_end: line_end as u32,
+                signature: None,
+                doc_comment: None,
+                snippet,
+                embedding_text,
+            });
+            *next_chunk_id = next_chunk_id.saturating_add(1);
+        }
+    }
+}
+
+fn load_existing_chunk_embeddings(path: &Path) -> HashMap<u32, Vec<f32>> {
+    if !path.join("metadata.json").exists() {
+        return HashMap::new();
+    }
+
+    let Ok(mut storage) = SemanticVectorStorage::open(path) else {
+        tracing::warn!(
+            target: "chunk_search",
+            "failed to open existing chunk semantic store '{}'; re-encoding all chunks",
+            path.display()
+        );
+        return HashMap::new();
+    };
+    match storage.load_all() {
+        Ok(vectors) => vectors
+            .into_iter()
+            .map(|(sid, embedding)| (sid.to_u32(), embedding))
+            .collect(),
+        Err(err) => {
+            tracing::warn!(
+                target: "chunk_search",
+                "failed to load existing chunk embeddings '{}': {}; re-encoding all chunks",
+                path.display(),
+                err
+            );
+            HashMap::new()
+        }
+    }
 }
 
 pub fn load_chunk_records(root: &Path) -> Result<Vec<CodeChunkRecord>, IndexError> {
@@ -436,10 +883,12 @@ pub fn load_chunk_records(root: &Path) -> Result<Vec<CodeChunkRecord>, IndexErro
         return Ok(Vec::new());
     }
 
-    let raw = std::fs::read_to_string(&path).map_err(|e| IndexError::General(format!(
-        "failed to read chunk metadata '{}': {e}",
-        path.display()
-    )))?;
+    let raw = std::fs::read_to_string(&path).map_err(|e| {
+        IndexError::General(format!(
+            "failed to read chunk metadata '{}': {e}",
+            path.display()
+        ))
+    })?;
     serde_json::from_str::<Vec<CodeChunkRecord>>(&raw).map_err(|e| {
         IndexError::General(format!(
             "failed to parse chunk metadata '{}': {e}",
@@ -473,7 +922,10 @@ pub fn vector_recall(
         .search_with_language(query, limit, language_filter)
         .map_err(|e| IndexError::General(format!("chunk vector recall failed: {e}")))?;
 
-    Ok(results.into_iter().map(|(id, score)| (id.to_u32(), score)).collect())
+    Ok(results
+        .into_iter()
+        .map(|(id, score)| (id.to_u32(), score))
+        .collect())
 }
 
 pub fn bm25_recall(
@@ -491,11 +943,12 @@ pub fn bm25_recall(
         return Ok(Vec::new());
     }
 
-    let index =
-        Index::open_in_dir(&tantivy_path).map_err(|e| IndexError::General(format!(
+    let index = Index::open_in_dir(&tantivy_path).map_err(|e| {
+        IndexError::General(format!(
             "failed to open chunk tantivy index '{}': {e}",
             tantivy_path.display()
-        )))?;
+        ))
+    })?;
     let schema = ChunkTantivySchema::from_schema(&index.schema())?;
 
     let reader: IndexReader = index
@@ -531,7 +984,12 @@ pub fn build_rerank_text(record: &CodeChunkRecord) -> String {
     const MAX_SNIPPET_CHARS: usize = 1200;
 
     let mut parts = Vec::with_capacity(8);
-    parts.push(format!("file: {}:{}-{}", record.file_path, record.line_start + 1, record.line_end + 1));
+    parts.push(format!(
+        "file: {}:{}-{}",
+        record.file_path,
+        record.line_start + 1,
+        record.line_end + 1
+    ));
     parts.push(format!("kind: {}", record.chunk_type));
 
     if let Some(scope) = record.parent_scope.as_deref() {
@@ -754,7 +1212,9 @@ fn write_tantivy_chunk_index(root: &Path, chunks: &[CodeChunkRecord]) -> Result<
             ))
         })?;
         let index = Index::create(dir, schema, IndexSettings::default()).map_err(|e| {
-            IndexError::General(format!("failed to create temporary chunk tantivy index: {e}"))
+            IndexError::General(format!(
+                "failed to create temporary chunk tantivy index: {e}"
+            ))
         })?;
 
         let mut writer = index.writer(50_000_000).map_err(|e| {
@@ -767,7 +1227,10 @@ fn write_tantivy_chunk_index(root: &Path, chunks: &[CodeChunkRecord]) -> Result<
             doc.add_u64(fields.chunk_id, chunk.chunk_id as u64);
             doc.add_u64(fields.symbol_id, chunk.symbol_id as u64);
             doc.add_text(fields.file_path, &chunk.file_path);
-            doc.add_text(fields.language, chunk.language.as_deref().unwrap_or("unknown"));
+            doc.add_text(
+                fields.language,
+                chunk.language.as_deref().unwrap_or("unknown"),
+            );
             doc.add_text(fields.chunk_type, &chunk.chunk_type);
             if let Some(scope) = chunk.parent_scope.as_deref() {
                 doc.add_text(fields.parent_scope, scope);
@@ -787,9 +1250,9 @@ fn write_tantivy_chunk_index(root: &Path, chunks: &[CodeChunkRecord]) -> Result<
             })?;
         }
 
-        writer
-            .commit()
-            .map_err(|e| IndexError::General(format!("failed to commit chunk tantivy index: {e}")))?;
+        writer.commit().map_err(|e| {
+            IndexError::General(format!("failed to commit chunk tantivy index: {e}"))
+        })?;
 
         Ok(())
     })();
@@ -955,7 +1418,8 @@ fn append_flow_chunks(
         let max_per_symbol = flow_chunk_max_per_symbol.max(1);
 
         for block in flow_blocks {
-            let Some((start, end)) = normalize_line_range(block.range.start_line, block.range.end_line, lines.len())
+            let Some((start, end)) =
+                normalize_line_range(block.range.start_line, block.range.end_line, lines.len())
             else {
                 continue;
             };
@@ -964,7 +1428,12 @@ fn append_flow_chunks(
                 continue;
             }
 
-            let parent = find_parent_symbol_for_block(&file_symbols, start, end, block.parent_symbol_name.as_deref());
+            let parent = find_parent_symbol_for_block(
+                &file_symbols,
+                start,
+                end,
+                block.parent_symbol_name.as_deref(),
+            );
             let symbol_id = parent.map(|s| s.id.to_u32()).unwrap_or(0);
             if symbol_id != 0 {
                 let used = per_symbol_count.entry(symbol_id).or_insert(0);
@@ -1203,7 +1672,9 @@ fn split_chunk_by_token_budget(
         );
 
         let line_start = base_line.saturating_add(start_off);
-        let line_end = base_line.saturating_add(end_off).min(chunk.line_end as usize);
+        let line_end = base_line
+            .saturating_add(end_off)
+            .min(chunk.line_end as usize);
         out.push(CodeChunkRecord {
             chunk_id: if idx == 0 {
                 chunk.chunk_id
@@ -1396,12 +1867,13 @@ fn append_inter_symbol_gap_chunks(
             .lines()
             .map(str::trim_start)
             .filter(|l| !l.is_empty())
-            .all(|l| l.starts_with("import ")
-                || l.starts_with("from ")
-                || l.starts_with("export ")
-                || l.starts_with("use ")
-                || l.starts_with("#include"))
-        {
+            .all(|l| {
+                l.starts_with("import ")
+                    || l.starts_with("from ")
+                    || l.starts_with("export ")
+                    || l.starts_with("use ")
+                    || l.starts_with("#include")
+            }) {
             "imports_gap"
         } else {
             "inter_symbol_gap"
@@ -1582,7 +2054,10 @@ fn load_source_lines<'a>(
 ) -> Option<&'a Vec<String>> {
     if !source_cache.contains_key(path) {
         let source = std::fs::read_to_string(path).ok()?;
-        source_cache.insert(path.to_path_buf(), source.lines().map(|s| s.to_string()).collect());
+        source_cache.insert(
+            path.to_path_buf(),
+            source.lines().map(|s| s.to_string()).collect(),
+        );
     }
     source_cache.get(path)
 }
@@ -1655,7 +2130,11 @@ fn extract_leading_module_comment(
 
 fn is_comment_like_line(line: &str, in_block: bool) -> (bool, bool, bool) {
     if in_block {
-        return (true, false, line.contains("*/") || line.contains("\"\"\"") || line.contains("'''"));
+        return (
+            true,
+            false,
+            line.contains("*/") || line.contains("\"\"\"") || line.contains("'''"),
+        );
     }
     if line.starts_with("//")
         || line.starts_with('#')
@@ -1679,7 +2158,11 @@ fn normalize_symbol_line_range(symbol: &Symbol, line_count: usize) -> Option<(us
     normalize_line_range(symbol.range.start_line, symbol.range.end_line, line_count)
 }
 
-fn normalize_line_range(start_line: u32, end_line: u32, line_count: usize) -> Option<(usize, usize)> {
+fn normalize_line_range(
+    start_line: u32,
+    end_line: u32,
+    line_count: usize,
+) -> Option<(usize, usize)> {
     if line_count == usize::MAX {
         let start = start_line as usize;
         let end = (end_line as usize).max(start);
@@ -1767,15 +2250,18 @@ fn classify_mixed_file_kind(path: &Path) -> Option<MixedFileKind> {
         .map(|s| s.to_ascii_lowercase());
     match ext.as_deref() {
         Some("md" | "mdx" | "txt" | "rst" | "adoc") => Some(MixedFileKind::Doc),
-        Some("toml" | "yaml" | "yml" | "json" | "jsonc" | "ini" | "cfg" | "conf" | "properties") => {
-            Some(MixedFileKind::Config)
-        }
+        Some(
+            "toml" | "yaml" | "yml" | "json" | "jsonc" | "ini" | "cfg" | "conf" | "properties",
+        ) => Some(MixedFileKind::Config),
         _ => None,
     }
 }
 
 fn detect_text_language(path: &Path) -> Option<String> {
-    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
     let lower_name = file_name.to_ascii_lowercase();
     if lower_name.starts_with(".env") {
         return Some("env".to_string());
@@ -1788,18 +2274,20 @@ fn detect_text_language(path: &Path) -> Option<String> {
     }
 
     let ext = path.extension().and_then(|e| e.to_str())?;
-    Some(match ext.to_ascii_lowercase().as_str() {
-        "md" | "mdx" => "markdown",
-        "rst" => "rst",
-        "adoc" => "asciidoc",
-        "txt" => "text",
-        "toml" => "toml",
-        "yaml" | "yml" => "yaml",
-        "json" | "jsonc" => "json",
-        "ini" | "cfg" | "conf" | "properties" => "config",
-        other => other,
-    }
-    .to_string())
+    Some(
+        match ext.to_ascii_lowercase().as_str() {
+            "md" | "mdx" => "markdown",
+            "rst" => "rst",
+            "adoc" => "asciidoc",
+            "txt" => "text",
+            "toml" => "toml",
+            "yaml" | "yml" => "yaml",
+            "json" | "jsonc" => "json",
+            "ini" | "cfg" | "conf" | "properties" => "config",
+            other => other,
+        }
+        .to_string(),
+    )
 }
 
 fn resolve_symbol_path(file_path: &str, workspace_root: Option<&Path>) -> PathBuf {
@@ -1827,7 +2315,10 @@ fn extract_symbol_snippet(
     let resolved = resolve_symbol_path(symbol.file_path.as_ref(), workspace_root);
     if !source_cache.contains_key(&resolved) {
         let source = std::fs::read_to_string(&resolved).ok()?;
-        source_cache.insert(resolved.clone(), source.lines().map(|s| s.to_string()).collect());
+        source_cache.insert(
+            resolved.clone(),
+            source.lines().map(|s| s.to_string()).collect(),
+        );
     }
     let lines = source_cache.get(&resolved)?;
     if lines.is_empty() {
@@ -1868,7 +2359,8 @@ fn extract_symbol_snippet(
         if start > 0 {
             start -= 1;
         }
-        if end < len.saturating_sub(1) && end.saturating_sub(start).saturating_add(1) < target_min_lines
+        if end < len.saturating_sub(1)
+            && end.saturating_sub(start).saturating_add(1) < target_min_lines
         {
             end += 1;
         }
@@ -1913,8 +2405,12 @@ fn build_embedding_text(
 
 fn parent_scope_label(scope: Option<&ScopeContext>) -> Option<String> {
     match scope {
-        Some(ScopeContext::ClassMember { class_name }) => class_name.as_ref().map(|s| s.to_string()),
-        Some(ScopeContext::Local { parent_name, .. }) => parent_name.as_ref().map(|s| s.to_string()),
+        Some(ScopeContext::ClassMember { class_name }) => {
+            class_name.as_ref().map(|s| s.to_string())
+        }
+        Some(ScopeContext::Local { parent_name, .. }) => {
+            parent_name.as_ref().map(|s| s.to_string())
+        }
         Some(ScopeContext::Parameter) => Some("parameter".to_string()),
         _ => None,
     }
@@ -2005,7 +2501,9 @@ mod tests {
         let mut cache = HashMap::new();
         let chunk = build_chunk_record(&symbol, None, 2000, 2, 3, &mut cache).unwrap();
         assert!(chunk.snippet.contains("fn b(x: i32) -> i32"));
-        assert!(chunk.embedding_text.contains("# function fn b(x: i32) -> i32"));
+        assert!(chunk
+            .embedding_text
+            .contains("# function fn b(x: i32) -> i32"));
     }
 
     #[test]
@@ -2135,6 +2633,95 @@ mod tests {
         assert!(chunks.iter().any(|c| c.chunk_type == "inter_symbol_gap"));
         assert!(chunks.iter().any(|c| c.chunk_type == "doc_chunk"));
         assert!(chunks.iter().any(|c| c.chunk_type == "config_chunk"));
+    }
+
+    #[test]
+    fn test_incremental_rebuild_replaces_changed_and_removes_deleted_files() {
+        let temp = TempDir::new().unwrap();
+        let file_a = temp.path().join("src").join("a.ts");
+        let file_b = temp.path().join("src").join("b.ts");
+        std::fs::create_dir_all(file_a.parent().unwrap()).unwrap();
+        std::fs::write(&file_a, "function a() { return 1 }\n").unwrap();
+        std::fs::write(&file_b, "function b() { return 2 }\n").unwrap();
+
+        let mut symbols = vec![
+            Symbol::new(
+                SymbolId::new(1).unwrap(),
+                "a",
+                SymbolKind::Function,
+                FileId::new(1).unwrap(),
+                Range::new(0, 0, 0, 26),
+            )
+            .with_file_path(file_a.to_string_lossy().to_string())
+            .with_signature("function a()"),
+            Symbol::new(
+                SymbolId::new(2).unwrap(),
+                "b",
+                SymbolKind::Function,
+                FileId::new(2).unwrap(),
+                Range::new(0, 0, 0, 26),
+            )
+            .with_file_path(file_b.to_string_lossy().to_string())
+            .with_signature("function b()"),
+        ];
+
+        let indexer = CodeChunkIndexer::new(temp.path());
+        let backend = MockRecallBackend {
+            model_name: "AllMiniLML6V2".to_string(),
+            dims: 16,
+        };
+        indexer
+            .rebuild_from_symbols(
+                &symbols,
+                &backend,
+                Some(temp.path()),
+                None,
+                2000,
+                1,
+                2,
+                None,
+                false,
+                &[],
+                6,
+                800,
+                4096,
+                96,
+                Some(16),
+            )
+            .unwrap();
+
+        std::fs::write(&file_a, "function a() { return 10 }\n").unwrap();
+        symbols.pop(); // file_b deleted from symbol index state
+
+        indexer
+            .rebuild_incremental_from_symbols(
+                &symbols,
+                &backend,
+                Some(temp.path()),
+                None,
+                2000,
+                1,
+                2,
+                false,
+                &[],
+                6,
+                800,
+                4096,
+                96,
+                Some(16),
+                &[file_a.clone()],
+                &[file_b.clone()],
+                false,
+            )
+            .unwrap();
+
+        let chunks = load_chunk_records(&temp.path().join("code_chunks")).unwrap();
+        assert!(chunks
+            .iter()
+            .any(|c| c.file_path == file_a.to_string_lossy()));
+        assert!(!chunks
+            .iter()
+            .any(|c| c.file_path == file_b.to_string_lossy()));
     }
 
     #[test]

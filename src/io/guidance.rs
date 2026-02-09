@@ -23,7 +23,10 @@ pub fn generate_guidance(tool: &str, _query: Option<&str>, result_count: usize) 
 
         "semantic_search_chunks" => {
             if result_count == 0 {
-                Some("No code chunks found. Try broader terms, module names, or known identifiers.".to_string())
+                Some(
+                    "No code chunks found. Try broader terms, module names, or known identifiers."
+                        .to_string(),
+                )
             } else {
                 Some(format!(
                     "Found {result_count} chunks. Inspect line ranges, then pivot to 'find_symbol' for exact API navigation."

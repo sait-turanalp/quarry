@@ -1,0 +1,24 @@
+# Static INT8 vs current Jina v1 baseline.
+# baseline_current_default is auto-added by codanna benchmark-rerank.
+
+[defaults]
+timeout_ms = 15000
+max_length = 1024
+rerank_score_normalization = "none"
+top_k_vector = 100
+top_k_bm25 = 100
+top_k_fused = 50
+
+[[profiles]]
+name = "jina_v1_tn30_heur_off"
+model = "JINARerankerV1TurboEn"
+top_n = 30
+post_rerank_heuristics_enabled = false
+
+[[profiles]]
+name = "jina_v1_static_int8_tn30_heur_off"
+# Replace with your generated static model path.
+model = "custom:/tmp/codanna-static-int8/latest/model_static_int8"
+top_n = 30
+post_rerank_heuristics_enabled = false
+

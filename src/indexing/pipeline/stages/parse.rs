@@ -3,12 +3,12 @@
 //! Converts FileContent into ParsedFile with RawSymbols.
 //! Uses thread-local parsers to avoid contention.
 
-use crate::Settings;
 use crate::indexing::pipeline::types::{
     FileContent, ParsedFile, PipelineError, PipelineResult, RawImport, RawRelationship, RawSymbol,
 };
-use crate::parsing::{LanguageId, LanguageParser, get_registry, normalize_for_module_path};
+use crate::parsing::{get_registry, normalize_for_module_path, LanguageId, LanguageParser};
 use crate::types::{FileId, SymbolCounter};
+use crate::Settings;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;

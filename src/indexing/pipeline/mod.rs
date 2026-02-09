@@ -39,7 +39,7 @@ pub use metrics::{PipelineMetrics, StageMetrics, StageTracker};
 pub use stages::cleanup::{CleanupStage, CleanupStats};
 pub use stages::context::{ContextStage, ContextStats};
 pub use stages::embed::{EmbedStage, EmbedStats};
-pub use stages::parse::{ParseStage, init_parser_cache, parse_file};
+pub use stages::parse::{init_parser_cache, parse_file, ParseStage};
 pub use stages::resolve::{ResolveStage, ResolveStats};
 pub use stages::semantic_embed::{SemanticEmbedStage, SemanticEmbedStats};
 pub use stages::write::{WriteStage, WriteStats};
@@ -50,15 +50,15 @@ pub use types::{
     UnresolvedRelationship,
 };
 
-use crate::FileId;
-use crate::RelationKind;
-use crate::Settings;
 use crate::indexing::IndexStats;
 use crate::io::status_line::DualProgressBar;
 use crate::parsing::ParserFactory;
 use crate::semantic::{SemanticWorkerClient, SemanticWorkerClientConfig, SimpleSemanticSearch};
 use crate::storage::DocumentIndex;
 use crate::vector::EmbeddingRuntimeConfig;
+use crate::FileId;
+use crate::RelationKind;
+use crate::Settings;
 use crossbeam_channel::{bounded, unbounded};
 use stages::{CollectStage, DiscoverStage, IndexStage, ReadStage};
 use std::path::{Path, PathBuf};
@@ -1309,64 +1309,186 @@ impl Pipeline {
             .with_width(28);
 
         // Run Phase 1 indexing with appropriate progress bar
-        let (index_stats, unresolved, symbol_cache, cleanup_stats, discover_counts) = if force {
-            // Force mode: use DualProgressBar for semantic+embedding, else single bar
-            let has_embedding =
-                semantic.is_some() && (embedding_pool.is_some() || semantic_worker_enabled);
+        let (index_stats, unresolved, symbol_cache, cleanup_stats, discover_counts, discover_paths) =
+            if force {
+                // Force mode: use DualProgressBar for semantic+embedding, else single bar
+                let has_embedding =
+                    semantic.is_some() && (embedding_pool.is_some() || semantic_worker_enabled);
 
-            if has_embedding {
-                tracing::info!(target: "semantic", "FORCE MODE: has_embedding=true, will save embeddings after indexing");
-                // Dual progress: EMBED and INDEX running in parallel
-                // Estimate embedding candidates = total_files (actual will vary based on symbols per file)
-                let dual_bar = Arc::new(DualProgressBar::new(
-                    "EMBED",
-                    total_files as u64, // Estimated embedding candidates
-                    "embedded",
-                    "INDEX",
-                    total_files as u64,
-                    "files",
-                ));
-                let dual_status = StatusLine::new(Arc::clone(&dual_bar));
+                if has_embedding {
+                    tracing::info!(target: "semantic", "FORCE MODE: has_embedding=true, will save embeddings after indexing");
+                    // Dual progress: EMBED and INDEX running in parallel
+                    // Estimate embedding candidates = total_files (actual will vary based on symbols per file)
+                    let dual_bar = Arc::new(DualProgressBar::new(
+                        "EMBED",
+                        total_files as u64, // Estimated embedding candidates
+                        "embedded",
+                        "INDEX",
+                        total_files as u64,
+                        "files",
+                    ));
+                    let dual_status = StatusLine::new(Arc::clone(&dual_bar));
 
-                let (stats, unresolved, cache, metrics) = self.index_directory_with_semantic(
-                    root,
-                    Arc::clone(&index),
-                    Arc::clone(semantic.as_ref().unwrap()),
-                    embedding_pool.clone(),
-                    None, // No single progress bar
-                    Some(dual_bar.clone()),
-                )?;
+                    let (stats, unresolved, cache, metrics) = self.index_directory_with_semantic(
+                        root,
+                        Arc::clone(&index),
+                        Arc::clone(semantic.as_ref().unwrap()),
+                        embedding_pool.clone(),
+                        None, // No single progress bar
+                        Some(dual_bar.clone()),
+                    )?;
 
-                // Drop StatusLine BEFORE logging to avoid stderr race condition
-                drop(dual_status);
-                if let Some(m) = metrics {
-                    m.log();
-                }
-                eprintln!("{dual_bar}");
+                    // Drop StatusLine BEFORE logging to avoid stderr race condition
+                    drop(dual_status);
+                    if let Some(m) = metrics {
+                        m.log();
+                    }
+                    eprintln!("{dual_bar}");
 
-                // Save embeddings after force indexing with semantic
-                if let Ok(guard) = semantic.as_ref().unwrap().lock() {
-                    tracing::info!(target: "semantic", "FORCE MODE: Saving embeddings to {:?}", semantic_path);
-                    match guard.save(&semantic_path) {
-                        Ok(()) => tracing::info!(target: "semantic", "FORCE MODE: Save successful"),
-                        Err(e) => {
-                            tracing::error!(target: "semantic", "FORCE MODE: Save failed: {}", e)
+                    // Legacy mode saves here and once again after phase-2/persistence.
+                    // `semantic_single_save_mode` keeps only the final save in this run.
+                    if !self.settings.indexing.semantic_single_save_mode {
+                        if let Ok(guard) = semantic.as_ref().unwrap().lock() {
+                            tracing::info!(target: "semantic", "FORCE MODE: Saving embeddings to {:?}", semantic_path);
+                            match guard.save(&semantic_path) {
+                                Ok(()) => {
+                                    tracing::info!(target: "semantic", "FORCE MODE: Save successful")
+                                }
+                                Err(e) => {
+                                    tracing::error!(target: "semantic", "FORCE MODE: Save failed: {}", e)
+                                }
+                            }
                         }
                     }
+
+                    let files_indexed = stats.files_indexed;
+                    (
+                        stats,
+                        unresolved,
+                        cache,
+                        CleanupStats::default(),
+                        (files_indexed, 0, 0),
+                        (Vec::new(), Vec::new(), Vec::new()),
+                    )
+                } else {
+                    // Single progress bar (no embedding or no semantic)
+                    let phase1_bar = Arc::new(ProgressBar::with_4_labels(
+                        total_files as u64,
+                        "files",
+                        "indexed",
+                        "failed",
+                        "embedded",
+                        bar_options,
+                    ));
+                    let phase1_status = StatusLine::new(Arc::clone(&phase1_bar));
+
+                    let (stats, unresolved, cache, metrics) = if let Some(ref sem) = semantic {
+                        self.index_directory_with_semantic(
+                            root,
+                            Arc::clone(&index),
+                            Arc::clone(sem),
+                            embedding_pool.clone(),
+                            Some(phase1_bar.clone()),
+                            None,
+                        )?
+                    } else {
+                        let (s, u, c) = self.index_directory_with_progress(
+                            root,
+                            Arc::clone(&index),
+                            Some(phase1_bar.clone()),
+                        )?;
+                        (s, u, c, None)
+                    };
+
+                    // Drop StatusLine BEFORE logging to avoid stderr race condition
+                    drop(phase1_status);
+                    if let Some(m) = metrics {
+                        m.log();
+                    }
+                    eprintln!("{phase1_bar}");
+
+                    // Legacy mode saves here and once again after phase-2/persistence.
+                    // `semantic_single_save_mode` keeps only the final save in this run.
+                    if !self.settings.indexing.semantic_single_save_mode {
+                        if let Some(ref sem) = semantic {
+                            if let Ok(guard) = sem.lock() {
+                                tracing::info!(target: "semantic", "FORCE MODE (single bar): Saving embeddings to {:?}", semantic_path);
+                                match guard.save(&semantic_path) {
+                                    Ok(()) => {
+                                        tracing::info!(target: "semantic", "FORCE MODE (single bar): Save successful")
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(target: "semantic", "FORCE MODE (single bar): Save failed: {}", e)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let files_indexed = stats.files_indexed;
+                    (
+                        stats,
+                        unresolved,
+                        cache,
+                        CleanupStats::default(),
+                        (files_indexed, 0, 0),
+                        (Vec::new(), Vec::new(), Vec::new()),
+                    )
+                }
+            } else {
+                // Incremental mode: discover first, then create bar with actual count
+                let discover_stage = DiscoverStage::new(root, self.config.discover_threads)
+                    .with_include_tests(self.settings.indexing.include_tests)
+                    .with_index(Arc::clone(&index))
+                    .with_workspace_root(self.settings.workspace_root.clone());
+                let discover_result = discover_stage.run_incremental()?;
+
+                if discover_result.is_empty() {
+                    return Ok(IncrementalStats {
+                        new_files: 0,
+                        modified_files: 0,
+                        deleted_files: 0,
+                        new_file_paths: Vec::new(),
+                        modified_file_paths: Vec::new(),
+                        deleted_file_paths: Vec::new(),
+                        index_stats: IndexStats::new(),
+                        cleanup_stats: CleanupStats::default(),
+                        phase2_stats: Phase2Stats::default(),
+                        elapsed: start.elapsed(),
+                    });
                 }
 
-                let files_indexed = stats.files_indexed;
-                (
-                    stats,
-                    unresolved,
-                    cache,
-                    CleanupStats::default(),
-                    (files_indexed, 0, 0),
-                )
-            } else {
-                // Single progress bar (no embedding or no semantic)
+                // Cleanup
+                let cleanup_stage = if let Some(ref sem) = semantic {
+                    CleanupStage::new(Arc::clone(&index), &semantic_path)
+                        .with_semantic(Arc::clone(sem))
+                } else {
+                    CleanupStage::new(Arc::clone(&index), &semantic_path)
+                };
+
+                let mut cleanup_stats = CleanupStats::default();
+                if !discover_result.deleted_files.is_empty() {
+                    let stats = cleanup_stage.cleanup_files(&discover_result.deleted_files)?;
+                    cleanup_stats.files_cleaned += stats.files_cleaned;
+                    cleanup_stats.symbols_removed += stats.symbols_removed;
+                }
+                if !discover_result.modified_files.is_empty() {
+                    let stats = cleanup_stage.cleanup_files(&discover_result.modified_files)?;
+                    cleanup_stats.files_cleaned += stats.files_cleaned;
+                    cleanup_stats.symbols_removed += stats.symbols_removed;
+                }
+
+                let files_to_index: Vec<PathBuf> = discover_result
+                    .new_files
+                    .iter()
+                    .chain(discover_result.modified_files.iter())
+                    .cloned()
+                    .collect();
+
+                // Create Phase 1 bar with actual files to index count
+                // Labels: files, indexed, failed, embedded (for embedding visibility)
                 let phase1_bar = Arc::new(ProgressBar::with_4_labels(
-                    total_files as u64,
+                    files_to_index.len() as u64,
                     "files",
                     "indexed",
                     "failed",
@@ -1375,131 +1497,29 @@ impl Pipeline {
                 ));
                 let phase1_status = StatusLine::new(Arc::clone(&phase1_bar));
 
-                let (stats, unresolved, cache, metrics) = if let Some(ref sem) = semantic {
-                    self.index_directory_with_semantic(
-                        root,
-                        Arc::clone(&index),
-                        Arc::clone(sem),
-                        embedding_pool.clone(),
-                        Some(phase1_bar.clone()),
-                        None,
-                    )?
-                } else {
-                    let (s, u, c) = self.index_directory_with_progress(
-                        root,
-                        Arc::clone(&index),
-                        Some(phase1_bar.clone()),
-                    )?;
-                    (s, u, c, None)
-                };
+                let (stats, unresolved, cache) = self.index_files(
+                    &files_to_index,
+                    Arc::clone(&index),
+                    semantic.clone(),
+                    embedding_pool.clone(),
+                    Some(phase1_bar.clone()),
+                )?;
 
-                // Drop StatusLine BEFORE logging to avoid stderr race condition
                 drop(phase1_status);
-                if let Some(m) = metrics {
-                    m.log();
-                }
                 eprintln!("{phase1_bar}");
 
-                // Save embeddings after force indexing (single bar mode)
-                if let Some(ref sem) = semantic {
-                    if let Ok(guard) = sem.lock() {
-                        tracing::info!(target: "semantic", "FORCE MODE (single bar): Saving embeddings to {:?}", semantic_path);
-                        match guard.save(&semantic_path) {
-                            Ok(()) => {
-                                tracing::info!(target: "semantic", "FORCE MODE (single bar): Save successful")
-                            }
-                            Err(e) => {
-                                tracing::error!(target: "semantic", "FORCE MODE (single bar): Save failed: {}", e)
-                            }
-                        }
-                    }
-                }
-
-                let files_indexed = stats.files_indexed;
-                (
-                    stats,
-                    unresolved,
-                    cache,
-                    CleanupStats::default(),
-                    (files_indexed, 0, 0),
-                )
-            }
-        } else {
-            // Incremental mode: discover first, then create bar with actual count
-            let discover_stage = DiscoverStage::new(root, self.config.discover_threads)
-                .with_include_tests(self.settings.indexing.include_tests)
-                .with_index(Arc::clone(&index))
-                .with_workspace_root(self.settings.workspace_root.clone());
-            let discover_result = discover_stage.run_incremental()?;
-
-            if discover_result.is_empty() {
-                return Ok(IncrementalStats {
-                    new_files: 0,
-                    modified_files: 0,
-                    deleted_files: 0,
-                    index_stats: IndexStats::new(),
-                    cleanup_stats: CleanupStats::default(),
-                    phase2_stats: Phase2Stats::default(),
-                    elapsed: start.elapsed(),
-                });
-            }
-
-            // Cleanup
-            let cleanup_stage = if let Some(ref sem) = semantic {
-                CleanupStage::new(Arc::clone(&index), &semantic_path).with_semantic(Arc::clone(sem))
-            } else {
-                CleanupStage::new(Arc::clone(&index), &semantic_path)
+                let counts = (
+                    discover_result.new_files.len(),
+                    discover_result.modified_files.len(),
+                    discover_result.deleted_files.len(),
+                );
+                let paths = (
+                    discover_result.new_files.clone(),
+                    discover_result.modified_files.clone(),
+                    discover_result.deleted_files.clone(),
+                );
+                (stats, unresolved, cache, cleanup_stats, counts, paths)
             };
-
-            let mut cleanup_stats = CleanupStats::default();
-            if !discover_result.deleted_files.is_empty() {
-                let stats = cleanup_stage.cleanup_files(&discover_result.deleted_files)?;
-                cleanup_stats.files_cleaned += stats.files_cleaned;
-                cleanup_stats.symbols_removed += stats.symbols_removed;
-            }
-            if !discover_result.modified_files.is_empty() {
-                let stats = cleanup_stage.cleanup_files(&discover_result.modified_files)?;
-                cleanup_stats.files_cleaned += stats.files_cleaned;
-                cleanup_stats.symbols_removed += stats.symbols_removed;
-            }
-
-            let files_to_index: Vec<PathBuf> = discover_result
-                .new_files
-                .iter()
-                .chain(discover_result.modified_files.iter())
-                .cloned()
-                .collect();
-
-            // Create Phase 1 bar with actual files to index count
-            // Labels: files, indexed, failed, embedded (for embedding visibility)
-            let phase1_bar = Arc::new(ProgressBar::with_4_labels(
-                files_to_index.len() as u64,
-                "files",
-                "indexed",
-                "failed",
-                "embedded",
-                bar_options,
-            ));
-            let phase1_status = StatusLine::new(Arc::clone(&phase1_bar));
-
-            let (stats, unresolved, cache) = self.index_files(
-                &files_to_index,
-                Arc::clone(&index),
-                semantic.clone(),
-                embedding_pool.clone(),
-                Some(phase1_bar.clone()),
-            )?;
-
-            drop(phase1_status);
-            eprintln!("{phase1_bar}");
-
-            let counts = (
-                discover_result.new_files.len(),
-                discover_result.modified_files.len(),
-                discover_result.deleted_files.len(),
-            );
-            (stats, unresolved, cache, cleanup_stats, counts)
-        };
 
         // Run Phase 2 with separate progress bar (no rate - not meaningful for relationships)
         let symbol_cache = Arc::new(symbol_cache);
@@ -1547,6 +1567,9 @@ impl Pipeline {
             new_files: discover_counts.0,
             modified_files: discover_counts.1,
             deleted_files: discover_counts.2,
+            new_file_paths: discover_paths.0,
+            modified_file_paths: discover_paths.1,
+            deleted_file_paths: discover_paths.2,
             index_stats,
             cleanup_stats,
             phase2_stats,
@@ -1599,6 +1622,9 @@ impl Pipeline {
                 new_files: 0,
                 modified_files: 0,
                 deleted_files: 0,
+                new_file_paths: Vec::new(),
+                modified_file_paths: Vec::new(),
+                deleted_file_paths: Vec::new(),
                 index_stats: IndexStats::new(),
                 cleanup_stats: CleanupStats::default(),
                 phase2_stats: Phase2Stats::default(),
@@ -1704,6 +1730,9 @@ impl Pipeline {
             new_files: discover_result.new_files.len(),
             modified_files: discover_result.modified_files.len(),
             deleted_files: discover_result.deleted_files.len(),
+            new_file_paths: discover_result.new_files,
+            modified_file_paths: discover_result.modified_files,
+            deleted_file_paths: discover_result.deleted_files,
             index_stats,
             cleanup_stats,
             phase2_stats,
@@ -2067,6 +2096,9 @@ impl Pipeline {
             new_files: index_stats.files_indexed,
             modified_files: 0,
             deleted_files: 0,
+            new_file_paths: Vec::new(),
+            modified_file_paths: Vec::new(),
+            deleted_file_paths: Vec::new(),
             index_stats,
             cleanup_stats: CleanupStats::default(),
             phase2_stats,
@@ -2737,6 +2769,12 @@ pub struct IncrementalStats {
     pub modified_files: usize,
     /// Number of deleted files cleaned up
     pub deleted_files: usize,
+    /// New files discovered in this run.
+    pub new_file_paths: Vec<PathBuf>,
+    /// Modified files discovered in this run.
+    pub modified_file_paths: Vec<PathBuf>,
+    /// Deleted files discovered in this run.
+    pub deleted_file_paths: Vec<PathBuf>,
     /// Phase 1 indexing stats
     pub index_stats: IndexStats,
     /// Cleanup stats

@@ -722,7 +722,9 @@ pub async fn run(
                 .and_then(|v| v.as_str());
 
             let results = match threshold {
-                Some(t) => facade.hybrid_chunk_search_with_threshold_detailed(q, limit, t, language),
+                Some(t) => {
+                    facade.hybrid_chunk_search_with_threshold_detailed(q, limit, t, language)
+                }
                 None => facade.hybrid_chunk_search_detailed(q, limit, language),
             };
 
