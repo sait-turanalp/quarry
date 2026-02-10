@@ -107,6 +107,24 @@ impl RelationKind {
                 | Self::ReferencedBy
         )
     }
+
+    /// Static string representation (avoids `format!("{:?}")` allocation).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Calls => "Calls",
+            Self::CalledBy => "CalledBy",
+            Self::Extends => "Extends",
+            Self::ExtendedBy => "ExtendedBy",
+            Self::Implements => "Implements",
+            Self::ImplementedBy => "ImplementedBy",
+            Self::Uses => "Uses",
+            Self::UsedBy => "UsedBy",
+            Self::Defines => "Defines",
+            Self::DefinedIn => "DefinedIn",
+            Self::References => "References",
+            Self::ReferencedBy => "ReferencedBy",
+        }
+    }
 }
 
 impl RelationshipMetadata {

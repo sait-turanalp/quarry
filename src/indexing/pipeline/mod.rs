@@ -60,6 +60,7 @@ use crate::FileId;
 use crate::RelationKind;
 use crate::Settings;
 use crossbeam_channel::{bounded, unbounded};
+use rayon::prelude::*;
 use stages::{CollectStage, DiscoverStage, IndexStage, ReadStage};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -852,13 +853,21 @@ impl Pipeline {
             let behaviors = context_stage.behaviors();
             let resolve_stage = ResolveStage::new(Arc::clone(&symbol_cache), behaviors);
 
-            for ctx in contexts {
-                let rel_count = ctx.unresolved_rels.len() as u64;
-                let (batch, resolve_stats) = resolve_stage.resolve(&ctx);
+            // Parallel resolve: each context resolved independently (read-only lookups)
+            let resolved: Vec<(u64, ResolvedBatch, ResolveStats)> = contexts
+                .par_iter()
+                .map(|ctx| {
+                    let rel_count = ctx.unresolved_rels.len() as u64;
+                    let (batch, resolve_stats) = resolve_stage.resolve(ctx);
+                    (rel_count, batch, resolve_stats)
+                })
+                .collect();
+
+            // Serial write + progress update
+            for (rel_count, batch, resolve_stats) in resolved {
                 stats.defines_resolved += resolve_stats.defines_resolved;
                 write_stage.write(batch);
 
-                // Update progress bar
                 if let Some(ref prog) = progress {
                     prog.set_progress(prog.current() + rel_count);
                     prog.add_extra1(resolve_stats.defines_resolved as u64);
@@ -884,6 +893,16 @@ impl Pipeline {
             let behaviors = context_stage.behaviors();
             let resolve_stage = ResolveStage::new(Arc::clone(&symbol_cache), behaviors);
 
+            // Parallel resolve: each context resolved independently
+            let resolved: Vec<(u64, ResolvedBatch, ResolveStats)> = contexts
+                .par_iter()
+                .map(|ctx| {
+                    let rel_count = ctx.unresolved_rels.len() as u64;
+                    let (batch, resolve_stats) = resolve_stage.resolve(ctx);
+                    (rel_count, batch, resolve_stats)
+                })
+                .collect();
+
             let mut all_no_candidates: Vec<String> = Vec::new();
             let mut all_ambiguous: Vec<(String, usize)> = Vec::new();
             let mut all_no_from_id: Vec<(String, String)> = Vec::new();
@@ -891,9 +910,8 @@ impl Pipeline {
             let mut total_ambiguous: usize = 0;
             let mut total_no_from_id: usize = 0;
 
-            for ctx in contexts {
-                let rel_count = ctx.unresolved_rels.len() as u64;
-                let (batch, resolve_stats) = resolve_stage.resolve(&ctx);
+            // Serial write + progress update + diagnostics collection
+            for (rel_count, batch, resolve_stats) in resolved {
                 stats.calls_resolved += resolve_stats.calls_resolved;
                 stats.other_resolved += resolve_stats.resolved - resolve_stats.calls_resolved;
                 write_stage.write(batch);

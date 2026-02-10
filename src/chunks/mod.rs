@@ -9,9 +9,14 @@
 
 use crate::config::SemanticBackend;
 use crate::parsing::{get_registry, FlowKind};
-use crate::semantic::{EmbeddingPool, SemanticVectorStorage, SimpleSemanticSearch};
+use crate::semantic::{
+    EmbeddingPool, SemanticMetadata, SemanticVectorStorage, SimpleSemanticSearch,
+};
 use crate::symbol::ScopeContext;
-use crate::vector::{create_text_embedding_with_runtime, EmbeddingRuntimeConfig};
+use crate::vector::{
+    create_text_embedding_with_max_length, create_text_embedding_with_runtime,
+    cosine_similarity, BinaryVector, EmbeddingRuntimeConfig, MmapVectorStorage, SegmentOrdinal,
+};
 use crate::{IndexError, Settings, Symbol, SymbolId, SymbolKind};
 use crate::semantic::OptimizedStaticModel;
 use fastembed::TextEmbedding;
@@ -357,7 +362,6 @@ impl CodeChunkIndexer {
 
         std::fs::create_dir_all(&self.root)?;
         let semantic_path = self.root.join("semantic");
-        let chunks_path = self.root.join("chunks.json");
         let manifest_path = self.root.join("manifest.json");
 
         let mut source_cache: HashMap<PathBuf, Vec<String>> = HashMap::new();
@@ -472,12 +476,6 @@ impl CodeChunkIndexer {
         let save_dur = t1.elapsed();
 
         let t2 = std::time::Instant::now();
-        let chunks_json = serde_json::to_string(&chunks)
-            .map_err(|e| IndexError::General(format!("failed to serialize chunk metadata: {e}")))?;
-        let mut writer = std::io::BufWriter::new(std::fs::File::create(&chunks_path)?);
-        std::io::Write::write_all(&mut writer, chunks_json.as_bytes())?;
-        drop(writer);
-
         write_tantivy_chunk_index(&self.root, &chunks)?;
         let write_dur = t2.elapsed();
 
@@ -547,11 +545,13 @@ impl CodeChunkIndexer {
 
         std::fs::create_dir_all(&self.root)?;
         let semantic_path = self.root.join("semantic");
-        let chunks_path = self.root.join("chunks.json");
         let manifest_path = self.root.join("manifest.json");
 
         let start = Instant::now();
-        let existing_chunks = load_chunk_records(&self.root)?;
+        let existing_chunks = match ChunkSearchBackend::open(&self.root) {
+            Ok(backend) => backend.load_all_records()?,
+            Err(_) => Vec::new(),
+        };
         let mut retained_chunks = Vec::with_capacity(existing_chunks.len());
         let mut removed_chunks = 0usize;
         for chunk in existing_chunks {
@@ -693,12 +693,6 @@ impl CodeChunkIndexer {
         )?;
         let embeddings_indexed = semantic.store_embeddings(items);
         semantic.save(&semantic_path)?;
-
-        let chunks_json = serde_json::to_string(&merged_chunks)
-            .map_err(|e| IndexError::General(format!("failed to serialize chunk metadata: {e}")))?;
-        let mut writer = std::io::BufWriter::new(std::fs::File::create(&chunks_path)?);
-        std::io::Write::write_all(&mut writer, chunks_json.as_bytes())?;
-        drop(writer);
 
         write_tantivy_chunk_index(&self.root, &merged_chunks)?;
 
@@ -949,106 +943,6 @@ fn load_existing_chunk_embeddings(path: &Path) -> HashMap<u32, Vec<f32>> {
     }
 }
 
-pub fn load_chunk_records(root: &Path) -> Result<Vec<CodeChunkRecord>, IndexError> {
-    let path = root.join("chunks.json");
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let raw = std::fs::read_to_string(&path).map_err(|e| {
-        IndexError::General(format!(
-            "failed to read chunk metadata '{}': {e}",
-            path.display()
-        ))
-    })?;
-    serde_json::from_str::<Vec<CodeChunkRecord>>(&raw).map_err(|e| {
-        IndexError::General(format!(
-            "failed to parse chunk metadata '{}': {e}",
-            path.display()
-        ))
-    })
-}
-
-pub fn load_chunk_record_map(root: &Path) -> Result<HashMap<u32, CodeChunkRecord>, IndexError> {
-    let chunks = load_chunk_records(root)?;
-    Ok(chunks.into_iter().map(|c| (c.chunk_id, c)).collect())
-}
-
-pub fn vector_recall(
-    root: &Path,
-    query: &str,
-    limit: usize,
-    language_filter: Option<&str>,
-) -> Result<Vec<(u32, f32)>, IndexError> {
-    if limit == 0 {
-        return Ok(Vec::new());
-    }
-
-    let semantic_path = root.join("semantic");
-    if !semantic_path.join("metadata.json").exists() {
-        return Ok(Vec::new());
-    }
-
-    let semantic = SimpleSemanticSearch::load(&semantic_path)?;
-    let results = semantic
-        .search_with_language(query, limit, language_filter)
-        .map_err(|e| IndexError::General(format!("chunk vector recall failed: {e}")))?;
-
-    Ok(results
-        .into_iter()
-        .map(|(id, score)| (id.to_u32(), score))
-        .collect())
-}
-
-pub fn bm25_recall(
-    root: &Path,
-    query: &str,
-    limit: usize,
-    language_filter: Option<&str>,
-) -> Result<Vec<(u32, f32)>, IndexError> {
-    if limit == 0 {
-        return Ok(Vec::new());
-    }
-
-    let tantivy_path = root.join("tantivy");
-    if !tantivy_path.join("meta.json").exists() {
-        return Ok(Vec::new());
-    }
-
-    let index = Index::open_in_dir(&tantivy_path).map_err(|e| {
-        IndexError::General(format!(
-            "failed to open chunk tantivy index '{}': {e}",
-            tantivy_path.display()
-        ))
-    })?;
-    let schema = ChunkTantivySchema::from_schema(&index.schema())?;
-
-    let reader: IndexReader = index
-        .reader_builder()
-        .reload_policy(ReloadPolicy::Manual)
-        .try_into()
-        .map_err(|e| IndexError::General(format!("failed to create chunk tantivy reader: {e}")))?;
-    reader
-        .reload()
-        .map_err(|e| IndexError::General(format!("failed to reload chunk tantivy reader: {e}")))?;
-
-    let searcher = reader.searcher();
-    let query_obj = build_chunk_bm25_query(&index, &schema, query, language_filter)?;
-    let top_docs = searcher
-        .search(&query_obj, &TopDocs::with_limit(limit))
-        .map_err(|e| IndexError::General(format!("chunk BM25 search failed: {e}")))?;
-
-    let mut results = Vec::with_capacity(top_docs.len());
-    for (score, addr) in top_docs {
-        let doc = searcher
-            .doc::<Document>(addr)
-            .map_err(|e| IndexError::General(format!("chunk BM25 doc load failed: {e}")))?;
-        if let Some(chunk_id) = doc.get_first(schema.chunk_id).and_then(|v| v.as_u64()) {
-            results.push((chunk_id as u32, score));
-        }
-    }
-    Ok(results)
-}
 
 pub fn build_rerank_text(record: &CodeChunkRecord) -> String {
     const MAX_SIGNATURE_CHARS: usize = 256;
@@ -1324,6 +1218,13 @@ fn write_tantivy_chunk_index(root: &Path, chunks: &[CodeChunkRecord]) -> Result<
 
         writer.commit().map_err(|e| {
             IndexError::General(format!("failed to commit chunk tantivy index: {e}"))
+        })?;
+
+        // Wait for background merge threads to finish before renaming the directory.
+        // Without this, merge threads may still reference temp files when rename() moves
+        // the directory, causing "FileDoesNotExist" warnings.
+        writer.wait_merging_threads().map_err(|e| {
+            IndexError::General(format!("failed to wait for chunk tantivy merge threads: {e}"))
         })?;
 
         Ok(())
@@ -2576,6 +2477,384 @@ fn current_unix_time_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// Cached Tantivy chunk reader for BM25 search and stored-field lookups.
+///
+/// Holds an open Tantivy `Index` + `IndexReader` + schema so that
+/// `hybrid_chunk_search_detailed` does not re-open the index on every query.
+/// Also provides `lookup_records()` to fetch `CodeChunkRecord` by chunk_id
+/// directly from Tantivy stored fields — eliminating the 469 MB `chunks.json`
+/// parse that `load_chunk_record_map()` currently performs every call.
+pub struct ChunkSearchBackend {
+    index: Index,
+    reader: IndexReader,
+    schema: ChunkTantivySchema,
+}
+
+impl ChunkSearchBackend {
+    /// Open the chunk Tantivy index at `<root>/tantivy`.
+    pub fn open(root: &Path) -> Result<Self, IndexError> {
+        let tantivy_path = root.join("tantivy");
+        if !tantivy_path.join("meta.json").exists() {
+            return Err(IndexError::General(format!(
+                "chunk tantivy index not found at '{}'",
+                tantivy_path.display()
+            )));
+        }
+
+        let index = Index::open_in_dir(&tantivy_path).map_err(|e| {
+            IndexError::General(format!(
+                "failed to open chunk tantivy index '{}': {e}",
+                tantivy_path.display()
+            ))
+        })?;
+        let schema = ChunkTantivySchema::from_schema(&index.schema())?;
+
+        let reader: IndexReader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()
+            .map_err(|e| {
+                IndexError::General(format!("failed to create chunk tantivy reader: {e}"))
+            })?;
+        reader.reload().map_err(|e| {
+            IndexError::General(format!("failed to reload chunk tantivy reader: {e}"))
+        })?;
+
+        Ok(Self {
+            index,
+            reader,
+            schema,
+        })
+    }
+
+    /// BM25 search returning `(chunk_id, score)` pairs.
+    pub fn bm25_search(
+        &self,
+        query: &str,
+        limit: usize,
+        language_filter: Option<&str>,
+    ) -> Result<Vec<(u32, f32)>, IndexError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let searcher = self.reader.searcher();
+        let query_obj =
+            build_chunk_bm25_query(&self.index, &self.schema, query, language_filter)?;
+        let top_docs = searcher
+            .search(&query_obj, &TopDocs::with_limit(limit))
+            .map_err(|e| IndexError::General(format!("chunk BM25 search failed: {e}")))?;
+
+        let mut results = Vec::with_capacity(top_docs.len());
+        for (score, addr) in top_docs {
+            let doc = searcher
+                .doc::<Document>(addr)
+                .map_err(|e| IndexError::General(format!("chunk BM25 doc load failed: {e}")))?;
+            if let Some(chunk_id) = doc.get_first(self.schema.chunk_id).and_then(|v| v.as_u64()) {
+                results.push((chunk_id as u32, score));
+            }
+        }
+        Ok(results)
+    }
+
+    /// Fetch `CodeChunkRecord`s for a batch of chunk IDs from Tantivy stored fields.
+    ///
+    /// Returns a `HashMap` keyed by chunk_id. Missing IDs are silently skipped.
+    pub fn lookup_records(
+        &self,
+        chunk_ids: &[u32],
+    ) -> Result<HashMap<u32, CodeChunkRecord>, IndexError> {
+        if chunk_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let searcher = self.reader.searcher();
+        let s = &self.schema;
+        let mut out = HashMap::with_capacity(chunk_ids.len());
+
+        for &cid in chunk_ids {
+            let term = Term::from_field_u64(s.chunk_id, cid as u64);
+            let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
+            let top = searcher
+                .search(&query, &TopDocs::with_limit(1))
+                .map_err(|e| {
+                    IndexError::General(format!("chunk lookup failed for id={cid}: {e}"))
+                })?;
+
+            if let Some((_score, addr)) = top.first() {
+                let doc = searcher.doc::<Document>(*addr).map_err(|e| {
+                    IndexError::General(format!("chunk doc load failed for id={cid}: {e}"))
+                })?;
+                let record = self.doc_to_record(&doc);
+                out.insert(cid, record);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Load ALL chunk records from Tantivy stored fields.
+    ///
+    /// Replaces `load_chunk_records()` which parsed `chunks.json` (469 MB).
+    /// Tantivy stored-field scan of ~90 MB is faster than JSON parse.
+    pub fn load_all_records(&self) -> Result<Vec<CodeChunkRecord>, IndexError> {
+        let searcher = self.reader.searcher();
+        let mut records = Vec::new();
+
+        for segment_reader in searcher.segment_readers() {
+            let store_reader = segment_reader.get_store_reader(1024).map_err(|e| {
+                IndexError::General(format!("chunk stored-field reader failed: {e}"))
+            })?;
+            for doc_id in 0..segment_reader.num_docs() {
+                let doc = store_reader.get::<Document>(doc_id).map_err(|e| {
+                    IndexError::General(format!("chunk stored-field read failed: {e}"))
+                })?;
+                records.push(self.doc_to_record(&doc));
+            }
+        }
+        Ok(records)
+    }
+
+    /// Total number of documents (chunks) in the Tantivy index.
+    pub fn doc_count(&self) -> usize {
+        let searcher = self.reader.searcher();
+        searcher.segment_readers().iter().map(|r| r.num_docs() as usize).sum()
+    }
+
+    fn doc_to_record(&self, doc: &Document) -> CodeChunkRecord {
+        let s = &self.schema;
+        let text = |f: Field| -> String {
+            doc.get_first(f)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let opt_text = |f: Field| -> Option<String> {
+            doc.get_first(f)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+        };
+        let u64_val = |f: Field| -> u64 {
+            doc.get_first(f).and_then(|v| v.as_u64()).unwrap_or(0)
+        };
+
+        CodeChunkRecord {
+            chunk_id: u64_val(s.chunk_id) as u32,
+            symbol_id: u64_val(s.symbol_id) as u32,
+            file_path: text(s.file_path),
+            language: opt_text(s.language),
+            chunk_type: text(s.chunk_type),
+            parent_scope: opt_text(s.parent_scope),
+            line_start: u64_val(s.line_start) as u32,
+            line_end: u64_val(s.line_end) as u32,
+            signature: opt_text(s.signature),
+            doc_comment: opt_text(s.doc_comment),
+            snippet: text(s.snippet),
+            embedding_text: String::new(),
+        }
+    }
+}
+
+/// Query-time embedding model for chunk vector search.
+enum ChunkQueryModel {
+    Optimized(OptimizedStaticModel),
+    Fastembed(Mutex<TextEmbedding>),
+}
+
+/// Cached chunk vector search backend using random-access mmap.
+///
+/// Instead of loading all embeddings into a HashMap (~860 MB heap copy),
+/// this struct holds only:
+/// - `binary_index` (~30 MB) for Hamming pre-filter
+/// - `id_offset_map` (~5 MB) for random mmap access
+/// - `languages` (~8.7 MB) for language filtering
+/// - query model (~31 MB for model2vec) for embedding queries
+///
+/// Search reads only ~500 candidate vectors from mmap pages.
+pub struct ChunkVectorBackend {
+    binary_index: HashMap<u32, BinaryVector>,
+    id_offset_map: HashMap<u32, usize>,
+    languages: HashMap<u32, String>,
+    storage: MmapVectorStorage,
+    model: ChunkQueryModel,
+}
+
+impl ChunkVectorBackend {
+    /// Open the chunk semantic index at `<root>/semantic`.
+    pub fn open(root: &Path) -> Result<Self, IndexError> {
+        let semantic_path = root.join("semantic");
+        if !semantic_path.join("metadata.json").exists() {
+            return Err(IndexError::General(
+                "chunk semantic metadata not found".to_string(),
+            ));
+        }
+
+        // 1. Load metadata → model_name
+        let metadata = SemanticMetadata::load(&semantic_path).map_err(|e| {
+            IndexError::General(format!("failed to load chunk semantic metadata: {e}"))
+        })?;
+
+        // 2. Open mmap storage + build id→offset map (~5 MB)
+        let mut storage =
+            MmapVectorStorage::open(&semantic_path, SegmentOrdinal::new(0)).map_err(|e| {
+                IndexError::General(format!("failed to open chunk vector storage: {e}"))
+            })?;
+        let id_offset_map = storage.build_id_offset_map().map_err(|e| {
+            IndexError::General(format!("failed to build chunk id-offset map: {e}"))
+        })?;
+
+        // 3. Load binary index (~30 MB)
+        let binary_index = Self::load_binary_index(&semantic_path)?;
+
+        // 4. Load languages map (~8.7 MB)
+        let languages = Self::load_languages(&semantic_path);
+
+        // 5. Init query embedding model
+        let model = Self::init_model(&metadata.model_name)?;
+
+        Ok(Self {
+            binary_index,
+            id_offset_map,
+            languages,
+            storage,
+            model,
+        })
+    }
+
+    /// Vector search returning `(chunk_id, cosine_score)` pairs.
+    pub fn search(
+        &self,
+        query: &str,
+        limit: usize,
+        language_filter: Option<&str>,
+    ) -> Result<Vec<(u32, f32)>, IndexError> {
+        if limit == 0 || self.binary_index.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Embed query
+        let query_embedding = self.embed_query(query)?;
+        let query_binary = BinaryVector::from_embedding(&query_embedding);
+
+        // Hamming pre-filter
+        let prefilter_limit = (limit * 5).max(100);
+        let mut hamming_scores: Vec<(u32, u32)> = self
+            .binary_index
+            .iter()
+            .filter(|(id, _)| match language_filter {
+                Some(lang) => self
+                    .languages
+                    .get(id)
+                    .is_some_and(|l| l == lang),
+                None => true,
+            })
+            .map(|(&id, bv)| (id, query_binary.hamming_distance(bv)))
+            .collect();
+
+        hamming_scores.sort_unstable_by_key(|(_, dist)| *dist);
+        hamming_scores.truncate(prefilter_limit);
+
+        // Random-access read only the candidate vectors from mmap
+        let ids_offsets: Vec<(u32, usize)> = hamming_scores
+            .iter()
+            .filter_map(|(id, _)| self.id_offset_map.get(id).map(|&off| (*id, off)))
+            .collect();
+
+        let vectors = self.storage.read_vectors_by_offsets(&ids_offsets);
+
+        // Cosine similarity refinement
+        let mut results: Vec<(u32, f32)> = vectors
+            .into_iter()
+            .map(|(id, emb)| (id, cosine_similarity(&query_embedding, &emb)))
+            .collect();
+
+        results.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(limit);
+        Ok(results)
+    }
+
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>, IndexError> {
+        match &self.model {
+            ChunkQueryModel::Optimized(m) => Ok(m.encode_single(text)),
+            ChunkQueryModel::Fastembed(m) => {
+                let mut guard = m
+                    .lock()
+                    .map_err(|_| IndexError::General("chunk embed lock poisoned".to_string()))?;
+                let embeddings = guard
+                    .embed(vec![text], None)
+                    .map_err(|e| IndexError::General(format!("chunk query embed failed: {e}")))?;
+                embeddings
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| IndexError::General("no embedding returned".to_string()))
+            }
+        }
+    }
+
+    fn init_model(model_name: &str) -> Result<ChunkQueryModel, IndexError> {
+        if SimpleSemanticSearch::looks_like_model2vec_model(model_name) {
+            let source = model_name.strip_prefix("model2vec:").unwrap_or(model_name);
+            let opt = OptimizedStaticModel::from_local(source).map_err(|e| {
+                IndexError::General(format!(
+                    "failed to load chunk vector model '{model_name}': {e}"
+                ))
+            })?;
+            return Ok(ChunkQueryModel::Optimized(opt));
+        }
+        let (te, _dims) =
+            create_text_embedding_with_max_length(model_name, false, Some(1024)).map_err(|e| {
+                IndexError::General(format!(
+                    "failed to load chunk vector model '{model_name}': {e}"
+                ))
+            })?;
+        Ok(ChunkQueryModel::Fastembed(Mutex::new(te)))
+    }
+
+    fn load_binary_index(semantic_path: &Path) -> Result<HashMap<u32, BinaryVector>, IndexError> {
+        let bin_path = semantic_path.join("binary_index.bin");
+        let data = std::fs::read(&bin_path).map_err(|e| {
+            IndexError::General(format!("failed to read binary_index.bin: {e}"))
+        })?;
+        Self::parse_binary_index(&data)
+            .ok_or_else(|| IndexError::General("corrupt binary_index.bin".to_string()))
+    }
+
+    fn parse_binary_index(data: &[u8]) -> Option<HashMap<u32, BinaryVector>> {
+        if data.len() < 4 {
+            return None;
+        }
+        let count = u32::from_le_bytes(data[0..4].try_into().ok()?) as usize;
+        let mut index = HashMap::with_capacity(count);
+        let mut offset = 4;
+
+        for _ in 0..count {
+            if offset + 8 > data.len() {
+                return None;
+            }
+            let id = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
+            offset += 4;
+            let bv_len =
+                u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
+            offset += 4;
+            if offset + bv_len > data.len() {
+                return None;
+            }
+            let bv = BinaryVector::from_bytes(&data[offset..offset + bv_len])?;
+            offset += bv_len;
+            index.insert(id, bv);
+        }
+        Some(index)
+    }
+
+    fn load_languages(semantic_path: &Path) -> HashMap<u32, String> {
+        let lang_path = semantic_path.join("languages.json");
+        let Ok(json) = std::fs::read_to_string(&lang_path) else {
+            return HashMap::new();
+        };
+        serde_json::from_str::<HashMap<u32, String>>(&json).unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2681,7 +2960,8 @@ mod tests {
 
         write_tantivy_chunk_index(temp.path(), &chunks).unwrap();
 
-        let hits = bm25_recall(temp.path(), "authenticate token", 5, Some("rust")).unwrap();
+        let backend = ChunkSearchBackend::open(temp.path()).unwrap();
+        let hits = backend.bm25_search("authenticate token", 5, Some("rust")).unwrap();
         assert!(!hits.is_empty());
         assert_eq!(hits[0].0, 11);
     }
@@ -2754,7 +3034,8 @@ mod tests {
             .unwrap();
         assert!(stats.chunks_indexed >= 5);
 
-        let chunks = load_chunk_records(&temp.path().join("code_chunks")).unwrap();
+        let backend = ChunkSearchBackend::open(&temp.path().join("code_chunks")).unwrap();
+        let chunks = backend.load_all_records().unwrap();
         assert!(chunks.iter().any(|c| c.chunk_type == "module_comment"));
         assert!(chunks.iter().any(|c| c.chunk_type == "inter_symbol_gap"));
         assert!(chunks.iter().any(|c| c.chunk_type == "doc_chunk"));
@@ -2841,7 +3122,8 @@ mod tests {
             )
             .unwrap();
 
-        let chunks = load_chunk_records(&temp.path().join("code_chunks")).unwrap();
+        let backend = ChunkSearchBackend::open(&temp.path().join("code_chunks")).unwrap();
+        let chunks = backend.load_all_records().unwrap();
         assert!(chunks
             .iter()
             .any(|c| c.file_path == file_a.to_string_lossy()));

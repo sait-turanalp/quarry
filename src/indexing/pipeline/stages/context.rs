@@ -16,6 +16,7 @@ use crate::indexing::pipeline::types::{
 use crate::parsing::{LanguageBehavior, LanguageId, ParserFactory};
 use crate::storage::DocumentIndex;
 use crate::types::FileId;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -87,6 +88,9 @@ impl ContextStage {
     /// Groups relationships by file_id and enriches each context with:
     /// - Local symbols from SymbolLookupCache
     /// - Imports from DocumentIndex
+    ///
+    /// Uses rayon parallel iteration: each file's context is built independently
+    /// (Tantivy reader, SymbolLookupCache, LanguageBehavior are all thread-safe).
     pub fn build_contexts(
         &self,
         unresolved: Vec<UnresolvedRelationship>,
@@ -98,15 +102,11 @@ impl ContextStage {
             by_file.entry(rel.file_id).or_default().push(rel);
         }
 
-        // Build context for each file
-        let mut contexts = Vec::with_capacity(by_file.len());
-
-        for (file_id, rels) in by_file {
-            let context = self.build_context_for_file(file_id, rels);
-            contexts.push(context);
-        }
-
-        contexts
+        // Build context for each file in parallel
+        by_file
+            .into_par_iter()
+            .map(|(file_id, rels)| self.build_context_for_file(file_id, rels))
+            .collect()
     }
 
     /// Build context for a single file.

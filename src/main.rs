@@ -264,6 +264,7 @@ async fn main() {
             | Commands::McpTest { .. }
             | Commands::Benchmark { .. }
             | Commands::BenchmarkRerank { .. }
+            | Commands::BenchmarkRerankQuick { .. }
     );
 
     let needs_indexer = !matches!(
@@ -274,6 +275,7 @@ async fn main() {
             | Commands::McpTest { .. }
             | Commands::Benchmark { .. }
             | Commands::BenchmarkRerank { .. }
+            | Commands::BenchmarkRerankQuick { .. }
             | Commands::AddDir { .. }
             | Commands::RemoveDir { .. }
             | Commands::ListDirs
@@ -782,6 +784,16 @@ async fn main() {
                     query_timeout_ms,
                     checkpoint_every,
                     skip_warm_on_timeout,
+                },
+                &config,
+            );
+        }
+
+        Commands::BenchmarkRerankQuick { warm_runs, limit } => {
+            codanna::cli::commands::benchmark_rerank_quick::run(
+                codanna::cli::commands::benchmark_rerank_quick::BenchmarkRerankQuickArgs {
+                    warm_runs,
+                    limit,
                 },
                 &config,
             );

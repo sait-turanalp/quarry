@@ -117,6 +117,10 @@ Tests live in `tests/` with separate test files per domain:
 - `plugins_tests.rs` / `tests/plugins/` - plugin system tests
 - `tests/fixtures/` - test fixture files
 
+## Working Style
+
+- **No subagent for analysis**: When exploring, searching, or analyzing code, do it directly with Glob/Grep/Read tools — never delegate research to subagents. Subagents are only for truly independent parallel tasks, not for code exploration.
+
 ## Features
 
 - `default = ["http-server"]` - includes HTTP server (axum)

@@ -5,6 +5,7 @@
 
 pub mod benchmark;
 pub mod benchmark_rerank;
+pub mod benchmark_rerank_quick;
 pub mod directories;
 pub mod documents;
 pub mod index;

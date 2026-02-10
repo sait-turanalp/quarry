@@ -16,6 +16,7 @@
 //! - Memory usage: 4 bytes per dimension per vector
 //! - Startup time: <1ms (mmap is lazy-loaded by OS)
 
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -318,6 +319,67 @@ impl MmapVectorStorage {
         }
 
         Ok(vectors)
+    }
+
+    /// Build a mapping from vector ID (u32) → byte offset in the mmap.
+    ///
+    /// One-pass scan over the file; result is ~12 bytes per vector.
+    /// For 420K vectors this is ~5 MB.
+    pub fn build_id_offset_map(&mut self) -> Result<HashMap<u32, usize>, VectorStorageError> {
+        self.ensure_mapped()?;
+        let mmap = self.mmap.as_ref().unwrap();
+        let dimension = self.dimension.get();
+        let vector_size = BYTES_PER_ID + dimension * BYTES_PER_F32;
+        let mut map = HashMap::with_capacity(self.vector_count);
+
+        let mut offset = HEADER_SIZE;
+        while offset + vector_size <= mmap.len() {
+            let id = u32::from_le_bytes([
+                mmap[offset],
+                mmap[offset + 1],
+                mmap[offset + 2],
+                mmap[offset + 3],
+            ]);
+            map.insert(id, offset);
+            offset += vector_size;
+        }
+        Ok(map)
+    }
+
+    /// Read vectors for a batch of IDs using a pre-built offset map.
+    ///
+    /// Only touches the mmap pages for the requested IDs (~500 vectors
+    /// instead of 420K), avoiding the 860 MB heap copy of `read_all_vectors`.
+    pub fn read_vectors_by_offsets(
+        &self,
+        ids_offsets: &[(u32, usize)],
+    ) -> Vec<(u32, Vec<f32>)> {
+        let Some(mmap) = self.mmap.as_ref() else {
+            return Vec::new();
+        };
+        let dimension = self.dimension.get();
+        let vector_size = BYTES_PER_ID + dimension * BYTES_PER_F32;
+        let mut out = Vec::with_capacity(ids_offsets.len());
+
+        for &(id, offset) in ids_offsets {
+            if offset + vector_size > mmap.len() {
+                continue;
+            }
+            let data_offset = offset + BYTES_PER_ID;
+            let mut vector = Vec::with_capacity(dimension);
+            for i in 0..dimension {
+                let bo = data_offset + i * BYTES_PER_F32;
+                let value = f32::from_le_bytes([
+                    mmap[bo],
+                    mmap[bo + 1],
+                    mmap[bo + 2],
+                    mmap[bo + 3],
+                ]);
+                vector.push(value);
+            }
+            out.push((id, vector));
+        }
+        out
     }
 
     /// Returns the number of vectors stored.

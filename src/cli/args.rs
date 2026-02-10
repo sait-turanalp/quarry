@@ -68,6 +68,7 @@ fn create_custom_help() -> String {
     help.push_str("  mcp           Execute MCP tools directly (one-shot)\n");
     help.push_str("  benchmark     Benchmark parser performance\n");
     help.push_str("  benchmark-rerank  Persistent reranker benchmark (quality + latency)\n");
+    help.push_str("  benchmark-rerank-quick  Quick reranker latency benchmark (no qrels)\n");
     help.push_str("  parse         Output AST nodes in JSONL format\n");
     help.push_str("  plugin        Manage Claude Code plugins\n");
     help.push_str("  documents     Index and search document collections\n");
@@ -351,6 +352,21 @@ pub enum Commands {
         /// Skip warm runs for a query when cold run timed out
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         skip_warm_on_timeout: bool,
+    },
+
+    /// Quick reranker latency benchmark (no qrels needed)
+    #[command(
+        name = "benchmark-rerank-quick",
+        about = "Quick reranker latency benchmark (10 built-in queries, no qrels needed)",
+    )]
+    BenchmarkRerankQuick {
+        /// Number of warm runs per query (median selected)
+        #[arg(long, default_value_t = 3)]
+        warm_runs: usize,
+
+        /// Retrieval limit (top-k)
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
     },
 
     /// Parse a file and output AST nodes in JSONL format

@@ -2298,23 +2298,61 @@ impl DocumentIndex {
             }
         };
         let writer = writer_lock.as_ref().ok_or(StorageError::NoActiveBatch)?;
+        Self::add_relationship_doc(writer, &self.schema, from, to, rel)
+    }
 
+    /// Batch-write relationships with a single lock acquisition.
+    ///
+    /// Avoids per-call RwLock overhead when writing many relationships at once.
+    /// Returns (written, failed) counts.
+    pub(crate) fn store_relationships_batch(
+        &self,
+        rels: &[(SymbolId, SymbolId, Relationship)],
+    ) -> StorageResult<(usize, usize)> {
+        let writer_lock = match self.writer.read() {
+            Ok(lock) => lock,
+            Err(poisoned) => {
+                eprintln!("Warning: Recovering from poisoned writer rwlock in store_relationships_batch");
+                poisoned.into_inner()
+            }
+        };
+        let writer = writer_lock.as_ref().ok_or(StorageError::NoActiveBatch)?;
+
+        let mut written = 0;
+        let mut failed = 0;
+        for (from, to, rel) in rels {
+            match Self::add_relationship_doc(writer, &self.schema, *from, *to, rel) {
+                Ok(()) => written += 1,
+                Err(_) => failed += 1,
+            }
+        }
+        Ok((written, failed))
+    }
+
+    /// Build and add a single relationship document to the writer.
+    fn add_relationship_doc(
+        writer: &IndexWriter<Document>,
+        schema: &IndexSchema,
+        from: SymbolId,
+        to: SymbolId,
+        rel: &Relationship,
+    ) -> StorageResult<()> {
         let mut doc = Document::new();
-        doc.add_text(self.schema.doc_type, "relationship");
-        doc.add_u64(self.schema.from_symbol_id, from.value() as u64);
-        doc.add_u64(self.schema.to_symbol_id, to.value() as u64);
-        doc.add_text(self.schema.relation_kind, format!("{:?}", rel.kind));
-        doc.add_f64(self.schema.relation_weight, rel.weight as f64);
+        doc.add_text(schema.doc_type, "relationship");
+        doc.add_u64(schema.from_symbol_id, from.value() as u64);
+        doc.add_u64(schema.to_symbol_id, to.value() as u64);
+        doc.add_text(schema.relation_kind, rel.kind.as_str());
+        doc.add_f64(schema.relation_weight, rel.weight as f64);
 
         if let Some(ref metadata) = rel.metadata {
             if let Some(line) = metadata.line {
-                doc.add_u64(self.schema.relation_line, line as u64);
+                doc.add_u64(schema.relation_line, line as u64);
             }
             if let Some(column) = metadata.column {
-                doc.add_u64(self.schema.relation_column, column as u64);
+                doc.add_u64(schema.relation_column, column as u64);
             }
             if let Some(ref context) = metadata.context {
-                doc.add_text(self.schema.relation_context, context.as_ref());
+                doc.add_text(schema.relation_context, context.as_ref());
             }
         }
 

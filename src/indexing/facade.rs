@@ -24,12 +24,12 @@
 //! ```
 
 use crate::chunks::{
-    bm25_recall, build_rerank_text as build_chunk_rerank_text, load_chunk_record_map,
-    vector_recall, ActiveRecallBackend, ChunkSearchResult, CodeChunkIndexer, CodeChunkRecord,
+    build_rerank_text as build_chunk_rerank_text, ActiveRecallBackend, ChunkSearchBackend,
+    ChunkSearchResult, ChunkVectorBackend, CodeChunkIndexer, CodeChunkRecord,
 };
 use crate::config::{SemanticBackend, Settings};
 use crate::indexing::pipeline::Pipeline;
-use crate::semantic::{EmbeddingPool, SimpleSemanticSearch};
+use crate::semantic::{EmbeddingPool, SimpleSemanticSearch, SymbolVectorBackend};
 use crate::storage::{DocumentIndex, SearchResult};
 use crate::symbol::context::{ContextIncludes, SymbolContext, SymbolRelationships};
 use crate::vector::EmbeddingRuntimeConfig;
@@ -78,12 +78,23 @@ struct ChunkRefreshDelta {
     force_full: bool,
 }
 
+/// Per-stage latency breakdown from chunk search.
+#[derive(Debug, Default, Clone)]
+pub struct SearchTimingMs {
+    pub bm25: u64,
+    pub vector: u64,
+    pub rrf: u64,
+    pub rerank: u64,
+    pub total: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ChunkSearchOutcome {
     pub results: Vec<ChunkSearchResult>,
     pub weak_count: usize,
     pub pruned_by: Vec<String>,
     pub bm25_only_fallback: bool,
+    pub timing: SearchTimingMs,
 }
 
 enum RerankExecution {
@@ -104,11 +115,24 @@ pub struct IndexFacade {
     /// Parallel indexing pipeline - used for mutations
     pipeline: Pipeline,
 
-    /// Optional semantic search for doc comment embeddings
+    /// Optional semantic search for doc comment embeddings (write path only).
+    /// Loaded lazily on first write via `ensure_semantic_for_write()`.
     semantic_search: Option<Arc<Mutex<SimpleSemanticSearch>>>,
+
+    /// True when semantic data exists on disk (set by `load_semantic_search`).
+    semantic_data_available: bool,
 
     /// Optional embedding pool for parallel embedding generation
     embedding_pool: Option<Arc<EmbeddingPool>>,
+
+    /// Lazy-initialized symbol vector search (binary pre-filter + mmap random access).
+    symbol_vector_backend: std::sync::OnceLock<Option<SymbolVectorBackend>>,
+
+    /// Lazy-initialized cached chunk Tantivy reader (BM25 + stored-field lookup).
+    chunk_backend: std::sync::OnceLock<Option<ChunkSearchBackend>>,
+
+    /// Lazy-initialized cached chunk vector search (binary pre-filter + mmap random access).
+    chunk_vector_backend: std::sync::OnceLock<Option<ChunkVectorBackend>>,
 
     /// Lazy-initialized cross-encoder reranker
     reranker: std::sync::OnceLock<Option<Arc<crate::reranking::Reranker>>>,
@@ -381,7 +405,11 @@ impl IndexFacade {
             document_index,
             pipeline,
             semantic_search: None,
+            semantic_data_available: false,
             embedding_pool: None,
+            symbol_vector_backend: std::sync::OnceLock::new(),
+            chunk_backend: std::sync::OnceLock::new(),
+            chunk_vector_backend: std::sync::OnceLock::new(),
             reranker: std::sync::OnceLock::new(),
             rerank_inflight: Arc::new(AtomicBool::new(false)),
             settings,
@@ -403,11 +431,16 @@ impl IndexFacade {
             settings.index_path.clone()
         };
 
+        let semantic_data_available = semantic_search.is_some();
         Self {
             document_index,
             pipeline,
             semantic_search,
+            semantic_data_available,
             embedding_pool: None,
+            symbol_vector_backend: std::sync::OnceLock::new(),
+            chunk_backend: std::sync::OnceLock::new(),
+            chunk_vector_backend: std::sync::OnceLock::new(),
             reranker: std::sync::OnceLock::new(),
             rerank_inflight: Arc::new(AtomicBool::new(false)),
             settings,
@@ -479,9 +512,9 @@ impl IndexFacade {
         Ok(())
     }
 
-    /// Check if semantic search is enabled.
+    /// Check if semantic search data is available.
     pub fn has_semantic_search(&self) -> bool {
-        self.semantic_search.is_some()
+        self.semantic_data_available
     }
 
     /// Whether this facade uses single-save mode for semantic persistence.
@@ -500,22 +533,49 @@ impl IndexFacade {
 
     /// Load semantic search data from disk.
     ///
-    /// This only loads pre-computed embeddings for querying.
-    /// Embedding pool for generating new embeddings is initialized lazily.
+    /// Initializes the lightweight SymbolVectorBackend for queries (~15 MB).
+    /// The full SimpleSemanticSearch (~148 MB) is loaded lazily only when the
+    /// first write operation (incremental indexing) requires it.
     pub fn load_semantic_search(&mut self, path: &Path) -> FacadeResult<bool> {
         if path.join("metadata.json").exists() {
-            match SimpleSemanticSearch::load(path) {
-                Ok(semantic) => {
-                    self.semantic_search = Some(Arc::new(Mutex::new(semantic)));
-                    // Embedding pool is initialized lazily when needed
-                    return Ok(true);
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to load semantic search: {e}");
-                }
+            // Eagerly init the lightweight query backend.
+            let _ = self.symbol_vector_backend.get_or_init(|| {
+                SymbolVectorBackend::open(path).ok()
+            });
+            if self.symbol_vector_backend.get().and_then(|o| o.as_ref()).is_some() {
+                self.semantic_data_available = true;
+                return Ok(true);
             }
         }
         Ok(false)
+    }
+
+    /// Lazily load `SimpleSemanticSearch` for write operations (incremental indexing).
+    ///
+    /// Query-time reads use the lightweight `SymbolVectorBackend` (~15 MB).
+    /// This method loads the full embedding HashMap (~148 MB) only when a
+    /// mutation needs to update the semantic store.
+    fn ensure_semantic_for_write(&mut self) -> FacadeResult<()> {
+        if self.semantic_search.is_some() {
+            return Ok(());
+        }
+        if !self.semantic_data_available {
+            return Ok(());
+        }
+        let semantic_path = self.index_base.join("semantic");
+        if !semantic_path.join("metadata.json").exists() {
+            return Ok(());
+        }
+        let sem = SimpleSemanticSearch::load(&semantic_path).map_err(|e| {
+            IndexError::General(format!("failed to load semantic search for write: {e}"))
+        })?;
+        tracing::debug!(
+            target: "semantic",
+            "Lazily loaded SimpleSemanticSearch for write path ({} embeddings)",
+            sem.embedding_count()
+        );
+        self.semantic_search = Some(Arc::new(Mutex::new(sem)));
+        Ok(())
     }
 
     /// Ensure embedding pool is initialized for generating new embeddings.
@@ -581,18 +641,20 @@ impl IndexFacade {
 
     /// Get semantic search embedding count.
     pub fn semantic_search_embedding_count(&self) -> usize {
-        self.semantic_search
-            .as_ref()
-            .map(|s| s.lock().map(|sem| sem.embedding_count()).unwrap_or(0))
-            .unwrap_or(0)
+        let vb = self.symbol_vector_backend.get_or_init(|| {
+            let semantic_path = self.index_base.join("semantic");
+            SymbolVectorBackend::open(&semantic_path).ok()
+        });
+        vb.as_ref().map(|b| b.embedding_count()).unwrap_or(0)
     }
 
     /// Get binary index count.
     pub fn semantic_binary_index_count(&self) -> usize {
-        self.semantic_search
-            .as_ref()
-            .map(|s| s.lock().map(|sem| sem.binary_index_count()).unwrap_or(0))
-            .unwrap_or(0)
+        let vb = self.symbol_vector_backend.get_or_init(|| {
+            let semantic_path = self.index_base.join("semantic");
+            SymbolVectorBackend::open(&semantic_path).ok()
+        });
+        vb.as_ref().map(|b| b.binary_index_count()).unwrap_or(0)
     }
 
     /// Get number of files with cached embeddings.
@@ -612,10 +674,20 @@ impl IndexFacade {
     }
 
     /// Get semantic search metadata.
+    ///
+    /// Reads directly from disk metadata when SimpleSemanticSearch is not loaded.
     pub fn get_semantic_metadata(&self) -> Option<crate::semantic::SemanticMetadata> {
-        self.semantic_search
-            .as_ref()
-            .and_then(|s| s.lock().ok().and_then(|sem| sem.metadata().cloned()))
+        // Try in-memory first (available after ensure_semantic_for_write)
+        if let Some(ref sem) = self.semantic_search {
+            if let Ok(guard) = sem.lock() {
+                if let Some(m) = guard.metadata() {
+                    return Some(m.clone());
+                }
+            }
+        }
+        // Fall back to disk metadata
+        let semantic_path = self.index_base.join("semantic");
+        crate::semantic::SemanticMetadata::load(&semantic_path).ok()
     }
 
     // =========================================================================
@@ -1225,13 +1297,17 @@ impl IndexFacade {
         limit: usize,
         language_filter: Option<&str>,
     ) -> FacadeResult<Vec<(Symbol, f32)>> {
-        let semantic = self
-            .semantic_search
+        let sym_backend = self.symbol_vector_backend.get_or_init(|| {
+            let semantic_path = self.index_base.join("semantic");
+            SymbolVectorBackend::open(&semantic_path).ok()
+        });
+        let vb = sym_backend
             .as_ref()
             .ok_or(IndexError::SemanticSearchNotEnabled)?;
 
-        let sem = semantic.lock().map_err(|_| IndexError::lock_error())?;
-        let results = sem.search_with_language(query, limit, language_filter)?;
+        let results = vb
+            .search(query, limit, language_filter)
+            .map_err(|e| IndexError::General(format!("symbol vector search failed: {e}")))?;
 
         let mut symbols = Vec::new();
         for (symbol_id, score) in results {
@@ -1363,14 +1439,16 @@ impl IndexFacade {
             .unwrap_or_default();
         let bm25_ms = bm25_start.elapsed().as_millis();
 
-        // 2. Vector search (semantic) — optional
+        // 2. Vector search (semantic) — lazy-init lightweight backend
         let vector_start = Instant::now();
-        let vector_results: Vec<(SymbolId, f32)> = match &self.semantic_search {
-            Some(sem) => {
-                let sem = sem.lock().map_err(|_| IndexError::lock_error())?;
-                sem.search_with_language(query, candidate_limit, language_filter)
-                    .unwrap_or_default()
-            }
+        let sym_backend = self.symbol_vector_backend.get_or_init(|| {
+            let semantic_path = self.index_base.join("semantic");
+            SymbolVectorBackend::open(&semantic_path).ok()
+        });
+        let vector_results: Vec<(SymbolId, f32)> = match sym_backend.as_ref() {
+            Some(vb) => vb
+                .search(query, candidate_limit, language_filter)
+                .unwrap_or_default(),
             None => Vec::new(),
         };
         let vector_ms = vector_start.elapsed().as_millis();
@@ -1535,38 +1613,47 @@ impl IndexFacade {
         }
 
         let chunk_root = self.index_base.join("code_chunks");
-        let chunk_map = load_chunk_record_map(&chunk_root)?;
-        if chunk_map.is_empty() {
-            return Ok(ChunkSearchOutcome::default());
-        }
+
+        // Lazy-init cached chunk Tantivy backend (BM25 + stored-field lookup).
+        let backend = self
+            .chunk_backend
+            .get_or_init(|| ChunkSearchBackend::open(&chunk_root).ok());
+        let backend = match backend.as_ref() {
+            Some(b) => b,
+            None => return Ok(ChunkSearchOutcome::default()),
+        };
 
         let bm25_start = Instant::now();
-        let bm25_results = bm25_recall(
-            &chunk_root,
-            query,
-            self.settings.chunk_search.top_k_bm25,
-            language_filter,
-        )
-        .unwrap_or_default();
+        let bm25_results = backend
+            .bm25_search(query, self.settings.chunk_search.top_k_bm25, language_filter)
+            .unwrap_or_default();
         let bm25_ms = bm25_start.elapsed().as_millis();
 
         let vector_start = Instant::now();
         let mut bm25_only_fallback = false;
-        let vector_results = match vector_recall(
-            &chunk_root,
-            query,
-            self.settings.chunk_search.top_k_vector,
-            language_filter,
-        ) {
-            Ok(results) => results,
-            Err(e) => {
-                tracing::warn!(
-                    target: "chunk_search",
-                    "chunk vector recall unavailable, using BM25 fallback: {e}"
-                );
-                eprintln!(
-                    "WARNING: Chunk vector recall unavailable; using BM25 fallback. Rebuild embeddings with: codanna index . --force"
-                );
+
+        // Lazy-init cached chunk vector backend (binary pre-filter + mmap random access).
+        let vec_backend = self
+            .chunk_vector_backend
+            .get_or_init(|| ChunkVectorBackend::open(&chunk_root).ok());
+
+        let vector_results = match vec_backend.as_ref() {
+            Some(vb) => match vb.search(
+                query,
+                self.settings.chunk_search.top_k_vector,
+                language_filter,
+            ) {
+                Ok(results) => results,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "chunk_search",
+                        "chunk vector recall failed: {e}"
+                    );
+                    bm25_only_fallback = true;
+                    Vec::new()
+                }
+            },
+            None => {
                 bm25_only_fallback = true;
                 Vec::new()
             }
@@ -1584,9 +1671,21 @@ impl IndexFacade {
         if merged.is_empty() {
             return Ok(ChunkSearchOutcome {
                 bm25_only_fallback,
+                timing: SearchTimingMs {
+                    bm25: bm25_ms as u64,
+                    vector: vector_ms as u64,
+                    rrf: rrf_ms as u64,
+                    total: start.elapsed().as_millis() as u64,
+                    ..SearchTimingMs::default()
+                },
                 ..ChunkSearchOutcome::default()
             });
         }
+
+        // Batch-lookup only the ~50 chunk records we actually need from Tantivy
+        // stored fields, instead of parsing the full 469 MB chunks.json.
+        let lookup_ids: Vec<u32> = merged.iter().map(|(id, _)| *id).collect();
+        let chunk_map = backend.lookup_records(&lookup_ids)?;
 
         let bm25_ids: HashSet<SymbolId> = bm25_results
             .iter()
@@ -1749,6 +1848,13 @@ impl IndexFacade {
                 weak_count: final_candidates.len(),
                 pruned_by,
                 bm25_only_fallback,
+                timing: SearchTimingMs {
+                    bm25: bm25_ms as u64,
+                    vector: vector_ms as u64,
+                    rrf: rrf_ms as u64,
+                    rerank: rerank_ms as u64,
+                    total: start.elapsed().as_millis() as u64,
+                },
                 ..ChunkSearchOutcome::default()
             });
         }
@@ -1796,6 +1902,13 @@ impl IndexFacade {
                 weak_count,
                 pruned_by,
                 bm25_only_fallback,
+                timing: SearchTimingMs {
+                    bm25: bm25_ms as u64,
+                    vector: vector_ms as u64,
+                    rrf: rrf_ms as u64,
+                    rerank: rerank_ms as u64,
+                    total: start.elapsed().as_millis() as u64,
+                },
             });
         }
 
@@ -1936,6 +2049,13 @@ impl IndexFacade {
             weak_count,
             pruned_by,
             bm25_only_fallback,
+            timing: SearchTimingMs {
+                bm25: bm25_ms as u64,
+                vector: vector_ms as u64,
+                rrf: rrf_ms as u64,
+                rerank: rerank_ms as u64,
+                total: start.elapsed().as_millis() as u64,
+            },
         })
     }
 
@@ -2121,7 +2241,8 @@ impl IndexFacade {
         path: impl AsRef<std::path::Path>,
     ) -> crate::IndexResult<crate::IndexingResult> {
         let path = path.as_ref();
-        if self.semantic_search.is_some() {
+        if self.semantic_data_available {
+            self.ensure_semantic_for_write()?;
             self.ensure_embedding_pool()?;
         }
         let stats = self.pipeline.index_file_single(
@@ -2166,6 +2287,9 @@ impl IndexFacade {
     /// Uses the Pipeline's cleanup stage to remove symbols and embeddings.
     pub fn remove_file(&mut self, path: impl AsRef<std::path::Path>) -> crate::IndexResult<()> {
         let path = path.as_ref();
+        if self.semantic_data_available {
+            self.ensure_semantic_for_write()?;
+        }
         let semantic_path = self.index_base.join("semantic");
 
         use crate::indexing::pipeline::stages::CleanupStage;
@@ -2192,7 +2316,8 @@ impl IndexFacade {
     ///
     /// This is the primary indexing entry point using Pipeline.
     pub fn index_directory(&mut self, path: &Path, force: bool) -> FacadeResult<IndexingStats> {
-        if self.semantic_search.is_some() {
+        if self.semantic_data_available {
+            self.ensure_semantic_for_write()?;
             self.ensure_embedding_pool()?;
         }
 
@@ -2250,7 +2375,8 @@ impl IndexFacade {
         use crate::indexing::progress::IndexStats;
         use crate::indexing::FileWalker;
 
-        if self.semantic_search.is_some() {
+        if self.semantic_data_available {
+            self.ensure_semantic_for_write()?;
             self.ensure_embedding_pool()?;
         }
 
@@ -2341,7 +2467,8 @@ impl IndexFacade {
         config_paths: &[PathBuf],
         progress: bool,
     ) -> FacadeResult<SyncStats> {
-        if self.semantic_search.is_some() {
+        if self.semantic_data_available {
+            self.ensure_semantic_for_write()?;
             self.ensure_embedding_pool()?;
         }
 
