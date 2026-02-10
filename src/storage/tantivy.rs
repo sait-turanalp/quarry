@@ -14,16 +14,17 @@ use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use tantivy::DocId;
 use tantivy::{
-    Index, IndexReader, IndexSettings, IndexWriter, ReloadPolicy, TantivyDocument as Document,
-    Term,
     collector::TopDocs,
     directory::MmapDirectory,
+    indexer::NoMergePolicy,
     query::{BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, TermQuery},
     schema::{
-        FAST, Field, IndexRecordOption, NumericOptions, STORED, STRING, Schema, SchemaBuilder,
-        TextFieldIndexing, TextOptions, Value,
+        Field, IndexRecordOption, NumericOptions, Schema, SchemaBuilder, TextFieldIndexing,
+        TextOptions, Value, FAST, STORED, STRING,
     },
     tokenizer::{NgramTokenizer, TextAnalyzer},
+    Index, IndexReader, IndexSettings, IndexWriter, ReloadPolicy, TantivyDocument as Document,
+    Term,
 };
 
 /// Schema fields for the document index
@@ -401,6 +402,10 @@ pub struct DocumentIndex {
     pub(crate) writer: RwLock<Option<IndexWriter<Document>>>,
     /// Tantivy heap size in bytes
     heap_size: usize,
+    /// Optional fixed writer worker threads (0 = Tantivy auto)
+    writer_threads: usize,
+    /// Disable Tantivy merge policy during indexing
+    no_merge_policy: bool,
     /// Maximum retry attempts for transient errors
     max_retry_attempts: u32,
     /// Optional path for vector storage files
@@ -456,6 +461,8 @@ impl DocumentIndex {
         let heap_size = heap_size.clamp(10_000_000, 1_000_000_000); // 10MB-1GB
 
         let max_retry_attempts = settings.indexing.max_retry_attempts;
+        let writer_threads = settings.indexing.tantivy_writer_threads;
+        let no_merge_policy = settings.indexing.tantivy_no_merge_policy;
 
         let (schema, index_schema) = IndexSchema::build();
 
@@ -490,6 +497,8 @@ impl DocumentIndex {
             index_path,
             writer: RwLock::new(None),
             heap_size,
+            writer_threads,
+            no_merge_policy,
             max_retry_attempts,
             vector_storage_path: None,
             vector_engine: None,
@@ -503,9 +512,28 @@ impl DocumentIndex {
 
     /// Create index writer with retry logic for transient errors
     fn create_writer_with_retry(&self) -> Result<IndexWriter<Document>, tantivy::TantivyError> {
+        // Tantivy requires at least ~15MB per thread.
+        const MIN_TANTIVY_MEMORY_PER_THREAD_BYTES: usize = 15_000_000;
+
         for attempt in 0..self.max_retry_attempts {
-            match self.index.writer::<Document>(self.heap_size) {
-                Ok(writer) => return Ok(writer),
+            let writer_result = if self.writer_threads > 0 {
+                let threads = self.writer_threads.max(1);
+                let memory_budget = self
+                    .heap_size
+                    .max(threads * MIN_TANTIVY_MEMORY_PER_THREAD_BYTES);
+                self.index
+                    .writer_with_num_threads::<Document>(threads, memory_budget)
+            } else {
+                self.index.writer::<Document>(self.heap_size)
+            };
+
+            match writer_result {
+                Ok(writer) => {
+                    if self.no_merge_policy {
+                        writer.set_merge_policy(Box::<NoMergePolicy>::default());
+                    }
+                    return Ok(writer);
+                }
                 Err(e) => {
                     // Check for transient I/O errors using ErrorKind
                     let is_transient = std::error::Error::source(&e)
@@ -1044,6 +1072,7 @@ impl DocumentIndex {
         }
         Ok(())
     }
+
 
     /// Remove documents for a specific file
     pub fn remove_file_documents(&self, file_path: &str) -> StorageResult<()> {
@@ -3243,8 +3272,8 @@ mod tests {
 
     #[test]
     fn test_vector_metadata_tantivy_roundtrip() {
-        use tantivy::schema::{STORED, SchemaBuilder, TEXT};
-        use tantivy::{Index, TantivyDocument, doc};
+        use tantivy::schema::{SchemaBuilder, STORED, TEXT};
+        use tantivy::{doc, Index, TantivyDocument};
 
         // Create a simple schema with a metadata field
         let mut schema_builder = SchemaBuilder::default();

@@ -335,6 +335,30 @@ impl IndexFacade {
         Ok(())
     }
 
+    /// Build chunk rebuild config for parallel execution inside pipeline.
+    /// Returns None if chunk search is disabled or no embedding pool is available.
+    fn build_chunk_config(&self) -> Option<crate::indexing::pipeline::ChunkRebuildConfig> {
+        if !self.settings.chunk_search.enabled {
+            return None;
+        }
+        self.embedding_pool.as_ref().map(|pool| {
+            crate::indexing::pipeline::ChunkRebuildConfig {
+                index_base: self.index_base.clone(),
+                settings: Arc::clone(&self.settings),
+                workspace_root: self
+                    .settings
+                    .workspace_root
+                    .clone()
+                    .or_else(|| std::env::current_dir().ok()),
+                embedding_pool: Arc::clone(pool),
+                indexed_paths: self
+                    .document_index
+                    .get_all_indexed_paths()
+                    .unwrap_or_default(),
+            }
+        })
+    }
+
     /// Create a new IndexFacade with the given settings.
     ///
     /// Creates or opens the DocumentIndex and initializes the Pipeline.
@@ -2171,28 +2195,35 @@ impl IndexFacade {
         if self.semantic_search.is_some() {
             self.ensure_embedding_pool()?;
         }
+
+        let chunk_config = self.build_chunk_config();
+
         let stats = self.pipeline.index_incremental(
             path,
             Arc::clone(&self.document_index),
             self.semantic_search.clone(),
             self.embedding_pool.clone(),
             force,
+            chunk_config,
         )?;
 
         // Update tracked paths
         self.add_indexed_path(path);
 
-        let mut changed_files =
-            Vec::with_capacity(stats.new_file_paths.len() + stats.modified_file_paths.len());
-        changed_files.extend(stats.new_file_paths.iter().cloned());
-        changed_files.extend(stats.modified_file_paths.iter().cloned());
-        let delta = ChunkRefreshDelta {
-            changed_files,
-            deleted_files: stats.deleted_file_paths.clone(),
-            force_full: force,
-        };
-        if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
-            tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
+        // If chunk rebuild was NOT done in pipeline (no pool/disabled), fall back to post-pipeline
+        if !self.settings.chunk_search.enabled || self.embedding_pool.is_none() {
+            let mut changed_files =
+                Vec::with_capacity(stats.new_file_paths.len() + stats.modified_file_paths.len());
+            changed_files.extend(stats.new_file_paths.iter().cloned());
+            changed_files.extend(stats.modified_file_paths.iter().cloned());
+            let delta = ChunkRefreshDelta {
+                changed_files,
+                deleted_files: stats.deleted_file_paths.clone(),
+                force_full: force,
+            };
+            if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
+                tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
+            }
         }
 
         Ok(IndexingStats {
@@ -2256,6 +2287,9 @@ impl IndexFacade {
         // Auto-force mode for empty indexes (clean index behaves like --force)
         let force = force || self.document_count().unwrap_or(0) == 0;
 
+        // Build chunk config for parallel rebuild inside pipeline
+        let chunk_config = self.build_chunk_config();
+
         // Use Pipeline for indexing with progress flag
         // The pipeline manages progress bars internally for clean sequential display
         let pipeline_stats = self.pipeline.index_incremental_with_progress_flag(
@@ -2266,23 +2300,27 @@ impl IndexFacade {
             force,
             progress && total_files > 0,
             total_files,
+            chunk_config,
         )?;
 
         // Update tracked paths
         self.add_indexed_path(dir);
 
-        let mut changed_files = Vec::with_capacity(
-            pipeline_stats.new_file_paths.len() + pipeline_stats.modified_file_paths.len(),
-        );
-        changed_files.extend(pipeline_stats.new_file_paths.iter().cloned());
-        changed_files.extend(pipeline_stats.modified_file_paths.iter().cloned());
-        let delta = ChunkRefreshDelta {
-            changed_files,
-            deleted_files: pipeline_stats.deleted_file_paths.clone(),
-            force_full: force,
-        };
-        if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
-            tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
+        // If chunk rebuild was NOT done in pipeline (no pool/disabled), fall back to post-pipeline
+        if !self.settings.chunk_search.enabled || self.embedding_pool.is_none() {
+            let mut changed_files = Vec::with_capacity(
+                pipeline_stats.new_file_paths.len() + pipeline_stats.modified_file_paths.len(),
+            );
+            changed_files.extend(pipeline_stats.new_file_paths.iter().cloned());
+            changed_files.extend(pipeline_stats.modified_file_paths.iter().cloned());
+            let delta = ChunkRefreshDelta {
+                changed_files,
+                deleted_files: pipeline_stats.deleted_file_paths.clone(),
+                force_full: force,
+            };
+            if let Err(e) = self.refresh_code_chunk_index(Some(&delta)) {
+                tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
+            }
         }
 
         // Convert to IndexStats format using pipeline's actual timing
@@ -2316,6 +2354,7 @@ impl IndexFacade {
         let to_remove: Vec<&PathBuf> = stored_set.difference(&config_set).collect();
 
         let mut stats = SyncStats::default();
+        let mut did_parallel_chunk = false;
 
         // Index new directories with progress if enabled
         // Use force=true since these are new directories being indexed for the first time
@@ -2333,6 +2372,11 @@ impl IndexFacade {
                 0
             };
 
+            let chunk_config = self.build_chunk_config();
+            if chunk_config.is_some() {
+                did_parallel_chunk = true;
+            }
+
             let result = self.pipeline.index_incremental_with_progress_flag(
                 path,
                 Arc::clone(&self.document_index),
@@ -2341,6 +2385,7 @@ impl IndexFacade {
                 true, // force: new directories should be fully indexed
                 progress,
                 file_count,
+                chunk_config,
             )?;
             stats.files_indexed += result.new_files + result.modified_files;
             stats.symbols_found += result.index_stats.symbols_found;
@@ -2356,8 +2401,11 @@ impl IndexFacade {
         // Update tracked paths
         self.indexed_paths = config_set;
 
-        if let Err(e) = self.refresh_code_chunk_index(None) {
-            tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
+        // Only run post-sync chunk rebuild if parallel didn't handle it
+        if stats.has_changes() && !did_parallel_chunk {
+            if let Err(e) = self.refresh_code_chunk_index(None) {
+                tracing::warn!(target: "chunk_search", "failed to refresh code chunk index: {e}");
+            }
         }
 
         Ok(stats)

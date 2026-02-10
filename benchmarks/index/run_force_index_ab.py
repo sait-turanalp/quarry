@@ -40,6 +40,10 @@ class Profile:
     chunk_incremental_rebuild_enabled: bool
     semantic_single_save_mode: bool
     rebuild_logging_verbose: bool
+    tantivy_heap_mb: int | None
+    batches_per_commit: int | None
+    tantivy_writer_threads: int | None
+    tantivy_no_merge_policy: bool
     rust_log: str
 
 
@@ -131,6 +135,24 @@ def parse_profiles(path: Path) -> list[Profile]:
                 rebuild_logging_verbose=parse_bool(
                     merged.get("rebuild_logging_verbose"), False
                 ),
+                tantivy_heap_mb=(
+                    int(merged["tantivy_heap_mb"])
+                    if merged.get("tantivy_heap_mb") is not None
+                    else None
+                ),
+                batches_per_commit=(
+                    int(merged["batches_per_commit"])
+                    if merged.get("batches_per_commit") is not None
+                    else None
+                ),
+                tantivy_writer_threads=(
+                    int(merged["tantivy_writer_threads"])
+                    if merged.get("tantivy_writer_threads") is not None
+                    else None
+                ),
+                tantivy_no_merge_policy=parse_bool(
+                    merged.get("tantivy_no_merge_policy"), False
+                ),
                 rust_log=str(
                     merged.get(
                         "rust_log",
@@ -201,8 +223,8 @@ def render_table(rows: list[dict[str, Any]]) -> str:
     base_wall = baseline.get("wall_s") or 0.0
 
     lines = [
-        "| Profile | Status | Wall | ΔWall vs Base | Pipeline Total | Semantic Save Calls | Chunk Save | Chunk Rebuild Span |",
-        "|---|---|---:|---:|---:|---:|---:|---:|",
+        "| Profile | Status | Wall | ΔWall vs Base | Pipeline Total | Semantic Save Calls | Chunk Save | Chunk Rebuild Span | HeapMB | Commits/Flush | Writer Threads | No Merge |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         wall = row.get("wall_s")
@@ -211,7 +233,7 @@ def render_table(rows: list[dict[str, Any]]) -> str:
             delta = ((wall - base_wall) / base_wall) * 100.0
         status = "OK" if row.get("exit_code") == 0 else f"FAIL({row.get('exit_code')})"
         lines.append(
-            "| {name} | {status} | {wall} s | {delta} | {pipe} s | {scalls} | {chunk_save} s | {chunk_span} s |".format(
+            "| {name} | {status} | {wall} s | {delta} | {pipe} s | {scalls} | {chunk_save} s | {chunk_span} s | {heap} | {bpc} | {threads} | {no_merge} |".format(
                 name=row["profile"],
                 status=status,
                 wall=f"{wall:.3f}" if isinstance(wall, (int, float)) else "n/a",
@@ -234,6 +256,10 @@ def render_table(rows: list[dict[str, Any]]) -> str:
                     if isinstance(row.get("chunk_rebuild_span_s"), (int, float))
                     else "n/a"
                 ),
+                heap=row.get("tantivy_heap_mb", "n/a"),
+                bpc=row.get("batches_per_commit", "n/a"),
+                threads=row.get("tantivy_writer_threads", "n/a"),
+                no_merge="true" if row.get("tantivy_no_merge_policy") else "false",
             )
         )
     lines.append("")
@@ -246,10 +272,13 @@ def run_profile(
     repo_path: Path,
     config_path: Path,
     out_dir: Path,
+    max_files: int | None,
     dry_run: bool,
 ) -> dict[str, Any]:
     log_path = out_dir / f"{profile.name}.log"
     cmd = [str(bin_path), "-c", str(config_path), "index", str(repo_path), "--force"]
+    if max_files is not None and max_files > 0:
+        cmd.extend(["--max-files", str(max_files)])
     env = os.environ.copy()
     env["CI_INDEXING__PIPELINE_TRACING"] = to_ci_bool(profile.pipeline_tracing)
     env["CI_INDEXING__CHUNK_INCREMENTAL_REBUILD_ENABLED"] = to_ci_bool(
@@ -261,6 +290,13 @@ def run_profile(
     env["CI_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE"] = to_ci_bool(
         profile.rebuild_logging_verbose
     )
+    if profile.tantivy_heap_mb is not None:
+        env["CI_INDEXING__TANTIVY_HEAP_MB"] = str(profile.tantivy_heap_mb)
+    if profile.batches_per_commit is not None:
+        env["CI_INDEXING__BATCHES_PER_COMMIT"] = str(profile.batches_per_commit)
+    if profile.tantivy_writer_threads is not None:
+        env["CI_INDEXING__TANTIVY_WRITER_THREADS"] = str(profile.tantivy_writer_threads)
+    env["CI_INDEXING__TANTIVY_NO_MERGE_POLICY"] = to_ci_bool(profile.tantivy_no_merge_policy)
     env["RUST_LOG"] = profile.rust_log
 
     row: dict[str, Any] = {
@@ -270,6 +306,10 @@ def run_profile(
         "chunk_incremental_rebuild_enabled": profile.chunk_incremental_rebuild_enabled,
         "semantic_single_save_mode": profile.semantic_single_save_mode,
         "rebuild_logging_verbose": profile.rebuild_logging_verbose,
+        "tantivy_heap_mb": profile.tantivy_heap_mb,
+        "batches_per_commit": profile.batches_per_commit,
+        "tantivy_writer_threads": profile.tantivy_writer_threads,
+        "tantivy_no_merge_policy": profile.tantivy_no_merge_policy,
     }
 
     if dry_run:
@@ -312,6 +352,12 @@ def main() -> int:
         default="/tmp/codanna-index-force-ab",
         help="output directory",
     )
+    ap.add_argument(
+        "--max-files",
+        type=int,
+        default=None,
+        help="optional max files for each run (passed to `codanna index --max-files`)",
+    )
     ap.add_argument("--dry-run", action="store_true", help="print resolved commands only")
     args = ap.parse_args()
 
@@ -329,7 +375,15 @@ def main() -> int:
     profiles = parse_profiles(profile_path)
     rows: list[dict[str, Any]] = []
     for profile in profiles:
-        row = run_profile(profile, bin_path, repo_path, config_path, out_dir, args.dry_run)
+        row = run_profile(
+            profile,
+            bin_path,
+            repo_path,
+            config_path,
+            out_dir,
+            args.max_files,
+            args.dry_run,
+        )
         rows.append(row)
         if args.dry_run:
             print(f"[dry-run] {profile.name}: {' '.join(row['cmd'])}")

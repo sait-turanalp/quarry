@@ -7,12 +7,17 @@
 # Candidate enables:
 # - incremental chunk refresh (for delta-aware runs)
 # - single semantic save mode (removes duplicate save work)
+# - Tantivy writer tuning (threads + no-merge policy + larger heap)
 
 [defaults]
 pipeline_tracing = true
 chunk_incremental_rebuild_enabled = false
 semantic_single_save_mode = false
 rebuild_logging_verbose = true
+tantivy_heap_mb = 50
+batches_per_commit = 10
+tantivy_writer_threads = 0
+tantivy_no_merge_policy = false
 rust_log = "warn,pipeline=info,semantic=info,indexing=info,chunk_search=info"
 
 [[profiles]]
@@ -20,9 +25,17 @@ name = "index_force_baseline"
 chunk_incremental_rebuild_enabled = false
 semantic_single_save_mode = false
 rebuild_logging_verbose = true
+tantivy_heap_mb = 50
+batches_per_commit = 10
+tantivy_writer_threads = 0
+tantivy_no_merge_policy = false
 
 [[profiles]]
 name = "index_force_opt_v1"
 chunk_incremental_rebuild_enabled = true
 semantic_single_save_mode = true
 rebuild_logging_verbose = true
+tantivy_heap_mb = 120
+batches_per_commit = 20
+tantivy_writer_threads = 4
+tantivy_no_merge_policy = true

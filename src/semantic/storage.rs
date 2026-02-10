@@ -4,7 +4,7 @@
 //! the existing MmapVectorStorage infrastructure, achieving <1μs access times.
 
 use crate::vector::{MmapVectorStorage, SegmentOrdinal, VectorDimension, VectorId};
-use crate::{SymbolId, semantic::SemanticSearchError};
+use crate::{semantic::SemanticSearchError, SymbolId};
 use std::path::Path;
 
 /// Wrapper around MmapVectorStorage specifically for semantic embeddings.
@@ -151,6 +151,21 @@ impl SemanticVectorStorage {
         &mut self,
         embeddings: &[(SymbolId, Vec<f32>)],
     ) -> Result<(), SemanticSearchError> {
+        let refs: Vec<(SymbolId, &[f32])> = embeddings
+            .iter()
+            .map(|(symbol_id, embedding)| (*symbol_id, embedding.as_slice()))
+            .collect();
+        self.save_batch_refs(&refs)
+    }
+
+    /// Saves multiple embeddings in batch without cloning embedding vectors.
+    ///
+    /// This is the preferred path for large saves where embeddings already
+    /// live in memory elsewhere.
+    pub fn save_batch_refs(
+        &mut self,
+        embeddings: &[(SymbolId, &[f32])],
+    ) -> Result<(), SemanticSearchError> {
         // Validate all dimensions first
         for (_, embedding) in embeddings {
             if embedding.len() != self.dimension.get() {
@@ -171,7 +186,7 @@ impl SemanticVectorStorage {
                     suggestion: "Symbol ID must be non-zero".to_string(),
                 }
             })?;
-            vector_batch.push((vector_id, embedding.as_slice()));
+            vector_batch.push((vector_id, *embedding));
         }
 
         self.storage
@@ -230,11 +245,9 @@ mod tests {
         assert_eq!(loaded, embedding);
 
         // Non-existent ID returns None
-        assert!(
-            storage
-                .load_embedding(SymbolId::new(999).unwrap())
-                .is_none()
-        );
+        assert!(storage
+            .load_embedding(SymbolId::new(999).unwrap())
+            .is_none());
     }
 
     #[test]

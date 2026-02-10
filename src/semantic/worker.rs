@@ -171,8 +171,8 @@ impl SemanticWorkerClient {
         })
     }
 
-    fn spawn_worker_process()
-    -> Result<(Child, BufWriter<ChildStdin>, BufReader<ChildStdout>), String> {
+    fn spawn_worker_process(
+    ) -> Result<(Child, BufWriter<ChildStdin>, BufReader<ChildStdout>), String> {
         let exe = std::env::current_exe()
             .map_err(|e| format!("Failed to resolve current executable: {e}"))?;
         let mut command = Command::new(exe);

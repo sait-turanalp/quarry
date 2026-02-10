@@ -3,12 +3,12 @@
 //! Provides multiple TextEmbedding instances that can be used concurrently
 //! by different threads, enabling parallel embedding generation.
 
-use crate::SymbolId;
 use crate::config::SemanticBackend;
+use crate::semantic::static_model::OptimizedStaticModel;
 use crate::vector::EmbeddingRuntimeConfig;
-use crossbeam_channel::{Receiver, Sender, bounded};
+use crate::SymbolId;
+use crossbeam_channel::{bounded, Receiver, Sender};
 use fastembed::TextEmbedding;
-use model2vec_rs::model::StaticModel;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::SemanticSearchError;
@@ -21,7 +21,7 @@ struct ModelInstance {
 
 enum ModelBackendInstance {
     Fastembed(TextEmbedding),
-    Model2Vec(StaticModel),
+    Optimized(OptimizedStaticModel),
 }
 
 /// Pool of TextEmbedding models for parallel embedding generation.
@@ -66,7 +66,7 @@ impl EmbeddingPool {
         runtime_config: Option<EmbeddingRuntimeConfig>,
     ) -> Result<Self, SemanticSearchError> {
         let pool_size = if backend == SemanticBackend::Model2vec {
-            1
+            1 // Single instance is sufficient — rayon parallelism is internal
         } else {
             pool_size.max(1)
         };
@@ -90,43 +90,46 @@ impl EmbeddingPool {
         // Create pool_size model instances
         for i in 0..pool_size {
             let model_instance = match backend {
+                SemanticBackend::Model2vec => {
+                    let opt_model =
+                        OptimizedStaticModel::from_local(model_name).map_err(|e| {
+                            SemanticSearchError::ModelInitError(format!(
+                                "Failed to initialize optimized static model {}: {}",
+                                i + 1,
+                                e
+                            ))
+                        })?;
+                    if i == 0 {
+                        dimensions = opt_model.dim();
+                    }
+                    ModelBackendInstance::Optimized(opt_model)
+                }
                 SemanticBackend::Fastembed => {
                     let show_progress = i == 0; // Only show progress for first model
-                    let (mut text_model, _) = crate::vector::create_text_embedding_with_runtime(
-                        model_name,
-                        show_progress,
-                        Some(max_sequence_length),
-                        Some(&runtime_config),
-                    )
-                    .map_err(|e| {
-                        SemanticSearchError::ModelInitError(format!(
-                            "Failed to initialize model instance {}: {}",
-                            i + 1,
-                            e
-                        ))
-                    })?;
+                    let (mut text_model, _) =
+                        crate::vector::create_text_embedding_with_runtime(
+                            model_name,
+                            show_progress,
+                            Some(max_sequence_length),
+                            Some(&runtime_config),
+                        )
+                        .map_err(|e| {
+                            SemanticSearchError::ModelInitError(format!(
+                                "Failed to initialize model instance {}: {}",
+                                i + 1,
+                                e
+                            ))
+                        })?;
 
                     if i == 0 {
                         let test_embedding = text_model
                             .embed(vec!["test"], None)
-                            .map_err(|e| SemanticSearchError::EmbeddingError(e.to_string()))?;
+                            .map_err(|e| {
+                                SemanticSearchError::EmbeddingError(e.to_string())
+                            })?;
                         dimensions = test_embedding.into_iter().next().unwrap().len();
                     }
                     ModelBackendInstance::Fastembed(text_model)
-                }
-                SemanticBackend::Model2vec => {
-                    let static_model = StaticModel::from_pretrained(model_name, None, None, None)
-                        .map_err(|e| {
-                        SemanticSearchError::ModelInitError(format!(
-                            "Failed to initialize model2vec instance {}: {}",
-                            i + 1,
-                            e
-                        ))
-                    })?;
-                    if i == 0 {
-                        dimensions = static_model.encode_single("test").len();
-                    }
-                    ModelBackendInstance::Model2Vec(static_model)
                 }
             };
 
@@ -217,7 +220,7 @@ impl EmbeddingPool {
                 .embed(vec![text], None)
                 .map_err(|e| SemanticSearchError::EmbeddingError(e.to_string()))
                 .map(|mut v| v.remove(0)),
-            ModelBackendInstance::Model2Vec(model) => Ok(model.encode_single(text)),
+            ModelBackendInstance::Optimized(model) => Ok(model.encode_single(text)),
         };
         self.release(instance);
         result
@@ -245,6 +248,31 @@ impl EmbeddingPool {
                 usage_str.join(", ")
             );
         }
+    }
+
+    /// Encode text strings directly without SymbolId bookkeeping.
+    /// Used by chunk rebuild to reuse the loaded model.
+    pub fn encode_texts(&self, texts: &[String]) -> Vec<Vec<f32>> {
+        if texts.is_empty() {
+            return Vec::new();
+        }
+        tracing::debug!(
+            target: "semantic",
+            "encode_texts: acquiring pool instance (channel len={})",
+            self.model_receiver.len()
+        );
+        let mut instance = self.acquire();
+        tracing::debug!(target: "semantic", "encode_texts: acquired instance, encoding {} texts", texts.len());
+        let result = match &mut instance.model {
+            ModelBackendInstance::Optimized(model) => {
+                model.encode_batch_parallel(texts, Some(self.max_sequence_length))
+            }
+            ModelBackendInstance::Fastembed(model) => {
+                model.embed(texts.to_vec(), None).unwrap_or_default()
+            }
+        };
+        self.release(instance);
+        result
     }
 
     /// Generate embeddings for multiple documents with length-aware adaptive batching.
@@ -295,77 +323,114 @@ impl EmbeddingPool {
             return Vec::new();
         }
 
-        // Reduce ONNX padding overhead by grouping similar lengths.
-        valid_items.sort_by_key(|item| item.estimated_tokens);
-
         let mut results = Vec::with_capacity(valid_items.len());
-        let mut cursor = 0usize;
-        while cursor < valid_items.len() {
-            let first = valid_items[cursor];
-            let mut max_items = max_items_for_tokens(first.estimated_tokens);
-            if max_items == 0 {
-                max_items = 1;
-            }
 
-            let mut batch = Vec::with_capacity(max_items);
-            let mut batch_tokens = 0usize;
-            while cursor < valid_items.len() && batch.len() < max_items {
-                let candidate = valid_items[cursor];
-                if !batch.is_empty()
-                    && batch_tokens + candidate.estimated_tokens > self.max_batch_tokens
-                {
-                    break;
-                }
-                batch_tokens += candidate.estimated_tokens;
-                batch.push(candidate);
-                cursor += 1;
-            }
-            if batch.is_empty() {
-                batch.push(valid_items[cursor]);
-                cursor += 1;
-            }
+        // Check if we have an Optimized backend — skip adaptive batching
+        let is_optimized = {
+            let instance = self.acquire();
+            let opt = matches!(instance.model, ModelBackendInstance::Optimized(_));
+            self.release(instance);
+            opt
+        };
 
-            let texts: Vec<&str> = batch.iter().map(|item| item.doc).collect();
+        if is_optimized {
+            // Fast path: send all items at once to rayon-parallel encode
+            let text_strings: Vec<String> = valid_items
+                .iter()
+                .map(|item| item.doc.to_string())
+                .collect();
 
             let mut instance = self.acquire();
-            let embeddings_result = match &mut instance.model {
-                ModelBackendInstance::Fastembed(model) => model
-                    .embed(texts, None)
-                    .map_err(|e| SemanticSearchError::EmbeddingError(e.to_string())),
-                ModelBackendInstance::Model2Vec(model) => {
-                    let text_strings: Vec<String> = texts
-                        .into_iter()
-                        .map(std::string::ToString::to_string)
-                        .collect();
-                    Ok(model.encode_with_args(&text_strings, Some(self.max_sequence_length), 1024))
+            let embeddings = match &mut instance.model {
+                ModelBackendInstance::Optimized(model) => {
+                    model.encode_batch_parallel(
+                        &text_strings,
+                        Some(self.max_sequence_length),
+                    )
                 }
+                _ => unreachable!(),
             };
             self.release(instance);
 
-            match embeddings_result {
-                Ok(embeddings) => {
-                    for (item, embedding) in batch.iter().zip(embeddings.into_iter()) {
-                        if embedding.len() == self.dimensions {
-                            results.push((item.id, embedding, item.language.to_string()));
-                        } else {
-                            tracing::warn!(
-                                target: "semantic",
-                                "Dimension mismatch for {}: expected {}, got {}",
-                                item.id.to_u32(),
-                                self.dimensions,
-                                embedding.len()
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
+            for (item, embedding) in valid_items.iter().zip(embeddings.into_iter()) {
+                if embedding.len() == self.dimensions {
+                    results.push((item.id, embedding, item.language.to_string()));
+                } else {
                     tracing::warn!(
                         target: "semantic",
-                        "Batch embedding failed (items={}, est_tokens={}): {}",
-                        batch.len(),
-                        batch_tokens,
-                        e
+                        "Dimension mismatch for {}: expected {}, got {}",
+                        item.id.to_u32(),
+                        self.dimensions,
+                        embedding.len()
                     );
+                }
+            }
+        } else {
+            // Fastembed path: adaptive batching for ONNX padding overhead
+            valid_items.sort_by_key(|item| item.estimated_tokens);
+
+            let mut cursor = 0usize;
+            while cursor < valid_items.len() {
+                let first = valid_items[cursor];
+                let mut max_items = max_items_for_tokens(first.estimated_tokens);
+                if max_items == 0 {
+                    max_items = 1;
+                }
+
+                let mut batch = Vec::with_capacity(max_items);
+                let mut batch_tokens = 0usize;
+                while cursor < valid_items.len() && batch.len() < max_items {
+                    let candidate = valid_items[cursor];
+                    if !batch.is_empty()
+                        && batch_tokens + candidate.estimated_tokens > self.max_batch_tokens
+                    {
+                        break;
+                    }
+                    batch_tokens += candidate.estimated_tokens;
+                    batch.push(candidate);
+                    cursor += 1;
+                }
+                if batch.is_empty() {
+                    batch.push(valid_items[cursor]);
+                    cursor += 1;
+                }
+
+                let texts: Vec<&str> = batch.iter().map(|item| item.doc).collect();
+
+                let mut instance = self.acquire();
+                let embeddings_result = match &mut instance.model {
+                    ModelBackendInstance::Fastembed(model) => model
+                        .embed(texts, None)
+                        .map_err(|e| SemanticSearchError::EmbeddingError(e.to_string())),
+                    ModelBackendInstance::Optimized(_) => unreachable!(),
+                };
+                self.release(instance);
+
+                match embeddings_result {
+                    Ok(embeddings) => {
+                        for (item, embedding) in batch.iter().zip(embeddings.into_iter()) {
+                            if embedding.len() == self.dimensions {
+                                results.push((item.id, embedding, item.language.to_string()));
+                            } else {
+                                tracing::warn!(
+                                    target: "semantic",
+                                    "Dimension mismatch for {}: expected {}, got {}",
+                                    item.id.to_u32(),
+                                    self.dimensions,
+                                    embedding.len()
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            target: "semantic",
+                            "Batch embedding failed (items={}, est_tokens={}): {}",
+                            batch.len(),
+                            batch_tokens,
+                            e
+                        );
+                    }
                 }
             }
         }

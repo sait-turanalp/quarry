@@ -9,18 +9,18 @@
 
 use crate::config::SemanticBackend;
 use crate::parsing::{get_registry, FlowKind};
-use crate::semantic::{SemanticVectorStorage, SimpleSemanticSearch};
+use crate::semantic::{EmbeddingPool, SemanticVectorStorage, SimpleSemanticSearch};
 use crate::symbol::ScopeContext;
 use crate::vector::{create_text_embedding_with_runtime, EmbeddingRuntimeConfig};
 use crate::{IndexError, Settings, Symbol, SymbolId, SymbolKind};
+use crate::semantic::OptimizedStaticModel;
 use fastembed::TextEmbedding;
 use fs2::FileExt;
-use model2vec_rs::model::StaticModel;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
@@ -43,7 +43,7 @@ pub trait RecallBackend: Send + Sync {
 
 enum ActiveModel {
     Fastembed(TextEmbedding),
-    Model2Vec(StaticModel),
+    Optimized(OptimizedStaticModel),
 }
 
 /// Active semantic embedding backend for code chunks.
@@ -61,6 +61,22 @@ impl ActiveRecallBackend {
         max_sequence_length: usize,
     ) -> Result<Self, IndexError> {
         match backend {
+            SemanticBackend::Model2vec => {
+                let source = model_name.strip_prefix("model2vec:").unwrap_or(model_name);
+                let opt = OptimizedStaticModel::from_local(source).map_err(|e| {
+                    IndexError::ConfigError {
+                        reason: format!(
+                            "failed to initialize optimized static model '{source}': {e}"
+                        ),
+                    }
+                })?;
+                let dims = opt.dim();
+                Ok(Self {
+                    model_name: model_name.to_string(),
+                    dimensions: dims,
+                    model: Mutex::new(ActiveModel::Optimized(opt)),
+                })
+            }
             SemanticBackend::Fastembed => {
                 let (mut model, resolved_name) = create_text_embedding_with_runtime(
                     model_name,
@@ -89,23 +105,6 @@ impl ActiveRecallBackend {
                     model: Mutex::new(ActiveModel::Fastembed(model)),
                 })
             }
-            SemanticBackend::Model2vec => {
-                let source = model_name.strip_prefix("model2vec:").unwrap_or(model_name);
-                let model =
-                    StaticModel::from_pretrained(source, None, None, None).map_err(|e| {
-                        IndexError::ConfigError {
-                            reason: format!(
-                                "failed to initialize model2vec backend '{source}': {e}"
-                            ),
-                        }
-                    })?;
-                let dims = model.encode_single("test").len();
-                Ok(Self {
-                    model_name: model_name.to_string(),
-                    dimensions: dims,
-                    model: Mutex::new(ActiveModel::Model2Vec(model)),
-                })
-            }
         }
     }
 }
@@ -128,10 +127,34 @@ impl RecallBackend for ActiveRecallBackend {
             ActiveModel::Fastembed(model) => model
                 .embed(texts.to_vec(), None)
                 .map_err(|e| IndexError::General(format!("fastembed encode failed: {e}"))),
-            ActiveModel::Model2Vec(model) => {
-                Ok(texts.iter().map(|t| model.encode_single(t)).collect())
+            ActiveModel::Optimized(model) => {
+                Ok(model.encode_batch_parallel(texts, Some(512)))
             }
         }
+    }
+}
+
+/// Adapter wrapping an existing EmbeddingPool as a RecallBackend.
+/// Avoids creating a separate model instance for chunk embedding.
+pub struct PoolRecallAdapter {
+    pool: Arc<EmbeddingPool>,
+}
+
+impl PoolRecallAdapter {
+    pub fn new(pool: Arc<EmbeddingPool>) -> Self {
+        Self { pool }
+    }
+}
+
+impl RecallBackend for PoolRecallAdapter {
+    fn model_name(&self) -> &str {
+        self.pool.model_name()
+    }
+    fn dimensions(&self) -> usize {
+        self.pool.dimensions()
+    }
+    fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, IndexError> {
+        Ok(self.pool.encode_texts(texts))
     }
 }
 
@@ -339,6 +362,7 @@ impl CodeChunkIndexer {
 
         let mut source_cache: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let mut chunks = Vec::with_capacity(symbols.len());
+        let stage_t = Instant::now();
         for symbol in symbols {
             if let Some(chunk) = build_chunk_record(
                 symbol,
@@ -351,12 +375,18 @@ impl CodeChunkIndexer {
                 chunks.push(chunk);
             }
         }
+        tracing::info!(
+            target: "pipeline",
+            "CHUNK STAGE build_chunk_record: {} chunks from {} symbols, {} files cached in {:.1}s",
+            chunks.len(), symbols.len(), source_cache.len(), stage_t.elapsed().as_secs_f64()
+        );
         let mut next_chunk_id = symbols
             .iter()
             .map(|s| s.id.to_u32())
             .max()
             .unwrap_or(0)
             .saturating_add(1);
+        let stage_t = Instant::now();
         append_mixed_chunks(
             symbols,
             indexed_paths,
@@ -366,7 +396,13 @@ impl CodeChunkIndexer {
             &mut chunks,
             &mut next_chunk_id,
         );
+        tracing::info!(
+            target: "pipeline",
+            "CHUNK STAGE append_mixed_chunks: {} total chunks in {:.1}s",
+            chunks.len(), stage_t.elapsed().as_secs_f64()
+        );
         if flow_chunk_enabled {
+            let stage_t = Instant::now();
             append_flow_chunks(
                 symbols,
                 settings,
@@ -378,7 +414,13 @@ impl CodeChunkIndexer {
                 &mut chunks,
                 &mut next_chunk_id,
             );
+            tracing::info!(
+                target: "pipeline",
+                "CHUNK STAGE append_flow_chunks: {} total chunks in {:.1}s",
+                chunks.len(), stage_t.elapsed().as_secs_f64()
+            );
         }
+        let stage_t = Instant::now();
         apply_token_budget_to_chunks(
             &mut chunks,
             &mut next_chunk_id,
@@ -388,16 +430,26 @@ impl CodeChunkIndexer {
             chunk_token_overlap,
         );
         dedup_chunk_records(&mut chunks);
+        tracing::info!(
+            target: "pipeline",
+            "CHUNK STAGE token_budget+dedup: {} final chunks in {:.1}s",
+            chunks.len(), stage_t.elapsed().as_secs_f64()
+        );
 
+        let t0 = std::time::Instant::now();
         let texts: Vec<String> = chunks.iter().map(|c| c.embedding_text.clone()).collect();
+        let chunk_count = texts.len();
         let embeddings = backend.encode(&texts)?;
+        let embed_dur = t0.elapsed();
 
         if semantic_path.exists() {
             std::fs::remove_dir_all(&semantic_path)?;
         }
         std::fs::create_dir_all(&semantic_path)?;
 
-        let mut semantic = SimpleSemanticSearch::from_model_name(backend.model_name())?;
+        let mut semantic = SimpleSemanticSearch::from_model_name(
+            backend.model_name(),
+        )?;
         let items: Vec<(SymbolId, Vec<f32>, String)> = chunks
             .iter()
             .zip(embeddings)
@@ -415,13 +467,29 @@ impl CodeChunkIndexer {
             })
             .collect();
         let embeddings_indexed = semantic.store_embeddings(items);
+        let t1 = std::time::Instant::now();
         semantic.save(&semantic_path)?;
+        let save_dur = t1.elapsed();
 
-        let chunks_json = serde_json::to_string_pretty(&chunks)
+        let t2 = std::time::Instant::now();
+        let chunks_json = serde_json::to_string(&chunks)
             .map_err(|e| IndexError::General(format!("failed to serialize chunk metadata: {e}")))?;
-        std::fs::write(&chunks_path, chunks_json)?;
+        let mut writer = std::io::BufWriter::new(std::fs::File::create(&chunks_path)?);
+        std::io::Write::write_all(&mut writer, chunks_json.as_bytes())?;
+        drop(writer);
 
         write_tantivy_chunk_index(&self.root, &chunks)?;
+        let write_dur = t2.elapsed();
+
+        tracing::info!(
+            target: "pipeline",
+            "CHUNK REBUILD detail: {} chunks | embed={:.1}s ({}/s) | save={:.1}s | write={:.1}s",
+            chunk_count,
+            embed_dur.as_secs_f64(),
+            if embed_dur.as_secs_f64() > 0.0 { (chunk_count as f64 / embed_dur.as_secs_f64()) as u64 } else { 0 },
+            save_dur.as_secs_f64(),
+            write_dur.as_secs_f64(),
+        );
 
         let manifest = ChunkIndexManifest {
             model_name: backend.model_name().to_string(),
@@ -429,7 +497,7 @@ impl CodeChunkIndexer {
             chunk_count: chunks.len(),
             generated_at_utc_secs: current_unix_time_secs(),
         };
-        let manifest_json = serde_json::to_string_pretty(&manifest)
+        let manifest_json = serde_json::to_string(&manifest)
             .map_err(|e| IndexError::General(format!("failed to serialize chunk manifest: {e}")))?;
         std::fs::write(&manifest_path, manifest_json)?;
 
@@ -620,13 +688,17 @@ impl CodeChunkIndexer {
         }
         std::fs::create_dir_all(&semantic_path)?;
 
-        let mut semantic = SimpleSemanticSearch::from_model_name(backend.model_name())?;
+        let mut semantic = SimpleSemanticSearch::from_model_name(
+            backend.model_name(),
+        )?;
         let embeddings_indexed = semantic.store_embeddings(items);
         semantic.save(&semantic_path)?;
 
-        let chunks_json = serde_json::to_string_pretty(&merged_chunks)
+        let chunks_json = serde_json::to_string(&merged_chunks)
             .map_err(|e| IndexError::General(format!("failed to serialize chunk metadata: {e}")))?;
-        std::fs::write(&chunks_path, chunks_json)?;
+        let mut writer = std::io::BufWriter::new(std::fs::File::create(&chunks_path)?);
+        std::io::Write::write_all(&mut writer, chunks_json.as_bytes())?;
+        drop(writer);
 
         write_tantivy_chunk_index(&self.root, &merged_chunks)?;
 
@@ -636,7 +708,7 @@ impl CodeChunkIndexer {
             chunk_count: merged_chunks.len(),
             generated_at_utc_secs: current_unix_time_secs(),
         };
-        let manifest_json = serde_json::to_string_pretty(&manifest)
+        let manifest_json = serde_json::to_string(&manifest)
             .map_err(|e| IndexError::General(format!("failed to serialize chunk manifest: {e}")))?;
         std::fs::write(&manifest_path, manifest_json)?;
 
@@ -1722,6 +1794,7 @@ fn append_mixed_chunks(
     chunks: &mut Vec<CodeChunkRecord>,
     next_chunk_id: &mut u32,
 ) {
+    let t = Instant::now();
     let mut by_file: HashMap<&str, Vec<&Symbol>> = HashMap::new();
     for symbol in symbols {
         by_file
@@ -1751,7 +1824,13 @@ fn append_mixed_chunks(
             next_chunk_id,
         );
     }
+    tracing::info!(
+        target: "pipeline",
+        "CHUNK MIXED sub: module_comment+gap done in {:.1}s, {} chunks so far",
+        t.elapsed().as_secs_f64(), chunks.len()
+    );
 
+    let t2 = Instant::now();
     append_config_doc_chunks(
         indexed_paths,
         workspace_root,
@@ -1759,6 +1838,11 @@ fn append_mixed_chunks(
         source_cache,
         chunks,
         next_chunk_id,
+    );
+    tracing::info!(
+        target: "pipeline",
+        "CHUNK MIXED sub: config_doc_chunks done in {:.1}s, {} chunks total",
+        t2.elapsed().as_secs_f64(), chunks.len()
     );
 }
 
@@ -1926,6 +2010,7 @@ fn append_config_doc_chunks(
     if let Some(indexed_paths) = indexed_paths {
         candidates.extend_from_slice(indexed_paths);
     }
+    let indexed_count = candidates.len();
 
     // Also include non-symbol text/config files directly from workspace for mixed chunking.
     if let Some(root) = workspace_root {
@@ -1960,8 +2045,16 @@ fn append_config_doc_chunks(
             }
         }
     }
+    tracing::info!(
+        target: "pipeline",
+        "CHUNK config_doc: {} indexed + {} walkdir = {} candidates",
+        indexed_count, candidates.len() - indexed_count, candidates.len()
+    );
 
     let mut seen_resolved = HashSet::new();
+    let mut matched = 0usize;
+    let total_candidates = candidates.len();
+    let loop_start = Instant::now();
     for raw_path in candidates {
         let Some(kind) = classify_mixed_file_kind(&raw_path) else {
             continue;
@@ -1970,15 +2063,32 @@ fn append_config_doc_chunks(
         if !seen_resolved.insert(resolved.clone()) {
             continue;
         }
+        matched += 1;
+        if matched > 85 && matched < 105 {
+            tracing::info!(
+                target: "pipeline",
+                "CHUNK config_doc BEFORE load #{}: {:?} ({:.1}s)",
+                matched, resolved.file_name().unwrap_or_default(), loop_start.elapsed().as_secs_f64()
+            );
+        }
         let Some(lines) = load_source_lines(&resolved, source_cache) else {
             continue;
         };
         if lines.is_empty() {
             continue;
         }
+        if matched % 10 == 0 || matched <= 5 {
+            tracing::info!(
+                target: "pipeline",
+                "CHUNK config_doc progress: {}/{} matched in {:.1}s — {:?} ({} lines)",
+                matched, total_candidates, loop_start.elapsed().as_secs_f64(),
+                resolved.file_name().unwrap_or_default(), lines.len()
+            );
+        }
 
         let file_path = normalize_chunk_file_path(&raw_path, workspace_root);
         let language = detect_text_language(&raw_path);
+        let split_t = Instant::now();
         let chunks_for_file = split_text_file_chunks(
             lines,
             max_snippet_chars.max(256),
@@ -1989,6 +2099,15 @@ fn append_config_doc_chunks(
             },
             MAX_CHUNKS_PER_FILE,
         );
+        let split_dur = split_t.elapsed();
+        if split_dur.as_millis() > 100 {
+            tracing::warn!(
+                target: "pipeline",
+                "CHUNK config_doc SLOW split: {:?} took {:.1}s ({} lines, {} produced)",
+                resolved.file_name().unwrap_or_default(),
+                split_dur.as_secs_f64(), lines.len(), chunks_for_file.len()
+            );
+        }
         let chunk_type = match kind {
             MixedFileKind::Doc => "doc_chunk",
             MixedFileKind::Config => "config_chunk",
@@ -2019,6 +2138,11 @@ fn append_config_doc_chunks(
             *next_chunk_id = next_chunk_id.saturating_add(1);
         }
     }
+    tracing::info!(
+        target: "pipeline",
+        "CHUNK config_doc: {} matched from {} candidates, {} chunks added",
+        matched, total_candidates, chunks.len()
+    );
 }
 
 fn resolve_indexed_path(path: &Path, workspace_root: Option<&Path>) -> PathBuf {
@@ -2224,9 +2348,11 @@ fn split_text_file_chunks(
         if end >= lines.len() {
             break;
         }
+        let prev_start = start;
         start = end.saturating_sub(overlap_lines.min(end.saturating_sub(start)));
-        if start >= end {
-            start = end;
+        // Guarantee forward progress: start must always advance by at least 1.
+        if start <= prev_start {
+            start = prev_start + 1;
         }
     }
     out

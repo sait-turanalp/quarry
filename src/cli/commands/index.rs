@@ -271,9 +271,10 @@ fn save_index(indexer: &mut IndexFacade, persistence: &IndexPersistence, config:
         indexer.symbol_count(),
         indexer.relationship_count()
     );
+    let save_start = std::time::Instant::now();
     match persistence.save_facade(indexer) {
         Ok(_) => {
-            println!("Index saved to: {}", config.index_path.display());
+            eprintln!("Index saved to: {} ({:.1}s)", config.index_path.display(), save_start.elapsed().as_secs_f64());
         }
         Err(e) => {
             eprintln!("Error: Could not save index: {e}");

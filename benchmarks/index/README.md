@@ -6,6 +6,10 @@ This benchmark compares indexing runtime between two profiles:
 - `index_force_opt_v1`: enables:
   - `indexing.chunk_incremental_rebuild_enabled = true`
   - `indexing.semantic_single_save_mode = true`
+  - `indexing.tantivy_writer_threads = 4`
+  - `indexing.tantivy_no_merge_policy = true`
+  - `indexing.tantivy_heap_mb = 120`
+  - `indexing.batches_per_commit = 20`
   - `chunk_search.rebuild_logging_verbose = true`
 
 ## Run
@@ -41,3 +45,4 @@ benchmarks/index/run_force_index_ab.sh \
 - `semantic_save_calls`: number of `index/semantic` save calls
 - `chunk_semantic_save_s`: estimated code-chunk semantic save duration
 - `chunk_rebuild_span_s`: estimated span from chunk semantic save start to chunk rebuild completion
+- `tantivy_*`: writer/heap/merge tuning values used for each profile

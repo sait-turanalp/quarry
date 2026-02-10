@@ -1,10 +1,12 @@
 //! Simple semantic search implementation for documentation comments
 
-use crate::SymbolId;
 use crate::vector::BinaryVector;
+use crate::SymbolId;
+use crate::semantic::static_model::OptimizedStaticModel;
 use fastembed::{EmbeddingModel, TextEmbedding};
-use model2vec_rs::model::StaticModel;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -71,7 +73,7 @@ pub struct SimpleSemanticSearch {
 
 enum QueryEmbeddingModel {
     Fastembed(TextEmbedding),
-    Model2Vec(StaticModel),
+    Optimized(OptimizedStaticModel),
 }
 
 impl std::fmt::Debug for SimpleSemanticSearch {
@@ -145,14 +147,13 @@ impl SimpleSemanticSearch {
         show_progress: bool,
     ) -> Result<QueryEmbeddingModel, SemanticSearchError> {
         if Self::is_model2vec_model(model_name) {
-            let static_model =
-                StaticModel::from_pretrained(Self::model2vec_source(model_name), None, None, None)
-                    .map_err(|e| {
-                        SemanticSearchError::ModelInitError(format!(
-                            "Invalid model2vec model '{model_name}': {e}"
-                        ))
-                    })?;
-            return Ok(QueryEmbeddingModel::Model2Vec(static_model));
+            let source = Self::model2vec_source(model_name);
+            let opt = OptimizedStaticModel::from_local(source).map_err(|e| {
+                SemanticSearchError::ModelInitError(format!(
+                    "Failed to load optimized static model '{model_name}': {e}"
+                ))
+            })?;
+            return Ok(QueryEmbeddingModel::Optimized(opt));
         }
 
         crate::vector::create_text_embedding_with_max_length(model_name, show_progress, Some(1024))
@@ -169,7 +170,10 @@ impl SimpleSemanticSearch {
             SemanticSearchError::ModelInitError("Failed to lock embedding model".to_string())
         })?;
         if model_guard.is_none() {
-            *model_guard = Some(Self::init_model(&self.model_name, show_progress)?);
+            *model_guard = Some(Self::init_model(
+                &self.model_name,
+                show_progress,
+            )?);
         }
         let model = model_guard.as_mut().ok_or_else(|| {
             SemanticSearchError::ModelInitError("Embedding model missing".to_string())
@@ -183,7 +187,7 @@ impl SimpleSemanticSearch {
                     SemanticSearchError::EmbeddingError("No embedding returned".to_string())
                 })
             }
-            QueryEmbeddingModel::Model2Vec(model) => Ok(model.encode_single(text)),
+            QueryEmbeddingModel::Optimized(model) => Ok(model.encode_single(text)),
         }
     }
 
@@ -224,9 +228,7 @@ impl SimpleSemanticSearch {
                         .map_err(|e| SemanticSearchError::EmbeddingError(e.to_string()))?;
                     test_embedding.into_iter().next().unwrap().len()
                 }
-                QueryEmbeddingModel::Model2Vec(static_model) => {
-                    static_model.encode_single("test").len()
-                }
+                QueryEmbeddingModel::Optimized(opt_model) => opt_model.dim(),
             };
             preloaded_model = Some(model);
             discovered
@@ -587,35 +589,41 @@ impl SimpleSemanticSearch {
 
         let mut storage = SemanticVectorStorage::new(path, dimension)?;
 
-        // Convert HashMap to Vec for batch save
-        let embeddings: Vec<(SymbolId, Vec<f32>)> = self
+        // Borrow embeddings directly to avoid cloning large vectors before write.
+        let embeddings: Vec<(SymbolId, &[f32])> = self
             .embeddings
             .iter()
-            .map(|(id, embedding)| (*id, embedding.clone()))
+            .map(|(id, embedding)| (*id, embedding.as_slice()))
             .collect();
 
         // Save all embeddings
-        storage.save_batch(&embeddings)?;
+        storage.save_batch_refs(&embeddings)?;
 
         // Save language mappings as a JSON file (convert SymbolId to u32 for serialization)
         let languages_path = path.join("languages.json");
-        let languages_map: HashMap<u32, String> = self
+        let languages_map: HashMap<u32, &str> = self
             .symbol_languages
             .iter()
-            .map(|(id, lang)| (id.to_u32(), lang.clone()))
+            .map(|(id, lang)| (id.to_u32(), lang.as_str()))
             .collect();
-        let languages_json = serde_json::to_string(&languages_map).map_err(|e| {
+        let mut languages_writer = BufWriter::new(File::create(&languages_path).map_err(|e| {
+            SemanticSearchError::StorageError {
+                message: format!("Failed to create language mappings file: {e}"),
+                suggestion: "Check disk space and file permissions".to_string(),
+            }
+        })?);
+        serde_json::to_writer(&mut languages_writer, &languages_map).map_err(|e| {
             SemanticSearchError::StorageError {
                 message: format!("Failed to serialize language mappings: {e}"),
                 suggestion: "This is likely a bug in the code".to_string(),
             }
         })?;
-        std::fs::write(&languages_path, languages_json).map_err(|e| {
-            SemanticSearchError::StorageError {
-                message: format!("Failed to write language mappings: {e}"),
+        languages_writer
+            .flush()
+            .map_err(|e| SemanticSearchError::StorageError {
+                message: format!("Failed to flush language mappings: {e}"),
                 suggestion: "Check disk space and file permissions".to_string(),
-            }
-        })?;
+            })?;
 
         // Save binary index
         self.save_binary_index(path)?;
@@ -638,29 +646,52 @@ impl SimpleSemanticSearch {
         );
 
         let bin_path = path.join("binary_index.bin");
-        let mut buf = Vec::new();
+        let mut writer = BufWriter::new(File::create(&bin_path).map_err(|e| {
+            SemanticSearchError::StorageError {
+                message: format!("Failed to create binary index file: {e}"),
+                suggestion: "Check disk space and file permissions".to_string(),
+            }
+        })?);
 
-        buf.extend_from_slice(&(self.binary_index.len() as u32).to_le_bytes());
+        writer
+            .write_all(&(self.binary_index.len() as u32).to_le_bytes())
+            .map_err(|e| SemanticSearchError::StorageError {
+                message: format!("Failed to write binary index header: {e}"),
+                suggestion: "Check disk space and file permissions".to_string(),
+            })?;
+
+        let mut bytes_written: usize = 4;
         for (sid, bv) in &self.binary_index {
-            buf.extend_from_slice(&sid.to_u32().to_le_bytes());
+            writer.write_all(&sid.to_u32().to_le_bytes()).map_err(|e| {
+                SemanticSearchError::StorageError {
+                    message: format!("Failed to write binary index symbol id: {e}"),
+                    suggestion: "Check disk space and file permissions".to_string(),
+                }
+            })?;
             let bv_bytes = bv.to_bytes();
-            buf.extend_from_slice(&(bv_bytes.len() as u32).to_le_bytes());
-            buf.extend_from_slice(&bv_bytes);
+            writer
+                .write_all(&(bv_bytes.len() as u32).to_le_bytes())
+                .and_then(|_| writer.write_all(&bv_bytes))
+                .map_err(|e| SemanticSearchError::StorageError {
+                    message: format!("Failed to write binary index vector bytes: {e}"),
+                    suggestion: "Check disk space and file permissions".to_string(),
+                })?;
+            bytes_written += 8 + bv_bytes.len();
         }
+        writer
+            .flush()
+            .map_err(|e| SemanticSearchError::StorageError {
+                message: format!("Failed to flush binary index: {e}"),
+                suggestion: "Check disk space and file permissions".to_string(),
+            })?;
 
+        tracing::info!(target: "semantic", "save_binary_index: SUCCESS");
         tracing::info!(
             target: "semantic",
             "save_binary_index: writing {} bytes to {:?}",
-            buf.len(),
+            bytes_written,
             bin_path
         );
-
-        std::fs::write(&bin_path, buf).map_err(|e| SemanticSearchError::StorageError {
-            message: format!("Failed to write binary index: {e}"),
-            suggestion: "Check disk space and file permissions".to_string(),
-        })?;
-
-        tracing::info!(target: "semantic", "save_binary_index: SUCCESS");
         Ok(())
     }
 
@@ -676,33 +707,43 @@ impl SimpleSemanticSearch {
         let hashes_path = path.join("embedded_hashes.json");
 
         #[derive(serde::Serialize)]
-        struct HashFile {
+        struct HashFile<'a> {
             format_version: u32,
-            hashes: HashMap<String, String>,
+            hashes: &'a HashMap<String, String>,
         }
 
         let hash_file = HashFile {
             format_version: EMBEDDING_FORMAT_VERSION,
-            hashes: self.embedded_file_hashes.clone(),
+            hashes: &self.embedded_file_hashes,
         };
 
-        let json =
-            serde_json::to_string(&hash_file).map_err(|e| SemanticSearchError::StorageError {
+        let mut writer = BufWriter::new(File::create(&hashes_path).map_err(|e| {
+            SemanticSearchError::StorageError {
+                message: format!("Failed to create embedded hashes file: {e}"),
+                suggestion: "Check disk space and file permissions".to_string(),
+            }
+        })?);
+        serde_json::to_writer(&mut writer, &hash_file).map_err(|e| {
+            SemanticSearchError::StorageError {
                 message: format!("Failed to serialize embedded hashes: {e}"),
                 suggestion: "This is likely a bug in the code".to_string(),
+            }
+        })?;
+        writer
+            .flush()
+            .map_err(|e| SemanticSearchError::StorageError {
+                message: format!("Failed to flush embedded hashes: {e}"),
+                suggestion: "Check disk space and file permissions".to_string(),
             })?;
-
+        let json_bytes = std::fs::metadata(&hashes_path)
+            .map(|m| m.len() as usize)
+            .unwrap_or(0);
         tracing::info!(
             target: "semantic",
             "save_embedded_hashes: writing {} bytes JSON to {:?}",
-            json.len(),
+            json_bytes,
             hashes_path
         );
-
-        std::fs::write(&hashes_path, json).map_err(|e| SemanticSearchError::StorageError {
-            message: format!("Failed to write embedded hashes: {e}"),
-            suggestion: "Check disk space and file permissions".to_string(),
-        })?;
 
         tracing::info!(target: "semantic", "save_embedded_hashes: SUCCESS");
         Ok(())

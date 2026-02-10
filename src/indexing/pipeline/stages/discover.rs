@@ -12,6 +12,7 @@ use crate::indexing::pipeline::types::{DiscoverResult, PipelineError, PipelineRe
 use crate::parsing::get_registry;
 use crate::storage::DocumentIndex;
 use crossbeam_channel::Sender;
+use glob::Pattern;
 use ignore::WalkBuilder;
 use std::collections::HashSet;
 use std::fs;
@@ -28,6 +29,8 @@ pub struct DiscoverStage {
     index: Option<Arc<DocumentIndex>>,
     /// Workspace root for path normalization.
     workspace_root: Option<PathBuf>,
+    /// Glob patterns to ignore for indexing discovery.
+    ignore_patterns: Vec<Pattern>,
 }
 
 impl DiscoverStage {
@@ -39,6 +42,7 @@ impl DiscoverStage {
             include_tests: false,
             index: None,
             workspace_root: None,
+            ignore_patterns: Vec::new(),
         }
     }
 
@@ -60,6 +64,12 @@ impl DiscoverStage {
         self
     }
 
+    /// Add glob ignore patterns (same format as settings.indexing.ignore_patterns).
+    pub fn with_ignore_patterns(mut self, patterns: &[String]) -> Self {
+        self.ignore_patterns = compile_ignore_patterns(patterns);
+        self
+    }
+
     /// Normalize a path relative to workspace_root.
     fn normalize_path(&self, path: &Path) -> PathBuf {
         if path.is_absolute() {
@@ -77,8 +87,114 @@ impl DiscoverStage {
 
     /// Run the discover stage, sending paths to the provided channel.
     ///
+    /// Uses `git ls-files` as a fast path when inside a git repo (reads
+    /// from git's pre-built index instead of walking the filesystem).
+    /// Falls back to `ignore` crate's parallel walker on failure.
+    ///
     /// Returns the number of files discovered.
     pub fn run(&self, sender: Sender<PathBuf>) -> PipelineResult<usize> {
+        // Try git ls-files fast path first
+        if let Some(count) = self.try_git_ls_files(&sender)? {
+            return Ok(count);
+        }
+
+        // Fallback: parallel filesystem walk
+        self.run_walk(sender)
+    }
+
+    /// Fast path: use `git ls-files` to discover tracked files.
+    ///
+    /// Returns `Ok(Some(count))` on success, `Ok(None)` to signal fallback.
+    fn try_git_ls_files(
+        &self,
+        sender: &Sender<PathBuf>,
+    ) -> PipelineResult<Option<usize>> {
+        // Check if root is inside a git repo
+        if !self.root.join(".git").exists() {
+            // Walk up to find .git (root might be a subdirectory)
+            let mut check = self.root.as_path();
+            let mut found_git = false;
+            while let Some(parent) = check.parent() {
+                if parent.join(".git").exists() {
+                    found_git = true;
+                    break;
+                }
+                check = parent;
+            }
+            if !found_git {
+                return Ok(None);
+            }
+        }
+
+        // Run git ls-files -- outputs tracked files, one per line
+        let output = std::process::Command::new("git")
+            .arg("ls-files")
+            .arg("-z") // NUL-separated (handles spaces/special chars)
+            .current_dir(&self.root)
+            .output();
+
+        let output = match output {
+            Ok(o) if o.status.success() => o,
+            _ => return Ok(None), // git not available or failed — fallback
+        };
+
+        let extensions = get_supported_extensions()?;
+        let mut count = 0usize;
+
+        // Parse NUL-separated output
+        for entry in output.stdout.split(|&b| b == 0) {
+            if entry.is_empty() {
+                continue;
+            }
+            let Ok(rel_str) = std::str::from_utf8(entry) else {
+                continue;
+            };
+
+            let path = self.root.join(rel_str);
+
+            // Skip hidden files
+            if let Some(file_name) = path.file_name() {
+                if let Some(name_str) = file_name.to_str() {
+                    if name_str.starts_with('.') {
+                        continue;
+                    }
+                }
+            }
+
+            // Filter by extension
+            if !has_supported_extension(&path, &extensions) {
+                continue;
+            }
+
+            if !self.include_tests && is_test_path(&path) {
+                continue;
+            }
+
+            if path_matches_ignore_patterns(&path, &self.root, &self.ignore_patterns) {
+                continue;
+            }
+
+            // Verify file exists on disk (git index may have stale entries)
+            if !path.is_file() {
+                continue;
+            }
+
+            count += 1;
+            if sender.send(path).is_err() {
+                break; // Channel closed
+            }
+        }
+
+        tracing::info!(
+            target: "pipeline",
+            "DISCOVER: git ls-files fast path — {count} files"
+        );
+
+        Ok(Some(count))
+    }
+
+    /// Fallback: parallel filesystem walk using `ignore` crate.
+    fn run_walk(&self, sender: Sender<PathBuf>) -> PipelineResult<usize> {
         let extensions = get_supported_extensions()?;
         let count = Arc::new(AtomicUsize::new(0));
 
@@ -100,11 +216,15 @@ impl DiscoverStage {
         let count_clone = count.clone();
         let extensions = Arc::new(extensions);
         let include_tests = self.include_tests;
+        let ignore_patterns = Arc::new(self.ignore_patterns.clone());
+        let root = self.root.clone();
 
         walker.run(|| {
             let sender = sender.clone();
             let extensions = extensions.clone();
             let count = count_clone.clone();
+            let ignore_patterns = ignore_patterns.clone();
+            let root = root.clone();
 
             Box::new(move |entry| {
                 let entry = match entry {
@@ -134,6 +254,10 @@ impl DiscoverStage {
                 }
 
                 if !include_tests && is_test_path(path) {
+                    return ignore::WalkState::Continue;
+                }
+
+                if path_matches_ignore_patterns(path, &root, &ignore_patterns) {
                     return ignore::WalkState::Continue;
                 }
 
@@ -261,6 +385,9 @@ impl DiscoverStage {
                 if !self.include_tests && is_test_path(path) {
                     continue;
                 }
+                if path_matches_ignore_patterns(path, &self.root, &self.ignore_patterns) {
+                    continue;
+                }
                 files.push(path.to_path_buf());
             }
         }
@@ -334,6 +461,51 @@ fn has_supported_extension(path: &Path, extensions: &HashSet<&str>) -> bool {
         .and_then(|ext| ext.to_str())
         .map(|ext| extensions.contains(ext))
         .unwrap_or(false)
+}
+
+fn compile_ignore_patterns(raw_patterns: &[String]) -> Vec<Pattern> {
+    let mut compiled = Vec::new();
+    for raw in raw_patterns {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut candidates = vec![trimmed.to_string()];
+        if trimmed.ends_with("/**") && !trimmed.starts_with("**/") && !trimmed.starts_with('/') {
+            candidates.push(format!("**/{trimmed}"));
+        }
+        for candidate in candidates {
+            if let Ok(pattern) = Pattern::new(&candidate) {
+                compiled.push(pattern);
+            }
+        }
+    }
+    compiled
+}
+
+fn normalize_glob_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn path_matches_ignore_patterns(path: &Path, root: &Path, patterns: &[Pattern]) -> bool {
+    if patterns.is_empty() {
+        return false;
+    }
+    let abs = normalize_glob_path(path);
+    let rel = path
+        .strip_prefix(root)
+        .ok()
+        .map(normalize_glob_path)
+        .unwrap_or_else(|| abs.clone());
+    let rel_dot = if rel.starts_with("./") {
+        rel.clone()
+    } else {
+        format!("./{rel}")
+    };
+
+    patterns
+        .iter()
+        .any(|pattern| pattern.matches(&rel) || pattern.matches(&rel_dot) || pattern.matches(&abs))
 }
 
 fn is_test_path(path: &Path) -> bool {

@@ -21,6 +21,10 @@ dist/
 # *.spec.ts
 # test_*.py
 
+# Experimental quantization scripts (not part of core project)
+/*.py
+/*.sh
+
 # Temporary files
 *.tmp
 *.temp

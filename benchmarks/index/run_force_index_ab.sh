@@ -13,6 +13,7 @@ Options:
   --profiles <PATH>  profile matrix TOML
                      (default: benchmarks/index/profiles.force_ab.toml)
   --out <DIR>        output directory (default: /tmp/codanna-index-force-ab)
+  --max-files <N>    optional max files per run
   --dry-run          print resolved commands and exit
   -h, --help         show help
 EOF
@@ -24,6 +25,7 @@ CONFIG=""
 PROFILES="benchmarks/index/profiles.force_ab.toml"
 OUT="/tmp/codanna-index-force-ab"
 DRY_RUN=false
+MAX_FILES=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -32,6 +34,7 @@ while [[ $# -gt 0 ]]; do
     --config) CONFIG="${2:-}"; shift 2 ;;
     --profiles) PROFILES="${2:-}"; shift 2 ;;
     --out) OUT="${2:-}"; shift 2 ;;
+    --max-files) MAX_FILES="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -57,6 +60,9 @@ CMD=(
 )
 if [[ "$DRY_RUN" == "true" ]]; then
   CMD+=(--dry-run)
+fi
+if [[ -n "$MAX_FILES" ]]; then
+  CMD+=(--max-files "$MAX_FILES")
 fi
 
 "${CMD[@]}"

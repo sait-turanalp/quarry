@@ -491,6 +491,12 @@ impl SymbolLookupCache {
     pub fn unique_names(&self) -> usize {
         self.by_name.len()
     }
+
+    /// Extract all symbols from cache as a Vec.
+    /// Used by parallel chunk rebuild to avoid re-reading from Tantivy.
+    pub fn all_symbols(&self) -> Vec<Symbol> {
+        self.by_id.iter().map(|r| r.value().clone()).collect()
+    }
 }
 
 impl PipelineSymbolCache for SymbolLookupCache {

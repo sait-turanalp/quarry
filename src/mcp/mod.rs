@@ -2329,8 +2329,22 @@ impl CodeIntelligenceServer {
             .unwrap_or("project");
         output.push_str(&format!("║ PROJECT: {}\n", project_name));
 
-        // Group files by module (workspace-aware)
-        let modules = group_files_by_module(&indexed_files, module_depth, &workspace_packages);
+        // Build indexed_symbols map for filtering
+        let mut indexed_symbols: HashMap<PathBuf, Vec<&crate::symbol::Symbol>> = HashMap::new();
+        for symbol in &all_symbols {
+            indexed_symbols
+                .entry(PathBuf::from(symbol.file_path.as_ref()))
+                .or_default()
+                .push(symbol);
+        }
+
+        // Group files by module (workspace-aware, filters single-file low-value modules)
+        let modules = group_files_by_module(
+            &indexed_files,
+            module_depth,
+            &workspace_packages,
+            &indexed_symbols,
+        );
 
         output.push_str(&format!(
             "║ Total Files: {} | Modules: {} (depth: {}) | Symbols: {}\n",
@@ -3219,10 +3233,14 @@ impl Default for ModuleStats {
 ///
 /// When workspace_packages is non-empty, files belonging to a workspace package
 /// use the package path as prefix, then apply depth to the remaining path.
+///
+/// Filters out single-file modules with fewer than 3 symbols to remove noise
+/// from patches/, __mocks__/, and other low-value directories.
 fn group_files_by_module(
     paths: &[PathBuf],
     depth: u32,
     workspace_packages: &[PathBuf],
+    indexed_symbols: &HashMap<PathBuf, Vec<&crate::symbol::Symbol>>,
 ) -> HashMap<PathBuf, Vec<PathBuf>> {
     let mut modules: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
 
@@ -3248,35 +3266,79 @@ fn group_files_by_module(
         modules.entry(module_path).or_default().push(path.clone());
     }
 
-    // Merge single-file modules into their parent module or remove them
-    let single_file_keys: Vec<PathBuf> = modules
-        .iter()
-        .filter(|(_, files)| files.len() == 1)
-        .map(|(k, _)| k.clone())
+    // Remove ONLY root-level config files (package.json, tsconfig.json, etc.)
+    // Keep all directory-based modules even if they have only 1 indexed file
+    let config_file_keys: Vec<PathBuf> = modules
+        .keys()
+        .filter(|k| {
+            let key_str = k.to_string_lossy();
+            let is_root_config = k.parent().is_none() || k.components().count() <= 1;
+            let is_config_extension = key_str.ends_with(".js")
+                || key_str.ends_with(".ts")
+                || key_str.ends_with(".mjs")
+                || key_str.ends_with(".cjs")
+                || key_str.ends_with(".json");
+            is_root_config && is_config_extension
+        })
+        .cloned()
         .collect();
 
-    for key in single_file_keys {
-        let key_str = key.to_string_lossy();
-        // Remove standalone config/setup files that aren't real modules
-        let is_config_file = key_str.ends_with(".js")
-            || key_str.ends_with(".ts")
-            || key_str.ends_with(".mjs")
-            || key_str.ends_with(".cjs")
-            || key_str.ends_with(".json");
-        if is_config_file {
-            modules.remove(&key);
-            continue;
-        }
+    for key in config_file_keys {
+        modules.remove(&key);
+    }
 
-        if let Some(parent) = key.parent() {
-            let parent_path = parent.to_path_buf();
-            // Merge into parent module if it exists
-            if parent_path != key && modules.contains_key(&parent_path) {
-                if let Some(files) = modules.remove(&key) {
-                    modules.get_mut(&parent_path).unwrap().extend(files);
+    // Remove test/example/benchmark directories and root-level scripts
+    let auxiliary_dir_keys: Vec<PathBuf> = modules
+        .keys()
+        .filter(|k| {
+            let key_str = k.to_string_lossy().to_lowercase();
+            let is_auxiliary_dir = key_str.starts_with("examples/")
+                || key_str.starts_with("example/")
+                || key_str.starts_with("tests/")
+                || key_str.starts_with("test/")
+                || key_str.starts_with("benches/")
+                || key_str.starts_with("benchmarks/")
+                || key_str == "examples"
+                || key_str == "tests"
+                || key_str == "benches"
+                || key_str == "benchmarks";
+
+            // Also filter root-level Python scripts (e.g., "quantize_jina.py/")
+            let is_root_script = (k.components().count() == 1)
+                && (key_str.ends_with(".py/") || key_str.ends_with(".sh/"));
+
+            is_auxiliary_dir || is_root_script
+        })
+        .cloned()
+        .collect();
+
+    for key in auxiliary_dir_keys {
+        modules.remove(&key);
+    }
+
+    // Remove low-value modules: 1 file + < 3 symbols
+    // This filters noise from patches/, __mocks__/, empty test-setup files, etc.
+    let low_value_keys: Vec<PathBuf> = modules
+        .keys()
+        .filter(|k| {
+            if let Some(files) = modules.get(*k) {
+                if files.len() == 1 {
+                    // Count symbols in this single file
+                    let symbol_count: usize = files
+                        .iter()
+                        .filter_map(|f| indexed_symbols.get(f))
+                        .map(|syms| syms.len())
+                        .sum();
+                    return symbol_count < 3;
                 }
             }
-        }
+            false
+        })
+        .cloned()
+        .collect();
+
+    for key in low_value_keys {
+        modules.remove(&key);
     }
 
     modules
@@ -3832,7 +3894,19 @@ impl Layer {
     }
 }
 
-/// Detect architectural layer using fan-in/fan-out metrics (project-agnostic)
+// Layer detection thresholds for two-dimensional classification
+const HIGH_ACTIVITY_THRESHOLD: usize = 50;   // Total activity indicating core module
+const HIGH_FAN_IN_THRESHOLD: usize = 25;     // Significant incoming calls
+const HIGH_FAN_OUT_THRESHOLD: usize = 30;    // Significant outgoing calls
+const DATA_RATIO_THRESHOLD: f64 = 0.75;      // Strong bias toward being called
+
+/// Detect architectural layer using two-dimensional fan-in/fan-out classification
+///
+/// This function uses quadrant-based logic to distinguish:
+/// - Interface: Low fan-in, high fan-out (entry points)
+/// - Processing: High fan-in AND high fan-out (core orchestrators)
+/// - Data: High fan-in, low fan-out (shared utilities)
+/// - Infrastructure: Test/mock/script patterns or orphan modules
 fn detect_layer_enhanced(module_path: &Path, fan_in: usize, fan_out: usize) -> Layer {
     let path_str = module_path.to_string_lossy().to_lowercase();
 
@@ -3845,17 +3919,35 @@ fn detect_layer_enhanced(module_path: &Path, fan_in: usize, fan_out: usize) -> L
         return Layer::Infrastructure;
     }
 
-    // Metric-driven classification
+    // Core modules are always Processing (business logic)
+    if path_str.contains("/core/") || path_str.starts_with("core/") {
+        return Layer::Processing;
+    }
+
+    // Two-dimensional classification with absolute thresholds
     let total = fan_in + fan_out;
     if total == 0 {
         return Layer::Infrastructure; // orphan module
     }
 
-    let ratio = fan_in as f64 / total as f64;
-    // ratio ~1.0 → heavily called, rarely calls out → Data/shared
-    // ratio ~0.0 → rarely called, calls many → Interface/entry
-    // ratio ~0.5 → balanced → Processing
+    // Quadrant 1: High activity in BOTH dimensions = Processing
+    // This fixes src/parsing (fan_in=38, fan_out=71+) and src/indexing
+    if fan_in >= HIGH_FAN_IN_THRESHOLD && fan_out >= HIGH_FAN_OUT_THRESHOLD {
+        return Layer::Processing;
+    }
 
+    // Quadrant 2: High fan-in, low fan-out = Data (shared utilities)
+    let ratio = fan_in as f64 / total as f64;
+    if ratio >= DATA_RATIO_THRESHOLD {
+        return Layer::Data;
+    }
+
+    // Quadrant 3: Low fan-in, high fan-out = Interface (entry points)
+    if fan_in < HIGH_FAN_IN_THRESHOLD && fan_out >= HIGH_FAN_OUT_THRESHOLD {
+        return Layer::Interface;
+    }
+
+    // Quadrant 4: Low activity = fallback to ratio-based
     if ratio > 0.65 {
         Layer::Data
     } else if ratio < 0.35 {
@@ -4007,6 +4099,49 @@ fn format_blast_radius(
 }
 
 /// Format critical paths section showing execution flows from entry points
+/// Check if symbol should be excluded from critical path traversal
+fn is_trivial_for_critical_path(symbol: &crate::Symbol) -> bool {
+    let name_lower = symbol.name.to_lowercase();
+    let file_lower = symbol.file_path.to_lowercase();
+
+    // Trivial function names (logging, debugging, serialization, formatting)
+    let trivial_names = [
+        "log", "debug", "info", "warn", "error", "trace",
+        "println", "print", "eprintln",
+        "fmt", "format", "display",
+        "serialize", "deserialize",
+        "clone", "drop", "into", "from", "to_string",
+        "unwrap", "expect",
+        "console.log", "console.warn", "console.error",
+    ];
+
+    if trivial_names.iter().any(|t| name_lower.contains(t)) {
+        return true;
+    }
+
+    // Logging/telemetry/tracing modules
+    let trivial_modules = [
+        "telemetry", "logging", "tracing", "log", "metrics",
+        "observability", "monitoring", "analytics",
+    ];
+
+    if trivial_modules.iter().any(|m| file_lower.contains(m)) {
+        return true;
+    }
+
+    false
+}
+
+/// Check if symbol belongs to utility module (widely-called helpers)
+fn is_utility_module(symbol: &crate::Symbol) -> bool {
+    let file_lower = symbol.file_path.to_lowercase();
+    let utility_patterns = [
+        "/utils/", "/helpers/", "/events/",
+        "/common/", "/shared/", "/lib/",
+    ];
+    utility_patterns.iter().any(|p| file_lower.contains(p))
+}
+
 fn format_critical_paths(entry_points: &[EntryPoint], facade: &IndexFacade) -> String {
     let mut output = String::new();
 
@@ -4037,9 +4172,12 @@ fn format_critical_paths(entry_points: &[EntryPoint], facade: &IndexFacade) -> S
             }
 
             // Find callee with highest fan-in (most important downstream symbol)
+            // Exclude trivial/logging functions and utility modules from critical path
             let best = callees
                 .iter()
                 .filter(|c| !visited.contains(&c.id))
+                .filter(|c| !is_trivial_for_critical_path(c))
+                .filter(|c| !is_utility_module(c))
                 .max_by_key(|c| facade.get_calling_functions(c.id).len());
 
             if let Some(next) = best {

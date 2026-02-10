@@ -100,6 +100,15 @@ pub struct IndexingConfig {
     #[serde(default = "default_tantivy_heap_mb")]
     pub tantivy_heap_mb: usize,
 
+    /// Optional fixed Tantivy writer worker threads (0 = Tantivy auto thread selection)
+    #[serde(default = "default_tantivy_writer_threads")]
+    pub tantivy_writer_threads: usize,
+
+    /// Disable Tantivy background merge policy during indexing.
+    /// Useful for throughput-focused bulk indexing benchmarks.
+    #[serde(default = "default_false")]
+    pub tantivy_no_merge_policy: bool,
+
     /// Maximum retry attempts for transient file system errors
     /// Handles permission delays from antivirus, SELinux, etc.
     #[serde(default = "default_max_retry_attempts")]
@@ -844,7 +853,32 @@ fn default_chunk_token_overlap() -> usize {
     96
 }
 fn default_chunk_hard_ignore_path_patterns() -> Vec<String> {
-    vec!["evals/**".to_string(), "**/*.eval.*".to_string()]
+    vec![
+        "evals/**".to_string(),
+        "**/*.eval.*".to_string(),
+        "target/**".to_string(),
+        "**/target/**".to_string(),
+        "node_modules/**".to_string(),
+        "**/node_modules/**".to_string(),
+        ".venv/**".to_string(),
+        "**/.venv/**".to_string(),
+        "venv/**".to_string(),
+        "**/venv/**".to_string(),
+        ".venv-quant/**".to_string(),
+        "**/.venv-quant/**".to_string(),
+        ".next/**".to_string(),
+        "**/.next/**".to_string(),
+        ".nuxt/**".to_string(),
+        "**/.nuxt/**".to_string(),
+        ".svelte-kit/**".to_string(),
+        "**/.svelte-kit/**".to_string(),
+        "dist/**".to_string(),
+        "**/dist/**".to_string(),
+        "build/**".to_string(),
+        "**/build/**".to_string(),
+        "out/**".to_string(),
+        "**/out/**".to_string(),
+    ]
 }
 fn default_chunk_single_line_penalty_factor() -> f32 {
     0.72
@@ -874,6 +908,9 @@ fn default_parallelism() -> usize {
 fn default_tantivy_heap_mb() -> usize {
     50 // Universal default that balances performance and permissions
 }
+fn default_tantivy_writer_threads() -> usize {
+    0 // Let Tantivy decide thread count by default
+}
 fn default_max_retry_attempts() -> u32 {
     3 // Exponential backoff: 100ms, 200ms, 400ms
 }
@@ -882,6 +919,55 @@ fn default_batch_size() -> usize {
 }
 fn default_batches_per_commit() -> usize {
     10 // Commit every 10 batches (~50K symbols)
+}
+fn default_global_ignore_patterns() -> Vec<String> {
+    vec![
+        ".git/**".to_string(),
+        ".codanna/**".to_string(),
+        "target/**".to_string(),
+        "**/target/**".to_string(),
+        "node_modules/**".to_string(),
+        "**/node_modules/**".to_string(),
+        "dist/**".to_string(),
+        "**/dist/**".to_string(),
+        "build/**".to_string(),
+        "**/build/**".to_string(),
+        "out/**".to_string(),
+        "**/out/**".to_string(),
+        ".next/**".to_string(),
+        "**/.next/**".to_string(),
+        ".nuxt/**".to_string(),
+        "**/.nuxt/**".to_string(),
+        ".svelte-kit/**".to_string(),
+        "**/.svelte-kit/**".to_string(),
+        ".turbo/**".to_string(),
+        "**/.turbo/**".to_string(),
+        "coverage/**".to_string(),
+        "**/coverage/**".to_string(),
+        ".cache/**".to_string(),
+        "**/.cache/**".to_string(),
+        ".venv/**".to_string(),
+        "**/.venv/**".to_string(),
+        "venv/**".to_string(),
+        "**/venv/**".to_string(),
+        ".venv-quant/**".to_string(),
+        "**/.venv-quant/**".to_string(),
+        "__pycache__/**".to_string(),
+        "**/__pycache__/**".to_string(),
+        ".pytest_cache/**".to_string(),
+        "**/.pytest_cache/**".to_string(),
+        ".mypy_cache/**".to_string(),
+        "**/.mypy_cache/**".to_string(),
+        ".ruff_cache/**".to_string(),
+        "**/.ruff_cache/**".to_string(),
+        ".tox/**".to_string(),
+        "**/.tox/**".to_string(),
+        ".nox/**".to_string(),
+        "**/.nox/**".to_string(),
+        "*.generated.*".to_string(),
+        "evals/**".to_string(),
+        "**/*.eval.*".to_string(),
+    ]
 }
 fn default_true() -> bool {
     true
@@ -983,16 +1069,11 @@ impl Default for IndexingConfig {
         Self {
             parallelism: default_parallelism(),
             tantivy_heap_mb: default_tantivy_heap_mb(),
+            tantivy_writer_threads: default_tantivy_writer_threads(),
+            tantivy_no_merge_policy: default_false(),
             max_retry_attempts: default_max_retry_attempts(),
             project_root: None,
-            ignore_patterns: vec![
-                "target/**".to_string(),
-                "node_modules/**".to_string(),
-                ".git/**".to_string(),
-                "*.generated.*".to_string(),
-                "evals/**".to_string(),
-                "**/*.eval.*".to_string(),
-            ],
+            ignore_patterns: default_global_ignore_patterns(),
             include_tests: false,
             indexed_paths: Vec::new(),
             batch_size: default_batch_size(),
@@ -1254,6 +1335,14 @@ impl Settings {
         self.indexed_paths_cache = self.indexing.indexed_paths.clone();
     }
 
+    fn merge_global_ignore_patterns(&mut self) {
+        for pattern in default_global_ignore_patterns() {
+            if !self.indexing.ignore_patterns.iter().any(|p| p == &pattern) {
+                self.indexing.ignore_patterns.push(pattern);
+            }
+        }
+    }
+
     /// Create settings specifically for init_config_file
     /// This populates all dynamic fields based on the current environment
     pub fn for_init() -> Result<Self, Box<dyn std::error::Error>> {
@@ -1296,6 +1385,7 @@ impl Settings {
                 if settings.workspace_root.is_none() {
                     settings.workspace_root = Self::workspace_root();
                 }
+                settings.merge_global_ignore_patterns();
                 settings.sync_indexed_path_cache();
                 settings
             })
@@ -1369,11 +1459,13 @@ impl Settings {
         Figment::new()
             .merge(Serialized::defaults(Settings::default()))
             .merge(Toml::file(path))
-            .merge(Env::prefixed("CI_").map(|key| {
-                key.as_str().to_lowercase().replace("__", ".").into()
-            }))
+            .merge(
+                Env::prefixed("CI_")
+                    .map(|key| key.as_str().to_lowercase().replace("__", ".").into()),
+            )
             .extract()
             .map(|mut settings: Settings| {
+                settings.merge_global_ignore_patterns();
                 settings.sync_indexed_path_cache();
                 settings
             })
@@ -1524,14 +1616,20 @@ impl Settings {
                 result.push_str(
                     "# Increase to 100-200MB if you have plenty of RAM and no restrictions\n",
                 );
+            } else if line.starts_with("tantivy_writer_threads = ") {
+                result.push_str(
+                    "\n# Optional fixed Tantivy writer worker threads (0 = Tantivy auto)\n",
+                );
+            } else if line.starts_with("tantivy_no_merge_policy = ") {
+                result.push_str(
+                    "\n# Disable Tantivy background merges during indexing (benchmark/bulk mode)\n",
+                );
             } else if line.starts_with("max_retry_attempts = ") {
                 result.push_str("\n# Retry attempts for transient file system errors\n");
                 result.push_str("# Exponential backoff: 100ms, 200ms, 400ms delays\n");
             } else if line.starts_with("ignore_patterns = ") {
                 result.push_str("\n# Additional patterns to ignore during indexing\n");
-                result.push_str(
-                    "# Defaults include eval/benchmark artifacts: evals/**, **/*.eval.*\n",
-                );
+                result.push_str("# Defaults include build/env artifacts (.next/.venv/target/dist/build/out) and eval artifacts\n");
             } else if line.starts_with("include_tests = ") {
                 result.push_str("\n# Include test files in indexing (default: false)\n");
                 result.push_str(
@@ -1556,9 +1654,7 @@ impl Settings {
                 );
                 result.push_str("# Keep off until A/B benchmarks validate correctness + speedup\n");
             } else if line.starts_with("semantic_single_save_mode = ") {
-                result.push_str(
-                    "\n# Reduce repeated semantic saves within one indexing command\n",
-                );
+                result.push_str("\n# Reduce repeated semantic saves within one indexing command\n");
                 result.push_str("# Keep off until A/B benchmarks validate correctness + speedup\n");
             } else if line.starts_with("show_progress = ") {
                 result.push_str("\n# Show progress bars during indexing (default: true)\n");
@@ -1730,9 +1826,7 @@ impl Settings {
                 continue;
             } else if in_chunk_search_section && line.starts_with("enabled = ") {
                 result.push_str("# Enable chunk indexing/search pipeline\n");
-            } else if in_chunk_search_section
-                && line.starts_with("rebuild_logging_verbose = ")
-            {
+            } else if in_chunk_search_section && line.starts_with("rebuild_logging_verbose = ") {
                 result.push_str("\n# Print detailed timing for chunk rebuild phases\n");
             } else if in_chunk_search_section && line.starts_with("top_k_vector = ") {
                 result.push_str("\n# Vector recall candidate pool size\n");
@@ -2018,6 +2112,13 @@ impl Settings {
 target/
 build/
 dist/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.turbo/
+coverage/
+.cache/
 *.o
 *.so
 *.dylib
@@ -2047,8 +2148,14 @@ dist/
 node_modules/
 vendor/
 .venv/
+.venv-quant/
 venv/
 __pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
 *.egg-info/
 .cargo/
 
@@ -2182,6 +2289,8 @@ mod tests {
         let expected_index_path = PathBuf::from(format!("{}/index", crate::init::local_dir_name()));
         assert_eq!(settings.index_path, expected_index_path);
         assert!(settings.indexing.parallelism > 0);
+        assert_eq!(settings.indexing.tantivy_writer_threads, 0);
+        assert!(!settings.indexing.tantivy_no_merge_policy);
         assert!(!settings.indexing.chunk_incremental_rebuild_enabled);
         assert!(!settings.indexing.semantic_single_save_mode);
         assert!(settings.languages.contains_key("rust"));
@@ -2212,9 +2321,17 @@ enabled = false
         let settings = Settings::load_from(&config_path).unwrap();
         assert_eq!(settings.version, 2);
         assert_eq!(settings.indexing.parallelism, 4);
-        assert_eq!(settings.indexing.ignore_patterns, vec!["custom/**"]);
-        // Default ignore patterns should be replaced by custom ones
-        assert_eq!(settings.indexing.ignore_patterns.len(), 1);
+        assert!(settings
+            .indexing
+            .ignore_patterns
+            .iter()
+            .any(|p| p == "custom/**"));
+        // Global defaults are merged so critical build/env ignores always apply.
+        assert!(settings
+            .indexing
+            .ignore_patterns
+            .iter()
+            .any(|p| p == "target/**"));
         assert_eq!(settings.mcp.max_context_size, 200000);
         assert!(!settings.languages["rust"].enabled);
     }
@@ -2348,10 +2465,26 @@ confidence_gate_require_dual_source = false
         assert_eq!(settings.chunk_search.chunk_token_target, 800);
         assert_eq!(settings.chunk_search.chunk_token_max, 4096);
         assert_eq!(settings.chunk_search.chunk_token_overlap, 96);
-        assert_eq!(
-            settings.chunk_search.hard_ignore_path_patterns,
-            vec!["evals/**".to_string(), "**/*.eval.*".to_string()]
-        );
+        assert!(settings
+            .chunk_search
+            .hard_ignore_path_patterns
+            .iter()
+            .any(|p| p == "evals/**"));
+        assert!(settings
+            .chunk_search
+            .hard_ignore_path_patterns
+            .iter()
+            .any(|p| p == "**/*.eval.*"));
+        assert!(settings
+            .chunk_search
+            .hard_ignore_path_patterns
+            .iter()
+            .any(|p| p == "target/**"));
+        assert!(settings
+            .chunk_search
+            .hard_ignore_path_patterns
+            .iter()
+            .any(|p| p == ".next/**"));
         assert!(settings.chunk_search.single_line_penalty_enabled);
         assert!((settings.chunk_search.single_line_penalty_factor - 0.72).abs() < f32::EPSILON);
         assert!(settings.chunk_search.block_chunk_boost_enabled);

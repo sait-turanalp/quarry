@@ -6,8 +6,9 @@
 //! - Language filtering
 //! - Hidden file handling
 
-use crate::Settings;
 use crate::parsing::get_registry;
+use crate::Settings;
+use glob::Pattern;
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -28,6 +29,8 @@ impl FileWalker {
     pub fn walk(&self, root: &Path) -> impl Iterator<Item = PathBuf> {
         let mut builder = WalkBuilder::new(root);
         let include_tests = self.settings.indexing.include_tests;
+        let ignore_patterns = compile_ignore_patterns(&self.settings.indexing.ignore_patterns);
+        let root = root.to_path_buf();
 
         // Configure the walker
         builder
@@ -71,6 +74,10 @@ impl FileWalker {
                 }
 
                 if !include_tests && is_test_path(path) {
+                    return None;
+                }
+
+                if path_matches_ignore_patterns(path, &root, &ignore_patterns) {
                     return None;
                 }
 
@@ -128,6 +135,51 @@ fn is_test_path(path: &Path) -> bool {
         .and_then(|s| s.to_str())
         .unwrap_or(file_name);
     stem.ends_with("_test") || stem.ends_with(".test") || stem.ends_with(".spec")
+}
+
+fn compile_ignore_patterns(raw_patterns: &[String]) -> Vec<Pattern> {
+    let mut compiled = Vec::new();
+    for raw in raw_patterns {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut candidates = vec![trimmed.to_string()];
+        if trimmed.ends_with("/**") && !trimmed.starts_with("**/") && !trimmed.starts_with('/') {
+            candidates.push(format!("**/{trimmed}"));
+        }
+        for candidate in candidates {
+            if let Ok(pattern) = Pattern::new(&candidate) {
+                compiled.push(pattern);
+            }
+        }
+    }
+    compiled
+}
+
+fn normalize_glob_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn path_matches_ignore_patterns(path: &Path, root: &Path, patterns: &[Pattern]) -> bool {
+    if patterns.is_empty() {
+        return false;
+    }
+    let abs = normalize_glob_path(path);
+    let rel = path
+        .strip_prefix(root)
+        .ok()
+        .map(normalize_glob_path)
+        .unwrap_or_else(|| abs.clone());
+    let rel_dot = if rel.starts_with("./") {
+        rel.clone()
+    } else {
+        format!("./{rel}")
+    };
+
+    patterns
+        .iter()
+        .any(|pattern| pattern.matches(&rel) || pattern.matches(&rel_dot) || pattern.matches(&abs))
 }
 
 #[cfg(test)]
@@ -206,5 +258,26 @@ mod tests {
         // Should only find the included file
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("included.rs"));
+    }
+
+    #[test]
+    fn test_settings_ignore_patterns_respected() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        let skip_dir = root.join("nested").join("target");
+        fs::create_dir_all(&skip_dir).unwrap();
+        fs::write(skip_dir.join("skip.rs"), "fn skip() {}").unwrap();
+        fs::write(root.join("keep.rs"), "fn keep() {}").unwrap();
+
+        let mut settings = Settings::default();
+        settings.languages.get_mut("python").unwrap().enabled = false;
+        settings.languages.get_mut("php").unwrap().enabled = false;
+        settings.indexing.ignore_patterns = vec!["target/**".to_string()];
+        let walker = FileWalker::new(Arc::new(settings));
+
+        let files: Vec<_> = walker.walk(root).collect();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("keep.rs"));
     }
 }

@@ -86,6 +86,16 @@ type ParseJoinHandle = thread::JoinHandle<(usize, usize, usize, Duration, Durati
 /// Thread join handle type for simple PARSE workers (no timing).
 type ParseSimpleJoinHandle = thread::JoinHandle<(usize, usize)>;
 
+/// Configuration for parallel chunk rebuild during Phase 2.
+/// When provided, chunk rebuild runs in a separate thread alongside LINKS.
+pub struct ChunkRebuildConfig {
+    pub index_base: PathBuf,
+    pub settings: Arc<Settings>,
+    pub workspace_root: Option<PathBuf>,
+    pub embedding_pool: Arc<crate::semantic::EmbeddingPool>,
+    pub indexed_paths: Vec<PathBuf>,
+}
+
 /// The parallel indexing pipeline.
 ///
 /// [PIPELINE API] Orchestrates multiple stages to efficiently index source code
@@ -365,6 +375,7 @@ impl Pipeline {
         let read_threads = self.config.read_threads;
         let discover_threads = self.config.discover_threads;
         let include_tests = settings.indexing.include_tests;
+        let ignore_patterns = settings.indexing.ignore_patterns.clone();
         let batch_size = self.config.batch_size;
         let batches_per_commit = self.config.batches_per_commit;
         let semantic_max_chunk_tokens = settings.semantic_search.max_chunk_tokens;
@@ -384,7 +395,8 @@ impl Pipeline {
             };
 
             let stage = DiscoverStage::new(discover_root, discover_threads)
-                .with_include_tests(include_tests);
+                .with_include_tests(include_tests)
+                .with_ignore_patterns(&ignore_patterns);
             let result = stage.run(path_tx);
 
             // Record metrics
@@ -645,6 +657,7 @@ impl Pipeline {
         let read_threads = self.config.read_threads;
         let discover_threads = self.config.discover_threads;
         let include_tests = settings.indexing.include_tests;
+        let ignore_patterns = settings.indexing.ignore_patterns.clone();
         let batch_size = self.config.batch_size;
         let batches_per_commit = self.config.batches_per_commit;
         let semantic_max_chunk_tokens = settings.semantic_search.max_chunk_tokens;
@@ -657,7 +670,8 @@ impl Pipeline {
         let discover_root = root.to_path_buf();
         let discover_handle = thread::spawn(move || {
             let stage = DiscoverStage::new(discover_root, discover_threads)
-                .with_include_tests(include_tests);
+                .with_include_tests(include_tests)
+                .with_ignore_patterns(&ignore_patterns);
             stage.run(path_tx)
         });
 
@@ -1273,8 +1287,9 @@ impl Pipeline {
         semantic: Option<Arc<Mutex<SimpleSemanticSearch>>>,
         embedding_pool: Option<Arc<crate::semantic::EmbeddingPool>>,
         force: bool,
+        chunk_config: Option<ChunkRebuildConfig>,
     ) -> PipelineResult<IncrementalStats> {
-        self.index_incremental_with_progress(root, index, semantic, embedding_pool, force, None)
+        self.index_incremental_with_progress(root, index, semantic, embedding_pool, force, None, chunk_config)
     }
 
     /// Index a directory with progress bars managed internally.
@@ -1290,13 +1305,14 @@ impl Pipeline {
         force: bool,
         show_progress: bool,
         total_files: usize,
+        chunk_config: Option<ChunkRebuildConfig>,
     ) -> PipelineResult<IncrementalStats> {
         use crate::io::status_line::{
             ProgressBar, ProgressBarOptions, ProgressBarStyle, StatusLine,
         };
 
         if !show_progress {
-            return self.index_incremental(root, index, semantic, embedding_pool, force);
+            return self.index_incremental(root, index, semantic, embedding_pool, force, chunk_config);
         }
 
         let start = Instant::now();
@@ -1440,7 +1456,8 @@ impl Pipeline {
                 let discover_stage = DiscoverStage::new(root, self.config.discover_threads)
                     .with_include_tests(self.settings.indexing.include_tests)
                     .with_index(Arc::clone(&index))
-                    .with_workspace_root(self.settings.workspace_root.clone());
+                    .with_workspace_root(self.settings.workspace_root.clone())
+                    .with_ignore_patterns(&self.settings.indexing.ignore_patterns);
                 let discover_result = discover_stage.run_incremental()?;
 
                 if discover_result.is_empty() {
@@ -1523,6 +1540,48 @@ impl Pipeline {
 
         // Run Phase 2 with separate progress bar (no rate - not meaningful for relationships)
         let symbol_cache = Arc::new(symbol_cache);
+
+        // Spawn parallel chunk rebuild alongside Phase 2
+        let chunk_handle = chunk_config.map(|config| {
+            let cache_clone = Arc::clone(&symbol_cache);
+            let settings = Arc::clone(&config.settings);
+            thread::spawn(move || {
+                let chunk_start = Instant::now();
+                let symbols = cache_clone.all_symbols();
+                tracing::info!(
+                    target: "pipeline",
+                    "PARALLEL CHUNK: extracted {} symbols from cache in {:.1}s",
+                    symbols.len(),
+                    chunk_start.elapsed().as_secs_f64()
+                );
+                let adapter = crate::chunks::PoolRecallAdapter::new(config.embedding_pool);
+                let indexer = crate::chunks::CodeChunkIndexer::new(&config.index_base);
+                let result = indexer.rebuild_from_symbols(
+                    &symbols,
+                    &adapter,
+                    config.workspace_root.as_deref(),
+                    Some(settings.as_ref()),
+                    settings.chunk_search.max_snippet_chars,
+                    settings.chunk_search.snippet_context_lines,
+                    settings.chunk_search.snippet_min_lines,
+                    Some(config.indexed_paths.as_slice()),
+                    settings.chunk_search.flow_chunk_enabled,
+                    &settings.chunk_search.flow_chunk_languages,
+                    settings.chunk_search.flow_chunk_max_per_symbol,
+                    settings.chunk_search.chunk_token_target,
+                    settings.chunk_search.chunk_token_max,
+                    settings.chunk_search.chunk_token_overlap,
+                    settings.chunk_search.embedding_dimension,
+                );
+                tracing::info!(
+                    target: "pipeline",
+                    "PARALLEL CHUNK REBUILD: {:.1}s",
+                    chunk_start.elapsed().as_secs_f64()
+                );
+                result
+            })
+        });
+
         let phase2_stats = if !unresolved.is_empty() {
             let phase2_options = bar_options.show_rate(false).with_label("LINKS");
             let phase2_bar = Arc::new(ProgressBar::with_options(
@@ -1547,6 +1606,21 @@ impl Pipeline {
         } else {
             Phase2Stats::default()
         };
+
+        // Wait for chunk rebuild
+        if let Some(handle) = chunk_handle {
+            match handle.join() {
+                Ok(Ok(stats)) => {
+                    tracing::info!(
+                        target: "pipeline",
+                        "Parallel chunk rebuild complete: {} chunks, {} embeddings",
+                        stats.chunks_indexed, stats.embeddings_indexed
+                    );
+                }
+                Ok(Err(e)) => tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}"),
+                Err(_) => tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked"),
+            }
+        }
 
         // Save embeddings
         if let Some(sem) = semantic {
@@ -1586,6 +1660,7 @@ impl Pipeline {
         embedding_pool: Option<Arc<crate::semantic::EmbeddingPool>>,
         force: bool,
         progress: Option<Arc<crate::io::status_line::ProgressBar>>,
+        chunk_config: Option<ChunkRebuildConfig>,
     ) -> PipelineResult<IncrementalStats> {
         let start = Instant::now();
         let semantic_path = self.semantic_path();
@@ -1599,6 +1674,7 @@ impl Pipeline {
                 embedding_pool,
                 &semantic_path,
                 progress,
+                chunk_config,
             );
         }
 
@@ -1606,7 +1682,8 @@ impl Pipeline {
         let discover_stage = DiscoverStage::new(root, self.config.discover_threads)
             .with_include_tests(self.settings.indexing.include_tests)
             .with_index(Arc::clone(&index))
-            .with_workspace_root(self.settings.workspace_root.clone());
+            .with_workspace_root(self.settings.workspace_root.clone())
+            .with_ignore_patterns(&self.settings.indexing.ignore_patterns);
         let discover_result = discover_stage.run_incremental()?;
 
         tracing::info!(
@@ -1675,6 +1752,42 @@ impl Pipeline {
 
         // Run Phase 2 resolution with progress if Phase 1 had progress
         let symbol_cache = Arc::new(symbol_cache);
+
+        // Spawn parallel chunk rebuild alongside Phase 2
+        let chunk_handle = chunk_config.map(|config| {
+            let cache_clone = Arc::clone(&symbol_cache);
+            let settings = Arc::clone(&config.settings);
+            thread::spawn(move || {
+                let chunk_start = Instant::now();
+                let symbols = cache_clone.all_symbols();
+                let adapter = crate::chunks::PoolRecallAdapter::new(config.embedding_pool);
+                let indexer = crate::chunks::CodeChunkIndexer::new(&config.index_base);
+                let result = indexer.rebuild_from_symbols(
+                    &symbols,
+                    &adapter,
+                    config.workspace_root.as_deref(),
+                    Some(settings.as_ref()),
+                    settings.chunk_search.max_snippet_chars,
+                    settings.chunk_search.snippet_context_lines,
+                    settings.chunk_search.snippet_min_lines,
+                    Some(config.indexed_paths.as_slice()),
+                    settings.chunk_search.flow_chunk_enabled,
+                    &settings.chunk_search.flow_chunk_languages,
+                    settings.chunk_search.flow_chunk_max_per_symbol,
+                    settings.chunk_search.chunk_token_target,
+                    settings.chunk_search.chunk_token_max,
+                    settings.chunk_search.chunk_token_overlap,
+                    settings.chunk_search.embedding_dimension,
+                );
+                tracing::info!(
+                    target: "pipeline",
+                    "PARALLEL CHUNK REBUILD: {:.1}s",
+                    chunk_start.elapsed().as_secs_f64()
+                );
+                result
+            })
+        });
+
         let phase2_stats = if progress.is_some() && !unresolved.is_empty() {
             // Create Phase 2 progress bar
             use crate::io::status_line::{
@@ -1710,6 +1823,21 @@ impl Pipeline {
         } else {
             self.run_phase2(unresolved, symbol_cache, Arc::clone(&index))?
         };
+
+        // Wait for chunk rebuild
+        if let Some(handle) = chunk_handle {
+            match handle.join() {
+                Ok(Ok(stats)) => {
+                    tracing::info!(
+                        target: "pipeline",
+                        "Parallel chunk rebuild complete: {} chunks, {} embeddings",
+                        stats.chunks_indexed, stats.embeddings_indexed
+                    );
+                }
+                Ok(Err(e)) => tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}"),
+                Err(_) => tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked"),
+            }
+        }
 
         // Save embeddings
         if let Some(sem) = semantic {
@@ -2014,6 +2142,7 @@ impl Pipeline {
         embedding_pool: Option<Arc<crate::semantic::EmbeddingPool>>,
         semantic_path: &Path,
         progress: Option<Arc<crate::io::status_line::ProgressBar>>,
+        chunk_config: Option<ChunkRebuildConfig>,
     ) -> PipelineResult<IncrementalStats> {
         let start = Instant::now();
         let show_progress = progress.is_some();
@@ -2041,6 +2170,42 @@ impl Pipeline {
 
         // Run Phase 2 resolution with progress if Phase 1 had progress
         let symbol_cache = Arc::new(symbol_cache);
+
+        // Spawn parallel chunk rebuild alongside Phase 2
+        let chunk_handle = chunk_config.map(|config| {
+            let cache_clone = Arc::clone(&symbol_cache);
+            let settings = Arc::clone(&config.settings);
+            thread::spawn(move || {
+                let chunk_start = Instant::now();
+                let symbols = cache_clone.all_symbols();
+                let adapter = crate::chunks::PoolRecallAdapter::new(config.embedding_pool);
+                let indexer = crate::chunks::CodeChunkIndexer::new(&config.index_base);
+                let result = indexer.rebuild_from_symbols(
+                    &symbols,
+                    &adapter,
+                    config.workspace_root.as_deref(),
+                    Some(settings.as_ref()),
+                    settings.chunk_search.max_snippet_chars,
+                    settings.chunk_search.snippet_context_lines,
+                    settings.chunk_search.snippet_min_lines,
+                    Some(config.indexed_paths.as_slice()),
+                    settings.chunk_search.flow_chunk_enabled,
+                    &settings.chunk_search.flow_chunk_languages,
+                    settings.chunk_search.flow_chunk_max_per_symbol,
+                    settings.chunk_search.chunk_token_target,
+                    settings.chunk_search.chunk_token_max,
+                    settings.chunk_search.chunk_token_overlap,
+                    settings.chunk_search.embedding_dimension,
+                );
+                tracing::info!(
+                    target: "pipeline",
+                    "PARALLEL CHUNK REBUILD: {:.1}s",
+                    chunk_start.elapsed().as_secs_f64()
+                );
+                result
+            })
+        });
+
         let phase2_stats = if show_progress && !unresolved.is_empty() {
             // Create Phase 2 progress bar
             use crate::io::status_line::{
@@ -2076,6 +2241,21 @@ impl Pipeline {
         } else {
             self.run_phase2(unresolved, symbol_cache, Arc::clone(&index))?
         };
+
+        // Wait for chunk rebuild
+        if let Some(handle) = chunk_handle {
+            match handle.join() {
+                Ok(Ok(stats)) => {
+                    tracing::info!(
+                        target: "pipeline",
+                        "Parallel chunk rebuild complete: {} chunks, {} embeddings",
+                        stats.chunks_indexed, stats.embeddings_indexed
+                    );
+                }
+                Ok(Err(e)) => tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}"),
+                Err(_) => tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked"),
+            }
+        }
 
         // Save embeddings
         if let Some(sem) = semantic {
@@ -2143,6 +2323,7 @@ impl Pipeline {
         let read_threads = self.config.read_threads;
         let discover_threads = self.config.discover_threads;
         let include_tests = settings.indexing.include_tests;
+        let ignore_patterns = settings.indexing.ignore_patterns.clone();
         let batch_size = self.config.batch_size;
         let batches_per_commit = self.config.batches_per_commit;
         let semantic_max_chunk_tokens = settings.semantic_search.max_chunk_tokens;
@@ -2181,7 +2362,8 @@ impl Pipeline {
             };
 
             let stage = DiscoverStage::new(discover_root, discover_threads)
-                .with_include_tests(include_tests);
+                .with_include_tests(include_tests)
+                .with_ignore_patterns(&ignore_patterns);
             let result = stage.run(path_tx);
 
             if let (Some(tracker), Ok(count)) = (&tracker, &result) {
@@ -2636,6 +2818,7 @@ impl Pipeline {
                     semantic.clone(),
                     embedding_pool.clone(),
                     false,
+                    None,
                 ) {
                     Ok(inc_stats) => {
                         stats.files_indexed += inc_stats.index_stats.files_indexed;
