@@ -136,6 +136,51 @@ Identifier splitting tek repoda umut vericiydi, 4 repoda çöktü:
 4'ün 3'ünde negatif → reddedildi, scaffolding söküldü. Ayrıca expansion açıkken kazanç
 zaten sıfırlanıyordu (expansion'ın 2. rewrite'ı aynı sinyali veriyor).
 
+## Tur 9: çok adımlı retrieval (2026-08-01) — ALTI POLİTİKANIN ALTISI DA REDDEDİLDİ
+
+Harness'ı dürüst yapan kural: **her politika tam 10 dosya döndürür.** Çok adımlı retrieval,
+"gördüğü her şeyin birleşimi" ile ölçülürse otomatik kazanır; bu turda kazanç ancak *aynı
+bütçede daha iyi seçim* demek.
+
+4 repo, 1376 sorgu, `limit=10`:
+
+| politika | django | tokio | vite | hugo | ort Δ | çağrı |
+|---|---|---|---|---|---|---|
+| **A tek atış** | **0.792** | **0.770** | **0.742** | **0.702** | — | 1.0 |
+| B mekanik genişletme | +0.013 | 0.000 | +0.003 | 0.000 | +0.004 | 1.9 |
+| C sözde-alaka geri besleme | −0.024 | −0.010 | −0.019 | −0.017 | −0.018 | 2.0 |
+| D graf genişletme | 0.000 | 0.000 | −0.003 | 0.000 | −0.001 | 2.4 |
+| E kapsam daraltma | −0.054 | −0.010 | 0.000 | −0.017 | −0.020 | 2.8 |
+| F uyarlanabilir | −0.019 | −0.010 | −0.008 | −0.021 | −0.015 | 2.1 |
+
+**Mekanizma: sorgu kayması.** İkinci sorgu birinci turun sonuçlarından besleniyor; birinci
+tur yanlışsa geri besleme terimleri yanlış mahalleye sapıyor ve doğru dosyayı daha da
+aşağı itiyor. C, E ve F'in negatif olmasının sebebi bu. D'nin sıfır kalması, call-graph
+özelliğinin öğrenilmiş ağırlığının 0.00 çıkmasıyla birebir tutarlı — graf bu görevde ne
+sıralama özelliği ne de recall kaynağı olarak bilgi taşıyor.
+
+**Sonuç:** havuz cevabı %98 içeriyor ama hangi aday olduğunu **sorgudan türetilebilecek
+hiçbir deterministik sinyal bilmiyor.** Bu sınıfın tavanına gelindi.
+
+## Tur 8: geç etkileşim / MaxSim (2026-08-01) — REDDEDİLDİ
+
+Aynı int8 tablosu, aynı adaylar, iki skorlama (`benchmarks/retrieval/maxsim_probe.py`):
+
+| skorlama | django | tokio |
+|---|---|---|
+| mevcut hibrit sıralama | **0.807** | **0.760** |
+| ilk 30'u MaxSim ile yeniden sırala | 0.807 | 0.760 |
+| salt MaxSim | 0.760 | 0.753 |
+| salt havuzlanmış cosine | 0.713 | 0.707 |
+
+MaxSim havuzlanmış cosine'ı geçiyor (token seviyesi eşleşme gerçek sinyal) ama hibriti
+geçemiyor ve **reranker olarak etkisi tam sıfır**. Mekanizma: statik tabloda bir token'ın
+vektörü her yerde aynı olduğu için MaxSim yumuşak terim eşleşmesine indirgeniyor — onun
+sert hâlini BM25 zaten yapıyor ve zaten füzyonda. Literatür de aynı yönde: DRMM (donmuş
+statik embedding + token etkileşimi) BERT-MaxP'ye yeniliyor, gerekçe bağlamsallaştırma
+([Dai & Callan, SIGIR'19](https://ar5iv.org/abs/1905.09217)). ColBERT tarzı token-vektör
+deposu kurulmadı.
+
 ## Tur 7: öğrenilmiş sıralayıcı ve call-graph (2026-08-01) — İKİSİ DE REDDEDİLDİ
 
 Elle ayarlı ağırlıklar dört dilde çöktüğü için (django +0.057, tokio −0.136) ağırlıkları
