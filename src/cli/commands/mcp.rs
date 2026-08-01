@@ -1144,7 +1144,9 @@ pub async fn run(
                 .as_ref()
                 .and_then(|m| m.get("limit"))
                 .and_then(|v| v.as_u64())
-                .unwrap_or(10) as u32;
+                // One source of truth: a hardcoded copy here would silently keep the CLI on
+                // the old default while the MCP tool moved on.
+                .unwrap_or(crate::mcp::default_chunk_limit() as u64) as u32;
             let threshold = arguments
                 .as_ref()
                 .and_then(|m| m.get("threshold"))
@@ -1156,7 +1158,7 @@ pub async fn run(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             server
-                .semantic_search_chunks(Parameters(SemanticSearchRequest {
+                .semantic_search_chunks(Parameters(crate::mcp::ChunkSearchRequest {
                     query: query.to_string(),
                     limit,
                     threshold,

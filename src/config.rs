@@ -796,14 +796,19 @@ fn default_confidence_gate_require_dual_source() -> bool {
 fn default_chunk_max_snippet_chars() -> usize {
     4_000
 }
+// Recall width, measured. With one chunk per file the fused pool is a hard ceiling on how
+// many distinct files can ever be returned, so 50 capped file-level recall at ~0.80 no
+// matter how good the ranking was. Widening to 500 moves R@50 from 0.804 to 0.903 and R@10
+// from 0.751 to 0.767 (4 repos, 1376 queries, 28 wins / 10 losses) for 6-20 ms instead of
+// 1-7 ms. 2000 buys a further 0.006 for 24-66 ms, which is the wrong side of the knee.
 fn default_chunk_top_k_vector() -> usize {
-    100
+    500
 }
 fn default_chunk_top_k_bm25() -> usize {
-    100
+    500
 }
 fn default_chunk_top_k_fused() -> usize {
-    50
+    500
 }
 fn default_chunk_rrf_k() -> u32 {
     60

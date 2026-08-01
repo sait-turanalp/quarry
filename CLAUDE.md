@@ -147,6 +147,14 @@ Foot-guns learned the hard way:
   `model.safetensors` (I8 `embeddings` tensor), `tokenizer.json`, `config.json`.
 - Noise floor on the 123-query holdout is **±0.016**; treat anything under 0.05 as noise
   and confirm with paired win/loss counts, never with a mean difference alone.
+- **`codanna init` freezes every default into `settings.toml`** (`toml::to_string_pretty`
+  over the whole `Settings::default()`), so changing a Rust default reaches new projects
+  only — every already-initialised project stays pinned to the config it got on day one.
+  After changing a default, update the eval repos' `.codanna/settings.toml` too, or the
+  measurement silently reports the old behaviour.
+- **`top_k_fused` is the ceiling on file-level recall,** not a ranking knob. With
+  `diversity_max_per_file = 1` the fused pool caps how many *distinct files* can ever be
+  returned; at the old value of 50 no amount of reranking could pass R@50 ≈ 0.80.
 
 ## Features
 

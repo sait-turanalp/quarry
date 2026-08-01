@@ -17,27 +17,30 @@ model = "minishlab/potion-code-16M-v2"   # int8, dim 256, ~16 MB tablo
 enabled = false
 
 [chunk_search]
-# rrf_k / top_k_* → DEFAULT. Tuning'leri gürültüydü (holdout 4 kazanç / 3 kayıp).
+top_k_vector = 500                       # Tur 11: havuz genişliği, tavanı belirleyen ayar
+top_k_bm25   = 500
+top_k_fused  = 500                       # eski default 50 idi; dosya recall'ünü 0.80'e kilitliyordu
+fusion_alpha = 0.8                       # Tur 6
+file_evidence_alpha = 0.5                # Tur 6
+diversity_max_per_file = 1
 post_rerank_heuristics_enabled = false   # default; açmak kazandırmıyor, gecikmeyi 2× yapıyor
 flow_chunk_enabled = true                # taşıyıcı, dokunma
 ```
 
-**Query expansion (ürüne taşınacak tek yeni kod):** sorguyu 3'e aç — ① orijinal
-② identifier'ları bölünmüş (`orderby_issubset_groupby` → `orderby issubset groupby`)
-③ baştaki fiil atılmış (`Added support for X` → `support for X`) — her birini `limit 20`
-ile ara, 3 listeyi RRF(k=5) ile birleştir, üstten 10 al.
+Ölçülen: **R@10 0.767 · R@30 0.865 · R@50 0.903** (4 repo, 1376 sorgu), p50 6-20 ms.
 
-Beklenen: **R@10 ≈ 0.82, R@5 ≈ 0.75, p50 4-8 ms.**
+**Query expansion gönderilmedi** — ilk turdaki "+0.07"si kırpılmış havuz artefaktıydı,
+havuz düzeltildikten sonra Tur 9'da yeniden ölçüldü ve +0.004'e düştü.
 
 ## Neyin gerçekten işe yaradığı (gürültü eşiği 0.05)
 
 | Değişiklik | Δ R@10 | Karar |
 |---|---|---|
-| query expansion | **+0.07** | ✅ al |
+| ~~query expansion~~ | ~~+0.07~~ → +0.004 | ❌ artefakttı, bkz. Tur 9 |
 | potion-retrieval-32M → potion-code (tek sorgu) | **+0.065** | ✅ al |
 | flow chunks (kapatınca) | **−0.057** | ✅ açık kalsın |
 | potion-code v1 → v2 | −0.008 (4 kazanç / 5 kayıp) | ⚪ gürültü — yine de v2 (CoIR'de daha iyi genelliyor, bedava) |
-| havuz tuning (rrf_k / top_k) | +0.008 (4/3) | ❌ at |
+| havuz genişliği (top_k_* 50/100 → 500) | +0.016 R@10, **+0.099 R@50** (28/10) | ✅ al, bkz. Tur 11 |
 | post-rerank heuristics (15 knob) | 0.000 | ❌ at |
 | chunk token target/overlap | 0.000 | ❌ at |
 
@@ -135,6 +138,51 @@ Identifier splitting tek repoda umut vericiydi, 4 repoda çöktü:
 
 4'ün 3'ünde negatif → reddedildi, scaffolding söküldü. Ayrıca expansion açıkken kazanç
 zaten sıfırlanıyordu (expansion'ın 2. rewrite'ı aynı sinyali veriyor).
+
+## Tur 11: havuz genişliği (2026-08-01) — GÖNDERİLDİ, turun en büyük kazancı
+
+Tur 10'dan sonra elde kalan soru şuydu: cevap havuzun içinde ama ilk 10'a gelmiyorsa,
+tüketici *daha fazla* dosya okusa ne olur? `benchmarks/retrieval/budget.py` bunu gönderilen
+config'le ölçtü ve eğri 30'da düz çıktı — R@30 ≈ R@50. Oysa havuzu 2000'e açtığımız Tur 5
+tavan ölçümünde R@50 0.891'di.
+
+Sebep tek satır: **`top_k_fused = 50`.** `diversity_max_per_file = 1` ile birlikte, füzyon
+havuzu döndürülebilecek *farklı dosya* sayısına sert tavan koyuyor. Tur 5'te bu ayarı bir
+tavan etüdü sanıp gönderilen config'e taşımamıştık; aradaki 9 puanın sıralamayla hiç ilgisi
+yokmuş.
+
+Havuz genişliği eğrisi (4 repo, 1376 sorgu, `budget.py`):
+
+| havuz | R@10 | R@20 | R@30 | R@50 | p50 |
+|---|---|---|---|---|---|
+| 100/100/50 (eski default) | 0.751 | 0.793 | 0.803 | 0.804 | 1-7 ms |
+| 200 | 0.761 | 0.827 | 0.856 | 0.888 | 2-8 ms |
+| **500 (gönderildi)** | **0.767** | 0.832 | 0.865 | **0.903** | 6-20 ms |
+| 2000 | 0.768 | 0.834 | 0.867 | 0.909 | 24-66 ms |
+
+Diz 500'de: 2000'e çıkmak R@50'ye +0.006 katıp gecikmeyi 3-4× yapıyor.
+
+Eşleştirilmiş doğrulama, limit=10'da, **4 repoda da aynı yön**: django +0.011 (6/2) ·
+tokio +0.005 (7/5) · vite +0.022 (9/1) · hugo +0.017 (6/2) → toplam 28 kazanç / 10 kayıp.
+R@10 farkı tek başına 0.05 eşiğinin altında, ama kabul gerekçesi R@10 değil: aynı config
+R@50'yi 0.804'ten 0.903'e taşıyor ve maliyeti yalnız gecikme — ek çağrı yok, ek model yok.
+
+`budget.py`'ın kendi iç kontrolü: R@10, `limit=10` ve `limit=50` çağrılarında birebir aynı
+çıkıyor. Daha fazla sonuç istemek ilk onun sıralamasını bozmuyor, yani eğri gerçek.
+
+## Tur 10: güçlü encoder ile tavan probe'u (2026-08-01) — MODEL EKSENİ KAPANDI
+
+Gecikme bütçesi 50 ms'e açılınca oturum boyunca bağlayıcı olan kısıt ("transformer forward
+pass yok") düştü. `ceiling_probe_strong.py` mevcut hibritin ürettiği havuzu
+`jinaai/jina-embeddings-v2-base-code` (161M, ONNX) ile yeniden sıraladı.
+
+django, n=40, 25 aday: havuzda var **0.900** · mevcut sıralama **0.800** · güçlü model
+**0.825**. Ulaşılabilir 10 puanın 2.5'i — eşiğin altında, üstelik CPU'da chunk başına
+~700 ms (ürünleştirilemez). CoreML EP denendi: 1012 düğümün 751'ini aldı ama süreç çöktü
+(dinamik shape'te kırılgan).
+
+Sonuç: kalan kayıp model kapasitesi değil. Bu, Tur 11'in havuz bulgusuyla birlikte okununca
+tam anlamını buluyor — sorun adayları *sıralamak* değil, adayları havuza *almaktı*.
 
 ## Tur 9: çok adımlı retrieval (2026-08-01) — ALTI POLİTİKANIN ALTISI DA REDDEDİLDİ
 
