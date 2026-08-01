@@ -48,6 +48,27 @@ pub fn split_identifier(name: &str) -> Vec<String> {
     words
 }
 
+/// Append the word-split form of every multi-part identifier in `text`.
+///
+/// The original spelling is kept so exact matches still score; only the extra sub-words
+/// are added, which is what makes `get_user_by_id` reachable from "user id".
+pub fn expand_identifiers(text: &str) -> String {
+    let mut extra: Vec<String> = Vec::new();
+    for token in text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-')) {
+        if token.len() < 3 {
+            continue;
+        }
+        let parts = split_identifier(token);
+        if parts.len() > 1 {
+            extra.extend(parts);
+        }
+    }
+    if extra.is_empty() {
+        return text.to_string();
+    }
+    format!("{text} {}", extra.join(" "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

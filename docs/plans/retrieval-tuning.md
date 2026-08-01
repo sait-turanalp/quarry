@@ -136,6 +136,36 @@ Identifier splitting tek repoda umut vericiydi, 4 repoda çöktü:
 4'ün 3'ünde negatif → reddedildi, scaffolding söküldü. Ayrıca expansion açıkken kazanç
 zaten sıfırlanıyordu (expansion'ın 2. rewrite'ı aynı sinyali veriyor).
 
+## Tur 7: öğrenilmiş sıralayıcı ve call-graph (2026-08-01) — İKİSİ DE REDDEDİLDİ
+
+Elle ayarlı ağırlıklar dört dilde çöktüğü için (django +0.057, tokio −0.136) ağırlıkları
+öğrenmeyi denedik. Ucuz özellikler: normalize bm25/vektör skoru, en iyi chunk'ın her iki
+koldaki sırası, dosyadaki aday chunk sayısı, kanıt kuyruğu, iki kolda birden görünme,
+yol-token örtüşmesi, imza eşleşmesi. Coordinate ascent doğrudan R@10'u optimize ediyor,
+doğrulama **leave-one-repo-out**.
+
+**9 özellik, LOO 4/4 geçti ama ortalama yalnızca +0.016** (havuza giren sorgular üzerinde;
+gerçek metriğe ≈ +0.015). Eşiğin (0.05) altında → gönderilmedi. Sonuç şunu söylüyor:
+**mevcut elle formül bu özelliklerin doğrusal optimumuna zaten çok yakın.**
+
+Öğrenilen ağırlıklar bir sadeleştirme fırsatı gösterdi: `evidence_tail` **negatif** çıkıyor
+çünkü `n_chunks` aynı bilgiyi daha temiz taşıyor — yani `file_evidence_alpha` formülü,
+dosyadaki chunk sayısını saymanın dolaylı hali.
+
+### Call-graph özelliği: ölçümle reddedildi
+
+Literatürdeki en büyük tek kaldıraç (LARGER ablation −%13.5) bizde **hiçbir şey vermedi**:
+coordinate ascent, kullanma seçeneği varken `graph_nbrs` ağırlığını **+0.00** seçti; işe
+yaramaz 10. boyut LOO'yu 4/4'ten 2/4'e düşürdü.
+
+Mekanizma: LARGER'da graf **recall** kazandırıyor. Bizde havuz zaten sorguların %98'inde
+cevabı içeriyor — recall sorun değil. Zaten getirilmiş adaylar arasında sıralama özelliği
+olarak graf komşuluğu, bm25/vektör/yol sinyallerinin ötesine geçmiyor.
+
+Yan ölçüm: aday başına ilişki sorgusu **0.66 ms** (MCP dahil) → 100 aday için 4 ms
+bütçesinin 5-10 katı. Graf ancak toplu okunup bellekte tutulursa kullanılabilirdi; kazanç
+sıfır çıktığı için o yapı da geri alındı.
+
 ## Tur 6: skor füzyonu + dosya kanıtı (2026-08-01) — GÖNDERİLDİ
 
 Tavan ölçümü işi sıralamaya yönlendirdikten sonra iki yapısal değişiklik:

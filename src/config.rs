@@ -432,8 +432,11 @@ pub struct GuidanceRange {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RerankingConfig {
-    /// Enable cross-encoder reranking after RRF merge
-    #[serde(default = "default_true")]
+    /// Enable cross-encoder reranking after fusion.
+    ///
+    /// Off by default: measured at 680-2200 ms per query for +0.09 file-level R@10, which
+    /// score fusion and file-level evidence beat at no latency cost.
+    #[serde(default = "default_false")]
     pub enabled: bool,
 
     /// Reranker model name
@@ -726,7 +729,10 @@ impl Default for ChunkSearchConfig {
 impl Default for RerankingConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            // Off: the cross-encoder cost 680-2200 ms per query for +0.09 file-level R@10,
+            // and score fusion plus file-level evidence recover more than that for free.
+            // Turn it on only if a sub-150 ms reranker becomes available.
+            enabled: false,
             model: default_reranker_model(),
             top_n: default_rerank_top_n(),
             timeout_ms: default_rerank_timeout_ms(),
@@ -826,8 +832,14 @@ fn default_chunk_source_weight_tests() -> f32 {
 fn default_chunk_source_weight_generated() -> f32 {
     0.3
 }
+/// One chunk per file by default.
+///
+/// The caller asks for N results and reasons about files, so spending two of those slots
+/// on one file halves the distinct files it can see. Measured across django/tokio/vite/hugo:
+/// +0.074..+0.086 file-level R@10 versus a cap of 2, with zero losing queries in any repo.
+/// Raise it when the consumer wants several places inside the same file instead.
 fn default_chunk_diversity_max_per_file() -> usize {
-    2
+    1
 }
 fn default_chunk_symbol_aware_weight() -> f32 {
     0.2
@@ -1008,8 +1020,12 @@ fn default_false() -> bool {
 fn default_max_context_size() -> usize {
     100_000
 }
+/// Code-specific static embeddings.
+///
+/// Measured against the general-purpose `potion-retrieval-32M` on four repositories:
+/// +0.065 file-level R@10 on a single query, in half the table size (256 dims, ~16 MB int8).
 fn default_embedding_model() -> String {
-    "minishlab/potion-retrieval-32M".to_string()
+    "minishlab/potion-code-16M-v2".to_string()
 }
 fn default_semantic_backend() -> SemanticBackend {
     SemanticBackend::Model2vec
