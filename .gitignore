@@ -80,3 +80,8 @@ vendors/fastembed-rs
 !/scripts/
 !/scripts/install.sh
 !/scripts/install.ps1
+
+# python venv (quantization) — rebuild on demand
+.venv-quant/
+.tmp-static-int8/
+*.data
