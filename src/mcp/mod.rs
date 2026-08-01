@@ -4415,7 +4415,7 @@ fn extract_keywords_from_symbols(symbols: &[crate::Symbol]) -> Vec<String> {
         }
 
         // Split symbol name into words
-        let words = split_symbol_name(symbol.name.as_ref());
+        let words = crate::utils::split_identifier(symbol.name.as_ref());
 
         for word in words {
             let word_lower = word.to_lowercase();
@@ -4430,40 +4430,6 @@ fn extract_keywords_from_symbols(symbols: &[crate::Symbol]) -> Vec<String> {
     keywords
 }
 
-/// Split camelCase or snake_case symbol name into words
-fn split_symbol_name(name: &str) -> Vec<String> {
-    let mut words = Vec::new();
-    let mut current_word = String::new();
-    let mut prev_was_upper = false;
-
-    for ch in name.chars() {
-        if ch == '_' || ch == '-' {
-            // snake_case or kebab-case separator
-            if !current_word.is_empty() {
-                words.push(current_word.clone());
-                current_word.clear();
-            }
-            prev_was_upper = false;
-        } else if ch.is_uppercase() {
-            // camelCase boundary
-            if !current_word.is_empty() && !prev_was_upper {
-                words.push(current_word.clone());
-                current_word.clear();
-            }
-            current_word.push(ch);
-            prev_was_upper = true;
-        } else {
-            current_word.push(ch);
-            prev_was_upper = false;
-        }
-    }
-
-    if !current_word.is_empty() {
-        words.push(current_word);
-    }
-
-    words
-}
 
 /// Analyze keyword frequency and return top keywords
 fn analyze_keyword_frequency(keywords: &[String], top_n: usize) -> Vec<(String, usize)> {

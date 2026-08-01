@@ -121,6 +121,33 @@ Tests live in `tests/` with separate test files per domain:
 
 - **No subagent for analysis**: When exploring, searching, or analyzing code, do it directly with Glob/Grep/Read tools — never delegate research to subagents. Subagents are only for truly independent parallel tasks, not for code exploration.
 
+## Retrieval quality — measure, never guess
+
+Any change touching chunk search, embeddings, fusion or ranking is measured with
+`benchmarks/retrieval/` (leakage-free ground truth from git history; primary metric R@10).
+Read that README before tuning anything — it holds the discipline rules and the
+measured verdicts. Active plan: `docs/plans/retrieval-tuning.md`.
+
+Two settings carry the retrieval quality and were both derived from measurement, not taste
+(`[chunk_search]`): `fusion_alpha` weights the dense arm in a min-max normalised convex
+combination instead of RRF, and `file_evidence_alpha` lets several matching chunks of one
+file compound its score. Changing either without re-running the suite is a regression risk.
+
+Foot-guns learned the hard way:
+- **Bool env overrides must be lowercase** (`CI_..._ENABLED=true|false`). `"True"/"False"`
+  fails figment parsing and silently drops **all** Settings to defaults — including
+  `reranking.enabled=true`. Symptom: query latency jumps from ~4 ms to ~2000 ms.
+- **`post_rerank_heuristics_enabled` is false by default**, and `facade.rs` returns early
+  when it is false — so source weights, penalties, symbol-aware scoring, diversity and the
+  result filter are all dead code in the default path. Turning them on gains nothing
+  (measured d=0.000) and doubles latency.
+- **int8 quantization of a model2vec table must use a single global symmetric scale.**
+  Per-row scales do not cancel under L2 normalisation and corrupt the model.
+- A static embedding model must live at `~/.codanna/models/<name>-int8/` with
+  `model.safetensors` (I8 `embeddings` tensor), `tokenizer.json`, `config.json`.
+- Noise floor on the 123-query holdout is **±0.016**; treat anything under 0.05 as noise
+  and confirm with paired win/loss counts, never with a mean difference alone.
+
 ## Features
 
 - `default = ["http-server"]` - includes HTTP server (axum)

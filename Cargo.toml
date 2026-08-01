@@ -135,6 +135,10 @@ rcgen = ["dep:rcgen"]
 # gpu-rocm = ["fastembed/rocm"]
 
 [profile.release]
+# Incremental is off by default in release; without it every one-line change in this
+# crate pays a full recompile+link (minutes), which makes the retrieval measurement
+# loop in benchmarks/retrieval/ unusable.
+incremental = true
 # opt-level = 3
 # lto = true
 # codegen-units = 1

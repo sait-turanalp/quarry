@@ -1,0 +1,34 @@
+[
+  {
+    "name": "django",
+    "url": "https://github.com/django/django.git",
+    "ext": ".py",
+    "depth": 1100,
+    "base_back": 900,
+    "queries": 400
+  },
+  {
+    "name": "tokio",
+    "url": "https://github.com/tokio-rs/tokio.git",
+    "ext": ".rs",
+    "depth": 1100,
+    "base_back": 800,
+    "queries": 400
+  },
+  {
+    "name": "vite",
+    "url": "https://github.com/vitejs/vite.git",
+    "ext": ".ts",
+    "depth": 1100,
+    "base_back": 800,
+    "queries": 400
+  },
+  {
+    "name": "hugo",
+    "url": "https://github.com/gohugoio/hugo.git",
+    "ext": ".go",
+    "depth": 1100,
+    "base_back": 800,
+    "queries": 400
+  }
+]

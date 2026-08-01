@@ -17,8 +17,8 @@
 //! For logging, use `RUST_LOG` environment variable directly (standard Rust pattern).
 
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -628,6 +628,24 @@ pub struct ChunkSearchConfig {
     #[serde(default = "default_chunk_hard_ignore_path_patterns")]
     pub hard_ignore_path_patterns: Vec<String>,
 
+    /// Weight of the dense arm when fusing the two ranked lists by normalised score.
+    ///
+    /// `Some(a)` combines min-max normalised BM25 and vector scores as
+    /// `a * dense + (1 - a) * bm25`; `None` falls back to rank-based RRF. Score fusion
+    /// keeps magnitude information that RRF discards, measured at +0.018..+0.057 file-level
+    /// R@10 across Python/Rust/TypeScript/Go.
+    #[serde(default = "default_chunk_fusion_alpha")]
+    pub fusion_alpha: Option<f32>,
+
+    /// How strongly extra matching chunks of the same file compound its score.
+    ///
+    /// A file is scored as `best_chunk + alpha * decaying_sum(remaining chunks)`. `0.0`
+    /// reduces to classic max-passage ranking; higher values reward files matched in
+    /// several places. Retrieval is chunk-level but callers reason in files, and this is
+    /// the only place that gap is closed.
+    #[serde(default = "default_chunk_file_evidence_alpha")]
+    pub file_evidence_alpha: f32,
+
     /// Downrank single-line chunks to reduce noisy one-liners.
     #[serde(default = "default_true")]
     pub single_line_penalty_enabled: bool,
@@ -692,6 +710,8 @@ impl Default for ChunkSearchConfig {
             chunk_token_max: default_chunk_token_max(),
             chunk_token_overlap: default_chunk_token_overlap(),
             hard_ignore_path_patterns: default_chunk_hard_ignore_path_patterns(),
+            fusion_alpha: default_chunk_fusion_alpha(),
+            file_evidence_alpha: default_chunk_file_evidence_alpha(),
             single_line_penalty_enabled: default_true(),
             single_line_penalty_factor: default_chunk_single_line_penalty_factor(),
             block_chunk_boost_enabled: default_true(),
@@ -880,6 +900,16 @@ fn default_chunk_hard_ignore_path_patterns() -> Vec<String> {
         "**/out/**".to_string(),
     ]
 }
+/// Dense-arm weight for score fusion. Measured across four languages: the curve is flat
+/// between 0.7 and 0.9, so the middle is taken rather than the edge next to pure-vector.
+fn default_chunk_fusion_alpha() -> Option<f32> {
+    Some(0.8)
+}
+
+fn default_chunk_file_evidence_alpha() -> f32 {
+    0.5
+}
+
 fn default_chunk_single_line_penalty_factor() -> f32 {
     0.72
 }
@@ -2321,17 +2351,21 @@ enabled = false
         let settings = Settings::load_from(&config_path).unwrap();
         assert_eq!(settings.version, 2);
         assert_eq!(settings.indexing.parallelism, 4);
-        assert!(settings
-            .indexing
-            .ignore_patterns
-            .iter()
-            .any(|p| p == "custom/**"));
+        assert!(
+            settings
+                .indexing
+                .ignore_patterns
+                .iter()
+                .any(|p| p == "custom/**")
+        );
         // Global defaults are merged so critical build/env ignores always apply.
-        assert!(settings
-            .indexing
-            .ignore_patterns
-            .iter()
-            .any(|p| p == "target/**"));
+        assert!(
+            settings
+                .indexing
+                .ignore_patterns
+                .iter()
+                .any(|p| p == "target/**")
+        );
         assert_eq!(settings.mcp.max_context_size, 200000);
         assert!(!settings.languages["rust"].enabled);
     }
@@ -2465,26 +2499,34 @@ confidence_gate_require_dual_source = false
         assert_eq!(settings.chunk_search.chunk_token_target, 800);
         assert_eq!(settings.chunk_search.chunk_token_max, 4096);
         assert_eq!(settings.chunk_search.chunk_token_overlap, 96);
-        assert!(settings
-            .chunk_search
-            .hard_ignore_path_patterns
-            .iter()
-            .any(|p| p == "evals/**"));
-        assert!(settings
-            .chunk_search
-            .hard_ignore_path_patterns
-            .iter()
-            .any(|p| p == "**/*.eval.*"));
-        assert!(settings
-            .chunk_search
-            .hard_ignore_path_patterns
-            .iter()
-            .any(|p| p == "target/**"));
-        assert!(settings
-            .chunk_search
-            .hard_ignore_path_patterns
-            .iter()
-            .any(|p| p == ".next/**"));
+        assert!(
+            settings
+                .chunk_search
+                .hard_ignore_path_patterns
+                .iter()
+                .any(|p| p == "evals/**")
+        );
+        assert!(
+            settings
+                .chunk_search
+                .hard_ignore_path_patterns
+                .iter()
+                .any(|p| p == "**/*.eval.*")
+        );
+        assert!(
+            settings
+                .chunk_search
+                .hard_ignore_path_patterns
+                .iter()
+                .any(|p| p == "target/**")
+        );
+        assert!(
+            settings
+                .chunk_search
+                .hard_ignore_path_patterns
+                .iter()
+                .any(|p| p == ".next/**")
+        );
         assert!(settings.chunk_search.single_line_penalty_enabled);
         assert!((settings.chunk_search.single_line_penalty_factor - 0.72).abs() < f32::EPSILON);
         assert!(settings.chunk_search.block_chunk_boost_enabled);
