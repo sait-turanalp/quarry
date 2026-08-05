@@ -1,5 +1,5 @@
 === Rust Language ABI-15 COMPREHENSIVE NODE MAPPING ===
-  Generated: 2026-08-05 22:09:21 UTC
+  Generated: 2026-08-05 22:39:27 UTC
   ABI Version: 15
   Node kind count: 147
 

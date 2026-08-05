@@ -1172,9 +1172,9 @@ impl TypeScriptParser {
                     }
                 }
             }
-            "interface_declaration" => {
+            "interface_declaration"
                 // Only process interface extends if we're looking for extends relationships
-                if extends_only {
+                if extends_only => {
                     if let Some(interface_name_node) = node.child_by_field_name("name") {
                         let interface_name = &code[interface_name_node.byte_range()];
 
@@ -1210,7 +1210,6 @@ impl TypeScriptParser {
                     }
                 }
                 // When extends_only = false, skip interfaces entirely since they don't implement
-            }
             _ => {}
         }
 
@@ -1258,9 +1257,9 @@ impl TypeScriptParser {
                         }
                     }
                 }
-                "implements_clause" => {
+                "implements_clause"
                     // Only process implements clause when NOT looking for extends only
-                    if !extends_only {
+                    if !extends_only => {
                         // Skip "implements" keyword, get all the interfaces
                         let mut impl_cursor = child.walk();
                         for impl_child in child.children(&mut impl_cursor) {
@@ -1283,7 +1282,6 @@ impl TypeScriptParser {
                             }
                         }
                     }
-                }
                 _ => {}
             }
         }

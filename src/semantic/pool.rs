@@ -343,7 +343,7 @@ impl EmbeddingPool {
             };
             self.release(instance);
 
-            for (item, embedding) in valid_items.iter().zip(embeddings.into_iter()) {
+            for (item, embedding) in valid_items.iter().zip(embeddings) {
                 if embedding.len() == self.dimensions {
                     results.push((item.id, embedding, item.language.to_string()));
                 } else {
@@ -399,7 +399,7 @@ impl EmbeddingPool {
 
                 match embeddings_result {
                     Ok(embeddings) => {
-                        for (item, embedding) in batch.iter().zip(embeddings.into_iter()) {
+                        for (item, embedding) in batch.iter().zip(embeddings) {
                             if embedding.len() == self.dimensions {
                                 results.push((item.id, embedding, item.language.to_string()));
                             } else {

@@ -948,7 +948,7 @@ impl Pipeline {
                     *name_counts.entry(name.clone()).or_default() += 1;
                 }
                 let mut sorted_names: Vec<_> = name_counts.into_iter().collect();
-                sorted_names.sort_by(|a, b| b.1.cmp(&a.1));
+                sorted_names.sort_by_key(|x| std::cmp::Reverse(x.1));
 
                 tracing::debug!(
                     target: "pipeline",
@@ -987,7 +987,7 @@ impl Pipeline {
                         *from_counts.entry(from_name.clone()).or_default() += 1;
                     }
                     let mut sorted: Vec<_> = from_counts.into_iter().collect();
-                    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+                    sorted.sort_by_key(|x| std::cmp::Reverse(x.1));
                     let top: Vec<String> = sorted
                         .iter()
                         .take(30)

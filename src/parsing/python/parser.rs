@@ -2566,10 +2566,13 @@ class Duck(Animal, Flyable, Swimmable):
             );
             println!("  → Parsing superclasses list");
 
-            let mut base_count = 1;
-            for (_typ, base, _) in implementations.iter().filter(|(t, _, _)| *t == "Duck") {
+            for (index, (_typ, base, _)) in implementations
+                .iter()
+                .filter(|(t, _, _)| *t == "Duck")
+                .enumerate()
+            {
+                let base_count = index + 1;
                 println!("  → Base class {base_count}: \"{base}\"");
-                base_count += 1;
             }
             println!(
                 "✓ Created {} implementation relationships",
@@ -2977,7 +2980,7 @@ class Outer:
                     println!(
                         "{}    body: {}",
                         indent,
-                        &code[body.byte_range()].replace('\n', "\\n")
+                        code[body.byte_range()].replace('\n', "\\n")
                     );
                 }
             }

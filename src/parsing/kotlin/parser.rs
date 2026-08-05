@@ -527,16 +527,15 @@ impl KotlinParser {
                         continue;
                     }
 
-                    if let Some(arg_type) = self.extract_value_argument_type(
-                        value_arg,
-                        code,
-                        var_types,
-                        signatures,
-                        infer_depth,
-                    ) {
+                    {
+                        let arg_type = self.extract_value_argument_type(
+                            value_arg,
+                            code,
+                            var_types,
+                            signatures,
+                            infer_depth,
+                        )?;
                         types.push(arg_type);
-                    } else {
-                        return None;
                     }
                 }
             }
@@ -907,15 +906,14 @@ impl KotlinParser {
             NODE_PACKAGE_HEADER | "import_list" | "import_header" | "type_alias" => {
                 self.register_node(&node);
             }
-            "infix_expression" => {
+            "infix_expression"
                 // Check for context receiver pattern: context(...) fun name() { }
                 // AST: infix_expression > call_expression("context") + simple_identifier("fun") + call_expression(name + lambda)
                 if self.try_extract_context_receiver_function(
                     node, code, file_id, symbols, counter, context, depth,
-                ) {
+                ) => {
                     return;
                 }
-            }
             _ => {}
         }
 

@@ -405,16 +405,15 @@ impl PhpParser {
                                 }
                             }
                         }
-                        "assignment_expression" => {
+                        "assignment_expression"
                             // Global variable assignment
-                            if self.is_global_scope(node) {
+                            if self.is_global_scope(node) => {
                                 if let Some(symbol) =
                                     self.process_global_assignment(child, code, file_id, counter)
                                 {
                                     symbols.push(symbol);
                                 }
                             }
-                        }
                         _ => {}
                     }
                 }

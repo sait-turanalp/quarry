@@ -3549,7 +3549,7 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
     }
 
     // Sort by priority (P0/P1/P2 first, P3 auxiliary last)
-    entry_points.sort_by(|a, b| a.priority.cmp(&b.priority));
+    entry_points.sort_by_key(|a| a.priority);
 
     // Deduplicate by file to avoid multiple entries from same file
     let mut seen_files = std::collections::HashSet::new();
@@ -4093,7 +4093,7 @@ fn format_blast_radius(modules: &HashMap<PathBuf, Vec<PathBuf>>, facade: &IndexF
     }
 
     // Sort by total callers descending
-    results.sort_by(|a, b| b.1.cmp(&a.1));
+    results.sort_by_key(|x| std::cmp::Reverse(x.1));
 
     if results.is_empty() {
         output.push_str("  No reverse dependencies detected.\n\n");
@@ -4337,7 +4337,7 @@ fn format_relationship_graph(relations: &[ModuleRelation], threshold: usize) -> 
     }
 
     // Sort by call count descending and take top 15
-    filtered_relations.sort_by(|a, b| b.call_count.cmp(&a.call_count));
+    filtered_relations.sort_by_key(|x| std::cmp::Reverse(x.call_count));
     filtered_relations.truncate(15);
 
     output.push_str(&format!(
@@ -4495,7 +4495,7 @@ fn analyze_keyword_frequency(keywords: &[String], top_n: usize) -> Vec<(String, 
     }
 
     let mut sorted: Vec<_> = frequency.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by frequency descending
+    sorted.sort_by_key(|x| std::cmp::Reverse(x.1)); // Sort by frequency descending
 
     sorted.into_iter().take(top_n).collect()
 }
