@@ -6,7 +6,7 @@
 
 <p>Your agent is only as good as what it can find. Quarry gives it a real map of your codebase, and keeps that map on your machine.</p>
 
-<p><i>Half the misses of ripgrep. Twenty times faster. Zero bytes uploaded.</i></p>
+<p><i>2.6× the accuracy of lexical search. 20× faster than grep. Zero bytes uploaded.</i></p>
 
 <p>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
@@ -89,14 +89,14 @@ Any other MCP client works the same way: the server is `quarry serve` over stdio
 
 Measured on four real repositories in four languages, with **1376 queries**, leakage-free ground truth, an identical output budget of 20 files for every contender.
 
-| | **Quarry** | ripgrep |
-|---|:---:|:---:|
-| **Right file found (R@20)** | **83.4%** | 69.2% |
-| Right file in the top 10 | **76.5%** | 57.6% |
-| Median query latency | **5-18 ms** | 67-348 ms |
-| Misses | **1 in 6** | 1 in 3 |
+| | **Quarry** | ripgrep | BM25 only |
+|---|:---:|:---:|:---:|
+| **Right file found (R@20)** | **83.4%** | 69.2% | 31.5% |
+| Right file in the top 10 | **76.5%** | 57.6% | 17.9% |
+| Median query latency | **5-18 ms** | 67-348 ms | 5-18 ms |
+| Misses | **1 in 6** | 1 in 3 | 2 in 3 |
 
-**Quarry finds the file ripgrep misses, roughly 20× faster.** Per repository:
+**Quarry finds the file ripgrep misses, roughly 20× faster, and more than doubles what lexical ranking alone can reach.** Per repository:
 
 | repository | language | **Quarry R@20** | ripgrep R@20 | Quarry p50 |
 |---|---|:---:|:---:|:---:|
