@@ -2,9 +2,11 @@
 
 <h1>Quarry ⛏</h1>
 
-<p><b>Your coding agent shouldn't have to grep.</b></p>
+<p><b>The code intelligence engine for AI coding agents.</b></p>
 
-<p><b>Half the misses of ripgrep. Roughly 20× faster.</b> Ask in plain English, get the right file in 6 ms, from a 31 MB model on your laptop.</p>
+<p>Your agent is only as good as what it can find. Quarry gives it a real map of your codebase, and keeps that map on your machine.</p>
+
+<p><i>Half the misses of ripgrep. Twenty times faster. Zero bytes uploaded.</i></p>
 
 <p>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
@@ -29,9 +31,11 @@
 
 </div>
 
-Your agent does not know where anything is. So it greps, reads the wrong file, greps again with different words, and burns a third of its context window before it writes a line of code. Every one of those round trips is a wrong guess about *where*.
+Coding agents have become the way most software gets written. They are also blind. Dropped into a codebase they have never seen, they grep, read the wrong file, grep again with different words, and spend a third of their context window guessing at *where* before they write a line of code.
 
-Quarry answers *where*. It is a local **code retrieval engine**: a tree-sitter parser for 14 languages, a custom int8 embedding engine, a lexical index and a scoring layer in one binary, reachable over [MCP](https://modelcontextprotocol.io), returning ranked, line-ranged snippets in single-digit milliseconds, entirely offline.
+The industry's answer has been to upload your source to someone else's machine and embed it there. Quarry's answer is that you should not have to.
+
+It is a **code intelligence engine** that runs where your code already lives. It parses fourteen languages the way a compiler does, understands what the code means rather than how it is spelled, and answers over [MCP](https://modelcontextprotocol.io) faster than you can finish reading the question. No API key. No upload. No account.
 
 Ask it the way you would ask a colleague:
 
