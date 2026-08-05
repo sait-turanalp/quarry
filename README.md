@@ -120,6 +120,19 @@ Per repository:
 
 Not one of those numbers involves a network call, an API key or a GPU.
 
+### Indexing a real codebase
+
+The reason local semantic search stayed theoretical is not quality, it is the index. Embedding a large repository with a transformer on a CPU takes hours, so the practical advice became "send it to a server". Measured on the same laptop, a MacBook Air M2 (4 performance cores, 4 efficiency cores, 16 GB), against Django:
+
+| | 502,537 lines · 2,986 files · 250,506 chunks |
+|---|---|
+| **Quarry**, complete index | **19 seconds** |
+| jina-v2-base-code on the same CPU, embedding only | ~47 hours *(measured at 1.5 chunks/s)* |
+
+The comparison is deliberately generous to the transformer: Quarry's figure covers parsing, chunking, embedding and writing the whole index, while the other covers embedding alone. A GPU would close much of that gap, and there is no GPU number here because none was measured.
+
+This is the trade the int8 engine makes. The transformer is the better embedder in isolation, worth about two and a half points when it reranks Quarry's own candidates. It costs four orders of magnitude to find out.
+
 ### Why this matters more for an agent than for you
 
 You can afford a bad grep. You squint at 200 matches, spot the right one, move on. It cost you four seconds.
