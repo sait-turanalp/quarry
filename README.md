@@ -48,22 +48,23 @@ It is a **code intelligence engine** that runs where your code already lives. It
 
 Ask it the way you would ask a colleague:
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/demo.gif" alt="Asking Quarry where Django decides a password is too common, and getting the validator back in 125 ms" width="900">
+</p>
+
+That is Django, half a million lines, and the question is not a search query. The file it lands on is the validator that implements the rule.
+
+It does not always land first. Here is one where it does not:
+
 ```console
 $ quarry search "break a camelCase name into words"
 
 examples/go/app/utils/helper.go:334-334  capitalizeWords
-   334 // capitalizeWords capitalizes the first letter of each word
-   335 func capitalizeWords(s string) string {
-
-src/mcp/mod.rs:4466-4483  extract_keywords_from_symbols
-  4466     for symbol in symbols {
-
-src/utils.rs:15-48                                          ← split_identifier(), the answer
-    15 /// `getHTTPResponse` -> `["get", "HTTP", "Response"]`
-    17 pub fn split_identifier(name: &str) -> Vec<String> {
+src/mcp/mod.rs:4466-4483                 extract_keywords_from_symbols
+src/utils.rs:15-48                       ← split_identifier(), the answer
 ```
 
-Not one word of that question appears in `split_identifier`. Grep cannot get there from here. `rg -i "camelcase"` returns 2 unrelated lines, `rg -i "split.*word"` returns 8. Quarry puts the answer third in a list you read in one glance.
+Third, not first. Grep does not get there at all: `rg -i "camelcase"` returns 2 unrelated lines, `rg -i "split.*word"` returns 8, and none of them is the function.
 
 That is the honest shape of the promise: **not always first, but almost always in the list.** Measured, it is in the first twenty results 83% of the time.
 
