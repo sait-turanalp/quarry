@@ -6,7 +6,9 @@
 
 <p>Your agent is only as good as what it can find. Quarry gives it a real map of your codebase, and keeps that map on your machine.</p>
 
-<p><b>Your agent's retrieval misses drop from 1 in 3 to 1 in 6.</b></p>
+<p><b>Your agent stops reading files it does not need: 99.4% fewer tokens than grep and read.</b></p>
+
+<p><b>And when it searches, its misses drop from 1 in 3 to 1 in 6.</b></p>
 
 <p><i>2.6× the accuracy of lexical search. Nothing leaves the machine.</i></p>
 
@@ -14,6 +16,7 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Built with Rust" src="https://img.shields.io/badge/built%20with-Rust-CE412B?logo=rust&logoColor=white">
   <img alt="Runs locally" src="https://img.shields.io/badge/runs-100%25%20local-7c3aed">
+  <img alt="tokens" src="https://img.shields.io/badge/tokens-%E2%88%9299.4%25%20vs%20grep%2Bread-2ea44f">
   <img alt="14 languages" src="https://img.shields.io/badge/languages-14-0891b2">
 </p>
 
@@ -98,6 +101,20 @@ Any other MCP client works the same way: the server is `quarry serve` over stdio
 
 Measured on four real repositories in four languages, with **1376 queries**, leakage-free ground truth, an identical output budget of 20 files for every contender.
 
+### What the answer costs
+
+An agent's scarcest resource is its context window, and grep spends it on files that turn out to be wrong. Median tokens spent by the time the wanted file is in hand, counted with tiktoken rather than estimated:
+
+| | tokens | vs Quarry |
+|---|---:|---:|
+| **Quarry**, one call | **108** | |
+| grep, then read the ranked files | 30,454 | **99.6% more** |
+| grep, then read 20 lines around each match | 18,047 | **99.4% more** |
+
+The third row is the one to argue with, and it is the one that matters: it is grep already doing the smart thing, reading only around its matches, and it still costs about 170× as much. A query counts only when both methods found the file, so grep is never charged for a search that never ended. Method, baseline and raw per-query numbers: [`benchmarks/tokens/`](benchmarks/tokens/).
+
+### How often it is right
+
 | | **Quarry** | ripgrep | BM25 only |
 |---|:---:|:---:|:---:|
 | **Right file found (R@20)** | **83.4%** | 69.2% | 31.5% |
@@ -124,14 +141,14 @@ Not one of those numbers involves a network call, an API key or a GPU.
 
 The reason local semantic search stayed theoretical is not quality, it is the index. Embedding a large repository with a transformer on a CPU takes hours, so the practical advice became "send it to a server". Measured on the same laptop, a MacBook Air M2 (4 performance cores, 4 efficiency cores, 16 GB), against Django:
 
-| | 502,537 lines · 2,986 files · 250,506 chunks |
-|---|---|
-| **Quarry**, complete index | **19 seconds** |
-| jina-v2-base-code on the same CPU, embedding only | ~47 hours *(measured at 1.5 chunks/s)* |
+| 502,537 lines · 2,986 files · 250,506 chunks | time | what it buys |
+|---|---|---|
+| **Quarry**, complete index | **19 seconds** | the baseline |
+| jina-v2-base-code on the same CPU, embedding only | ~47 hours *(measured at 1.5 chunks/s)* | **+2.5 points of R@10** when it reranks Quarry's own candidates |
 
-The comparison is deliberately generous to the transformer: Quarry's figure covers parsing, chunking, embedding and writing the whole index, while the other covers embedding alone. A GPU would close much of that gap, and there is no GPU number here because none was measured.
+That last cell is the whole trade, and it is not in Quarry's favour on quality: the transformer is the better embedder in isolation. It costs four orders of magnitude to find out.
 
-This is the trade the int8 engine makes. The transformer is the better embedder in isolation, worth about two and a half points when it reranks Quarry's own candidates. It costs four orders of magnitude to find out.
+The comparison is deliberately generous to the transformer everywhere else: Quarry's figure covers parsing, chunking, embedding and writing the whole index, while the other covers embedding alone. A GPU would close much of the time gap, and there is no GPU number here because none was measured.
 
 ### Why this matters more for an agent than for you
 
