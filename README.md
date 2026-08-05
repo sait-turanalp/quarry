@@ -4,10 +4,9 @@
 
 <p><b>Your coding agent shouldn't have to grep.</b></p>
 
-<p>Ask in plain English. Get the right file in <b>6 ms</b>. On your machine, from a 31 MB model.</p>
+<p><b>Half the misses of ripgrep. Roughly 20× faster.</b> Ask in plain English, get the right file in 6 ms, from a 31 MB model on your laptop.</p>
 
 <p>
-  <a href="https://github.com/sait-turanalp/quarry/releases"><img alt="Release" src="https://img.shields.io/github/v/release/sait-turanalp/quarry?sort=semver&color=2ea44f"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Built with Rust" src="https://img.shields.io/badge/built%20with-Rust-CE412B?logo=rust&logoColor=white">
   <img alt="Runs locally" src="https://img.shields.io/badge/runs-100%25%20local-7c3aed">
