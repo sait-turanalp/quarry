@@ -42,11 +42,18 @@ It is a **code intelligence engine** that runs where your code already lives. It
 Ask it the way you would ask a colleague:
 
 ```console
-$ quarry mcp semantic_search_chunks query:"break a name written in camelCase into separate words"
+$ quarry search "break a camelCase name into words"
 
-   File: ./examples/go/app/utils/helper.go:335       Scope: capitalizeWords
-   File: ./src/mcp/mod.rs:4467-4484                  Scope: extract_keywords_from_symbols
-   File: ./src/utils.rs:16-49                        ← split_identifier(), the answer
+examples/go/app/utils/helper.go:334-334  capitalizeWords
+   334 // capitalizeWords capitalizes the first letter of each word
+   335 func capitalizeWords(s string) string {
+
+src/mcp/mod.rs:4466-4483  extract_keywords_from_symbols
+  4466     for symbol in symbols {
+
+src/utils.rs:15-48                                          ← split_identifier(), the answer
+    15 /// `getHTTPResponse` -> `["get", "HTTP", "Response"]`
+    17 pub fn split_identifier(name: &str) -> Vec<String> {
 ```
 
 Not one word of that question appears in `split_identifier`. Grep cannot get there from here. `rg -i "camelcase"` returns 2 unrelated lines, `rg -i "split.*word"` returns 8. Quarry puts the answer third in a list you read in one glance.
@@ -137,7 +144,33 @@ Quarry's answer is the part it owns: **an int8 static embedding engine**. The em
 - 🤖 **Built for agents**: an MCP server exposing semantic search, call graphs, callers, impact analysis, type fields and source retrieval.
 - 🌍 **14 languages**: Rust, Python, TypeScript, JavaScript, Go, Java, C, C++, C#, PHP, Kotlin, Swift, Lua, GDScript.
 - 🧭 **More than search**: tree-sitter gives it real structure, so it also answers *who calls this*, *what breaks if I change it*, *what does this module export*.
-- 📦 **One binary**: engine, index and MCP server ship together. Nothing to orchestrate.
+- 📦 **One binary**: engine, index, model and MCP server ship together. Nothing to fetch, nothing to orchestrate.
+
+## What your agent can ask
+
+Search is one of seventeen tools. The rest exist because half of an agent's questions are not "where is this" but "what happens if I touch it".
+
+| tool | the question it answers |
+|---|---|
+| `search` / `semantic_search_chunks` | Where is the code that does *this*? |
+| `semantic_search_docs` | Which symbol is this, by what it does? |
+| `semantic_search_with_context` | Same, plus docs, callers and impact in one call |
+| `search_symbols` | Full-text symbol lookup with fuzzy matching |
+| `find_symbol` | Where is this exact name defined? |
+| `get_source` | Show me the actual code for it |
+| `find_callers` | What calls this? |
+| `get_calls` | What does this call? |
+| `get_call_tree` | The whole downstream tree, with depth |
+| `analyze_impact` | What breaks if I change this? |
+| `get_type_fields` | What are this type's fields and methods? |
+| `get_module_exports` | What is public in this file? |
+| `get_feature_context` | Everything about one symbol, in a single call |
+| `get_project_overview` | Architecture, tech stack, module relationships |
+| `get_state_graph` | React hooks in a component: state, effects, callbacks |
+| `search_documents` | The same search over markdown and docs |
+| `get_index_info` | What is indexed, and how much of it |
+
+An agent that can ask *what breaks if I change this* before editing is a different kind of agent from one that can only grep.
 
 ## Usage
 
@@ -145,9 +178,10 @@ Quarry's answer is the part it owns: **an int8 static embedding engine**. The em
 quarry init                    # write .quarry/settings.toml
 quarry index <path>            # build the index
 quarry index <path> --force    # rebuild it from scratch
+quarry search "<question>"     # ask in plain English (--limit, --lang, --json)
 quarry serve                   # MCP server (stdio)
 quarry serve --http --watch    # MCP over HTTP, live re-index on change
-quarry mcp <tool> k:v ...      # call any tool straight from the shell
+quarry mcp <tool> k:v ...      # call any of the seventeen tools from the shell
 quarry retrieve <query>        # symbols, callers, dependencies
 quarry parse <file>            # dump the AST, for parser work
 ```
