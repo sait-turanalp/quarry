@@ -6,7 +6,9 @@
 
 <p>Your agent is only as good as what it can find. Quarry gives it a real map of your codebase, and keeps that map on your machine.</p>
 
-<p><i>2.6× the accuracy of lexical search. 20× faster than grep. Zero bytes uploaded.</i></p>
+<p><b>Your agent's retrieval misses drop from 1 in 3 to 1 in 6.</b></p>
+
+<p><i>2.6× the accuracy of lexical search. Nothing leaves the machine.</i></p>
 
 <p>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
@@ -96,7 +98,11 @@ Measured on four real repositories in four languages, with **1376 queries**, lea
 | Median query latency | **5-18 ms** | 67-348 ms | 5-18 ms |
 | Misses | **1 in 6** | 1 in 3 | 2 in 3 |
 
-**Quarry finds the file ripgrep misses, roughly 20× faster, and more than doubles what lexical ranking alone can reach.** Per repository:
+**Quarry finds the file ripgrep misses, and more than doubles what lexical ranking alone can reach.**
+
+The latency comparison is not symmetric, so read it for what it is: Quarry answers in 5-18 ms against a prebuilt index, where ripgrep re-scans the corpus in 67-348 ms. Building that index is a real cost paid once; an agent then spends it back over hundreds of queries in a session.
+
+Per repository:
 
 | repository | language | **Quarry R@20** | ripgrep R@20 | Quarry p50 |
 |---|---|:---:|:---:|:---:|
