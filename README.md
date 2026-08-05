@@ -49,7 +49,7 @@ It is a **code intelligence engine** that runs where your code already lives. It
 Ask it the way you would ask a colleague:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/demo.gif" alt="Asking Quarry where Django decides a password is too common, and getting the validator back in 125 ms" width="900">
+  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/demo.gif" alt="Asking Quarry where Django decides a password is too common, and getting the validator back in 144 ms" width="900">
 </p>
 
 That is Django, half a million lines, and the question is not a search query. The file it lands on is the validator that implements the rule.

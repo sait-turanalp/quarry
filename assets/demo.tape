@@ -13,11 +13,13 @@ Output assets/images/demo.gif
 Require quarry
 
 Set Shell "bash"
-Set FontSize 15
-Set Width 1180
-Set Height 400
-Set Padding 26
+Set FontSize 30
+Set Width 2360
+Set Height 820
+Set Padding 48
 Set Theme "Catppuccin Mocha"
+Set WindowBar Colorful
+Set BorderRadius 10
 Set TypingSpeed 55ms
 Set Framerate 24
 
