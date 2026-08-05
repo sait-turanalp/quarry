@@ -42,6 +42,10 @@ The industry's answer has been to upload your source to someone else's machine a
 
 It is a **code intelligence engine** that runs where your code already lives. It parses fourteen languages the way a compiler does, understands what the code means rather than how it is spelled, and answers over [MCP](https://modelcontextprotocol.io) faster than you can finish reading the question. No API key. No upload. No account.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/token_efficiency.png" alt="Recall against tokens read into the agent's context: Quarry reaches 83% at about 2,000 tokens, grep is still under 50% at 100,000" width="760">
+</p>
+
 Ask it the way you would ask a colleague:
 
 ```console
@@ -115,6 +119,10 @@ The third row is the one to argue with, and it is the one that matters: it is gr
 
 ### How often it is right
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/miss_rate.png" alt="Share of queries where the wanted file was never found: Quarry 1 in 6, ripgrep 1 in 3, BM25 alone 2 in 3" width="720">
+</p>
+
 | | **Quarry** | ripgrep | BM25 only |
 |---|:---:|:---:|:---:|
 | **Right file found (R@20)** | **83.4%** | 69.2% | 31.5% |
@@ -128,6 +136,10 @@ The latency comparison is not symmetric, so read it for what it is: Quarry answe
 
 Per repository:
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/recall_by_repo.png" alt="R@20 by repository, Quarry against ripgrep, across Python, Rust, TypeScript and Go" width="720">
+</p>
+
 | repository | language | **Quarry R@20** | ripgrep R@20 | Quarry p50 |
 |---|---|:---:|:---:|:---:|
 | django | Python | **86.0%** | 68.7% | 18 ms |
@@ -140,6 +152,10 @@ Not one of those numbers involves a network call, an API key or a GPU.
 ### Indexing a real codebase
 
 The reason local semantic search stayed theoretical is not quality, it is the index. Embedding a large repository with a transformer on a CPU takes hours, so the practical advice became "send it to a server". Measured on the same laptop, a MacBook Air M2 (4 performance cores, 4 efficiency cores, 16 GB), against Django:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sait-turanalp/quarry/main/assets/images/indexing_speed.png" alt="Indexing Django: 19 seconds for Quarry's complete index against roughly 47 hours for a transformer to do the embedding alone" width="760">
+</p>
 
 | 502,537 lines · 2,986 files · 250,506 chunks | time | what it buys |
 |---|---|---|

@@ -1,0 +1,44 @@
+{
+  "_note": "Every number here is copied from README.md. If one changes, both change. The 'source' field says which section it came from so the pair cannot drift silently.",
+
+  "indexing": {
+    "source": "README.md, 'Indexing a real codebase' table",
+    "corpus": "Django, 502,537 lines, 2,986 files, 250,506 chunks",
+    "machine": "MacBook Air M2, 4P + 4E cores, 16 GB",
+    "bars": [
+      { "label": "Quarry\ncomplete index", "seconds": 19, "display": "19 s", "highlight": true },
+      { "label": "jina-v2-base-code\nembedding only", "seconds": 169200, "display": "~47 h", "highlight": false }
+    ],
+    "footnote": "Quarry: parse + chunk + embed + write. Transformer: embedding only."
+  },
+
+  "recall_by_repo": {
+    "source": "README.md, per-repository table under 'How often it is right'",
+    "metric": "R@20",
+    "repos": [
+      { "name": "django",  "language": "Python",     "quarry": 86.0, "ripgrep": 68.7 },
+      { "name": "tokio",   "language": "Rust",       "quarry": 84.9, "ripgrep": 75.4 },
+      { "name": "vite",    "language": "TypeScript", "quarry": 84.1, "ripgrep": 66.1 },
+      { "name": "hugo",    "language": "Go",         "quarry": 78.5, "ripgrep": 66.5 }
+    ]
+  },
+
+  "miss_rate": {
+    "source": "README.md, 'Misses' row of the 'How often it is right' table",
+    "bars": [
+      { "label": "Quarry",    "misses_in": 6, "display": "1 in 6", "highlight": true },
+      { "label": "ripgrep",   "misses_in": 3, "display": "1 in 3", "highlight": false },
+      { "label": "BM25 only", "misses_in": 1.5, "display": "2 in 3", "highlight": false }
+    ]
+  },
+
+  "token_cost": {
+    "source": "README.md, 'What the answer costs' table",
+    "unit": "median tokens until the wanted file is in hand",
+    "bars": [
+      { "label": "Quarry, one call", "tokens": 108, "highlight": true },
+      { "label": "grep + read 20 lines\naround each match", "tokens": 18047, "highlight": false },
+      { "label": "grep + read the\nranked files", "tokens": 30454, "highlight": false }
+    ]
+  }
+}
