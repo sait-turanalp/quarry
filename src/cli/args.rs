@@ -190,6 +190,33 @@ pub enum Commands {
         query: RetrieveQuery,
     },
 
+    /// Search the codebase in plain English
+    #[command(
+        about = "Search the codebase in plain English",
+        long_about = "Ask for what the code does rather than what it is called. Prints paths, \
+                      line ranges and a short preview, like grep does.",
+        after_help = "Examples:\n  quarry search \"where do we validate the auth token\"\n  \
+                      quarry search \"retry with backoff\" --limit 5\n  \
+                      quarry search \"parse the config file\" --lang rust --json"
+    )]
+    Search {
+        /// What you are looking for, in your own words
+        #[arg(value_name = "QUERY")]
+        query: String,
+
+        /// Maximum number of results
+        #[arg(short, long, default_value_t = 20)]
+        limit: usize,
+
+        /// Restrict to one language (rust, python, typescript, go, ...)
+        #[arg(long)]
+        lang: Option<String>,
+
+        /// Emit JSON instead of the human-readable listing
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Show current configuration settings
     #[command(about = "Display active settings from .quarry/settings.toml")]
     Config,

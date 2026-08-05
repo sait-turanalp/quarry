@@ -16,4 +16,5 @@ pub mod parse;
 pub mod plugin;
 pub mod profile;
 pub mod retrieve;
+pub mod search;
 pub mod serve;

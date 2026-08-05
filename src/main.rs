@@ -343,6 +343,7 @@ async fn main() {
             // Only these MCP tools need semantic search
             ["semantic_search_docs", "semantic_search_with_context"].contains(&tool.as_str())
         }
+        Commands::Search { .. } => true,
         Commands::Index { .. } | Commands::Serve { .. } => true,
         _ => false,
     };
@@ -708,6 +709,23 @@ async fn main() {
                 indexer.as_ref().expect("retrieve requires indexer"),
             );
             std::process::exit(exit_code as i32);
+        }
+        Commands::Search {
+            query,
+            limit,
+            lang,
+            json,
+        } => {
+            if let Err(e) = quarry::cli::commands::search::run(
+                indexer.as_ref().expect("search requires indexer"),
+                &query,
+                limit,
+                lang.as_deref(),
+                json,
+            ) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
         }
 
         Commands::Mcp {

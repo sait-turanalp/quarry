@@ -2331,6 +2331,17 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    /// Environment variables are process-global, and settings are layered on top of them,
+    /// so a test that sets QUARRY_* races every test that loads settings. Two of three runs
+    /// used to fail on that. Any test which touches the environment or reads a config file
+    /// takes this lock for its whole body.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        // A test that panics while holding the lock must not poison it for everyone else.
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn test_default_settings() {
         let settings = Settings::default();
@@ -2348,6 +2359,7 @@ mod tests {
 
     #[test]
     fn test_load_from_toml() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
 
@@ -2392,6 +2404,7 @@ enabled = false
 
     #[test]
     fn test_save_settings() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
 
@@ -2408,6 +2421,7 @@ enabled = false
 
     #[test]
     fn test_partial_config() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
 
@@ -2458,6 +2472,7 @@ enabled = true
 
     #[test]
     fn test_reranking_confidence_gate_from_toml() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
         let toml_content = r#"
@@ -2569,6 +2584,7 @@ confidence_gate_require_dual_source = false
 
     #[test]
     fn test_chunk_search_rerank_controls_from_toml() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
         let toml_content = r#"
@@ -2585,6 +2601,7 @@ rerank_score_normalization = "sigmoid"
 
     #[test]
     fn test_layered_config() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
@@ -2634,6 +2651,7 @@ default = "info"
 
     #[test]
     fn test_load_from_supports_ci_double_underscore_mapping() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
         fs::write(&config_path, "[indexing]\nparallelism = 2\n").unwrap();
@@ -2888,6 +2906,7 @@ enabled = true
 
     #[test]
     fn test_indexed_paths_from_toml() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
         let test_folder1 = temp_dir.path().join("src");
@@ -2919,6 +2938,7 @@ indexed_paths = ["{path1_str}", "{path2_str}"]
 
     #[test]
     fn test_save_indexed_paths_to_toml() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
         let test_folder = temp_dir.path().join("test_folder");
@@ -2944,6 +2964,7 @@ indexed_paths = ["{path1_str}", "{path2_str}"]
 
     #[test]
     fn test_documents_config_loading() {
+        let _env = env_guard();
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("settings.toml");
 
