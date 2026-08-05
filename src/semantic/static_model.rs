@@ -41,6 +41,10 @@ impl std::fmt::Debug for OptimizedStaticModel {
     }
 }
 
+/// The model compiled into this binary: model2vec potion-code-16M-v2, quantised to int8
+/// with a single global symmetric scale.
+pub const SHIPPED_MODEL: &str = "minishlab/potion-code-16M-v2";
+
 impl OptimizedStaticModel {
     /// Resolve a model identifier to a local directory path.
     ///
@@ -98,23 +102,68 @@ impl OptimizedStaticModel {
     /// `~/.quarry/models/` by extracting the model name and trying common
     /// suffixes (`-int8`, as-is).
     pub fn from_local(model_path: &str) -> Result<Self, String> {
-        let base = Self::resolve_model_path(model_path)?;
-        let safetensors_path = base.join("model.safetensors");
-        let tokenizer_path = base.join("tokenizer.json");
-        let config_path = base.join("config.json");
-
-        // --- config.json ---
-        let cfg_bytes = std::fs::read_to_string(&config_path)
+        // On-disk wins when it is there, so anyone who quantised their own copy keeps it.
+        // When it is not, the shipped model answers instead of the whole engine failing.
+        let base = match Self::resolve_model_path(model_path) {
+            Ok(base) => base,
+            Err(e) if Self::is_shipped_model(model_path) => {
+                tracing::debug!(target: "semantic", "using the embedded model ({e})");
+                return Self::embedded();
+            }
+            Err(e) => return Err(e),
+        };
+        let config = std::fs::read_to_string(base.join("config.json"))
             .map_err(|e| format!("failed to read config.json: {e}"))?;
+        let tokenizer = std::fs::read(base.join("tokenizer.json"))
+            .map_err(|e| format!("failed to read tokenizer.json: {e}"))?;
+        let model = std::fs::read(base.join("model.safetensors"))
+            .map_err(|e| format!("failed to read model.safetensors: {e}"))?;
+        Self::from_bytes(&config, &tokenizer, &model)
+    }
+
+    /// Whether this identifier names the model compiled into the binary.
+    fn is_shipped_model(model_path: &str) -> bool {
+        let name = model_path
+            .strip_prefix("model2vec:")
+            .unwrap_or(model_path)
+            .rsplit('/')
+            .next()
+            .unwrap_or(model_path);
+        matches!(
+            name,
+            "potion-code-16M-v2" | "potion-code-16M-v2-int8" | SHIPPED_MODEL
+        )
+    }
+
+    /// The model this binary ships with, loaded from bytes baked in at compile time.
+    ///
+    /// A retrieval engine that cannot embed anything until the user has hunted down a
+    /// model file is not one binary, it is two. Sixteen megabytes buys a tool that works
+    /// the moment it is installed, offline, with nothing to fetch and nothing to configure.
+    pub fn embedded() -> Result<Self, String> {
+        Self::from_bytes(
+            include_str!("../../assets/model/potion-code-16M-v2-int8/config.json"),
+            include_bytes!("../../assets/model/potion-code-16M-v2-int8/tokenizer.json"),
+            include_bytes!("../../assets/model/potion-code-16M-v2-int8/model.safetensors"),
+        )
+    }
+
+    /// Shared loader: the source of the three files does not matter once they are bytes.
+    fn from_bytes(
+        cfg_bytes: &str,
+        tokenizer_bytes: &[u8],
+        model_bytes: &[u8],
+    ) -> Result<Self, String> {
+        // --- config.json ---
         let cfg: Value =
-            serde_json::from_str(&cfg_bytes).map_err(|e| format!("bad config.json: {e}"))?;
+            serde_json::from_str(cfg_bytes).map_err(|e| format!("bad config.json: {e}"))?;
         let normalize = cfg
             .get("normalize")
             .and_then(Value::as_bool)
             .unwrap_or(true);
 
         // --- tokenizer ---
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
+        let tokenizer = Tokenizer::from_bytes(tokenizer_bytes)
             .map_err(|e| format!("failed to load tokenizer: {e}"))?;
 
         // Median token length for char-level pre-truncation.
@@ -142,9 +191,7 @@ impl OptimizedStaticModel {
         };
 
         // --- safetensors (int8 path) ---
-        let model_bytes = std::fs::read(&safetensors_path)
-            .map_err(|e| format!("failed to read model.safetensors: {e}"))?;
-        let safet = SafeTensors::deserialize(&model_bytes)
+        let safet = SafeTensors::deserialize(model_bytes)
             .map_err(|e| format!("failed to parse safetensors: {e}"))?;
 
         let tensor = safet
