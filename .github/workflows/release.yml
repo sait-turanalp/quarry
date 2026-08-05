@@ -49,9 +49,6 @@ jobs:
             os: macos-15
             target: aarch64-apple-darwin
 
-          - name: windows-x64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
 
     name: Build ${{ matrix.name }}
     needs: info
@@ -188,7 +185,7 @@ jobs:
         with:
           tag_name: v${{ needs.info.outputs.version }}
           name: v${{ needs.info.outputs.version }}
-          draft: true
+          draft: false
           files: |
             dist-manifest.json
             quarry-*.tar.xz
