@@ -2,7 +2,7 @@
 
 ## Problem
 
-Codanna bir CLI tool — kullanicinin makinesinde IDE, tarayici ve diger uygulamalarla birlikte calisiyor. Embedding modeli (`potion-retrieval-32M-int8`) diskten 32MB int8 veri yukleniyor, ama eskiden kullandigimiz `model2vec-rs` crate'i bu veriyi **yukleme aninda f32'ye ceviriyordu**. Sonuc: bellekte 123MB'lik bir tablo, 4x gereksiz bellek kullanimi, ve daha kotu CPU cache locality.
+Quarry bir CLI tool — kullanicinin makinesinde IDE, tarayici ve diger uygulamalarla birlikte calisiyor. Embedding modeli (`potion-retrieval-32M-int8`) diskten 32MB int8 veri yukleniyor, ama eskiden kullandigimiz `model2vec-rs` crate'i bu veriyi **yukleme aninda f32'ye ceviriyordu**. Sonuc: bellekte 123MB'lik bir tablo, 4x gereksiz bellek kullanimi, ve daha kotu CPU cache locality.
 
 ## Cozum
 
@@ -37,8 +37,8 @@ pub struct OptimizedStaticModel {
 **`resolve_model_path(model_path)`** — Model dizin cozumleme:
 - Oncelik sirasi:
   1. `model_path` zaten `model.safetensors` iceren bir dizinse → dogrudan kullan
-  2. `~/.codanna/models/{name}-int8/` dene (tercih edilen int8 variant)
-  3. `~/.codanna/models/{name}/` dene
+  2. `~/.quarry/models/{name}-int8/` dene (tercih edilen int8 variant)
+  3. `~/.quarry/models/{name}/` dene
 - HuggingFace identifiers icin (`minishlab/potion-retrieval-32M`), repo adini (`potion-retrieval-32M`) cikarir
 - `model2vec:` prefix'i otomatik olarak strip edilir
 
@@ -155,11 +155,11 @@ HuggingFace model isimleri (`minishlab/potion-retrieval-32M`) dogrudan dizin pat
 ```
 "minishlab/potion-retrieval-32M"
   → rsplit('/') → "potion-retrieval-32M"
-  → ~/.codanna/models/potion-retrieval-32M-int8/  (varsa, tercih)
-  → ~/.codanna/models/potion-retrieval-32M/        (fallback)
+  → ~/.quarry/models/potion-retrieval-32M-int8/  (varsa, tercih)
+  → ~/.quarry/models/potion-retrieval-32M/        (fallback)
 ```
 
-Default model config'de `minishlab/potion-retrieval-32M` olarak tanimli. Bu otomatik olarak `~/.codanna/models/potion-retrieval-32M-int8/` dizinine cozumlenir.
+Default model config'de `minishlab/potion-retrieval-32M` olarak tanimli. Bu otomatik olarak `~/.quarry/models/potion-retrieval-32M-int8/` dizinine cozumlenir.
 
 ## Neden Bu Yaklasim?
 

@@ -3,8 +3,8 @@
 //! Tests that the provider registry correctly initializes and builds
 //! resolution caches when config_files are specified in settings.
 
-use codanna::config::{LanguageConfig, Settings};
-use codanna::project_resolver::{
+use quarry::config::{LanguageConfig, Settings};
+use quarry::project_resolver::{
     persist::ResolutionPersistence, providers::typescript::TypeScriptProvider,
     registry::SimpleProviderRegistry,
 };
@@ -39,16 +39,16 @@ fn test_provider_initialization_with_valid_config() {
     // Create completely isolated temp directory
     let temp_dir = TempDir::new().unwrap();
     let tsconfig_path = temp_dir.path().join("tsconfig.json");
-    let codanna_dir = temp_dir.path().join(".codanna");
-    let index_path = codanna_dir.join("index");
+    let quarry_dir = temp_dir.path().join(".quarry");
+    let index_path = quarry_dir.join("index");
 
     println!("Test directories:");
     println!("  Temp dir: {:?}", temp_dir.path());
     println!("  TSConfig: {tsconfig_path:?}");
-    println!("  Codanna dir: {codanna_dir:?}");
+    println!("  Quarry dir: {quarry_dir:?}");
 
     // Create necessary directories
-    fs::create_dir_all(&codanna_dir).unwrap();
+    fs::create_dir_all(&quarry_dir).unwrap();
     fs::create_dir_all(&index_path).unwrap();
 
     let tsconfig_content = r#"{
@@ -92,9 +92,9 @@ fn test_provider_initialization_with_valid_config() {
         "Provider should see our config file"
     );
 
-    // Now test the persistence layer directly (since provider uses hardcoded .codanna)
-    use codanna::project_resolver::persist::{ResolutionIndex, ResolutionRules};
-    use codanna::project_resolver::sha::compute_file_sha;
+    // Now test the persistence layer directly (since provider uses hardcoded .quarry)
+    use quarry::project_resolver::persist::{ResolutionIndex, ResolutionRules};
+    use quarry::project_resolver::sha::compute_file_sha;
 
     // Create resolution index
     let mut index = ResolutionIndex::new();
@@ -126,10 +126,10 @@ fn test_provider_initialization_with_valid_config() {
     index.set_rules(&tsconfig_path, rules.clone());
 
     // Save to isolated location
-    let persistence = ResolutionPersistence::new(&codanna_dir);
+    let persistence = ResolutionPersistence::new(&quarry_dir);
     persistence.save("typescript", &index).unwrap();
 
-    let saved_file = codanna_dir
+    let saved_file = quarry_dir
         .join("index")
         .join("resolvers")
         .join("typescript_resolution.json");
@@ -179,7 +179,7 @@ fn test_provider_initialization_with_valid_config() {
 fn test_provider_initialization_with_missing_config() {
     // Create isolated temp directory
     let temp_dir = TempDir::new().unwrap();
-    let index_path = temp_dir.path().join(".codanna").join("index");
+    let index_path = temp_dir.path().join(".quarry").join("index");
     fs::create_dir_all(&index_path).unwrap();
 
     // Create settings with non-existent config file
@@ -195,7 +195,7 @@ fn test_provider_initialization_with_missing_config() {
     assert_eq!(providers.len(), 1);
 
     // Note: We can't fully test rebuild_cache here because TypeScriptProvider
-    // uses a hardcoded ".codanna" path. This is a limitation we accept for now.
+    // uses a hardcoded ".quarry" path. This is a limitation we accept for now.
     // The important thing is the test doesn't pollute the production environment.
 }
 
@@ -203,8 +203,8 @@ fn test_provider_initialization_with_missing_config() {
 fn test_provider_initialization_with_invalid_json_config() {
     // Create isolated temp directory
     let temp_dir = TempDir::new().unwrap();
-    let codanna_dir = temp_dir.path().join(".codanna");
-    let index_path = codanna_dir.join("index");
+    let quarry_dir = temp_dir.path().join(".quarry");
+    let index_path = quarry_dir.join("index");
     fs::create_dir_all(&index_path).unwrap();
 
     // Create an invalid JSON file
@@ -238,8 +238,8 @@ fn test_provider_initialization_with_invalid_json_config() {
 fn test_provider_initialization_with_multiple_configs() {
     // Create isolated temp directory
     let temp_dir = TempDir::new().unwrap();
-    let codanna_dir = temp_dir.path().join(".codanna");
-    let index_path = codanna_dir.join("index");
+    let quarry_dir = temp_dir.path().join(".quarry");
+    let index_path = quarry_dir.join("index");
     fs::create_dir_all(&index_path).unwrap();
 
     // Root tsconfig
@@ -298,7 +298,7 @@ fn test_provider_initialization_with_multiple_configs() {
 fn test_provider_not_active_when_disabled() {
     // Create isolated temp directory
     let temp_dir = TempDir::new().unwrap();
-    let index_path = temp_dir.path().join(".codanna").join("index");
+    let index_path = temp_dir.path().join(".quarry").join("index");
     fs::create_dir_all(&index_path).unwrap();
 
     let mut settings = Settings {

@@ -9,7 +9,7 @@ set -e  # Exit on first error
 export CARGO_TERM_COLOR=always
 export RUST_BACKTRACE=1
 
-echo "🚀 Running Codanna CI locally (exact GitHub Actions replica)"
+echo "🚀 Running Quarry CI locally (exact GitHub Actions replica)"
 echo "============================================================"
 
 # Ensure we're using the latest stable Rust (matches GitHub Actions)
@@ -38,8 +38,8 @@ echo ""
 echo "🔨 Building release binary for testing (with all features)..."
 cargo build --release --all-features
 # Use absolute path to ensure tests can find it regardless of working directory
-export CODANNA_BIN="$(pwd)/target/release/codanna"
-echo "✓ Using release binary: $CODANNA_BIN"
+export QUARRY_BIN="$(pwd)/target/release/quarry"
+echo "✓ Using release binary: $QUARRY_BIN"
 
 # Build with different feature combinations
 echo ""
@@ -59,7 +59,7 @@ echo ""
 echo "🧪 Run tests"
 cargo test --verbose
 
-# Codanna-specific checks
+# Quarry-specific checks
 echo ""
 echo "🌳 Check tree-sitter queries compile"
 # Note: This is a simple check - in GitHub Actions this might be more sophisticated
@@ -70,8 +70,8 @@ echo ""
 echo "🖥️  Test MCP server functionality"
 # Run mcp-test locally (works fine with local permissions)
 # Note: This is skipped in GitHub Actions due to permission issues
-if [ -d ".codanna/index" ]; then
-    $CODANNA_BIN mcp-test
+if [ -d ".quarry/index" ]; then
+    $QUARRY_BIN mcp-test
     if [ $? -eq 0 ]; then
         echo "✓ MCP server and tools working correctly"
     else
@@ -80,28 +80,28 @@ if [ -d ".codanna/index" ]; then
     fi
 else
     echo "⚠️  Skipping mcp-test (no index found)"
-    echo "   Run 'codanna init && codanna index src' first to test MCP"
+    echo "   Run 'quarry init && quarry index src' first to test MCP"
 fi
 
 echo ""
 echo "📋 Verify CLI commands"
-$CODANNA_BIN --help > /dev/null
+$QUARRY_BIN --help > /dev/null
 echo "✓ Main help works"
-$CODANNA_BIN index --help > /dev/null
+$QUARRY_BIN index --help > /dev/null
 echo "✓ Index help works"
-$CODANNA_BIN retrieve --help > /dev/null
+$QUARRY_BIN retrieve --help > /dev/null
 echo "✓ Retrieve help works"
 
 # Performance checks
 echo ""
 echo "📊 Check binary size"
-ls -lh $CODANNA_BIN
+ls -lh $QUARRY_BIN
 
 # Handle platform differences for stat command
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    size=$(stat -f%z $CODANNA_BIN)
+    size=$(stat -f%z $QUARRY_BIN)
 else
-    size=$(stat -c%s $CODANNA_BIN)
+    size=$(stat -c%s $QUARRY_BIN)
 fi
 
 echo "Binary size: $size bytes"

@@ -42,6 +42,9 @@ impl SemanticEmbedStats {
 /// Progress callback type for EMBED stage.
 pub type EmbedProgressCallback = Arc<dyn Fn(u64) + Send + Sync>;
 
+// Worker is the larger variant, but exactly one EmbedBackend exists per stage, so the
+// per-value waste clippy is counting never materialises.
+#[allow(clippy::large_enum_variant)]
 enum EmbedBackend {
     Pool(Arc<EmbeddingPool>),
     Worker(Mutex<SemanticWorkerClient>),
@@ -74,8 +77,7 @@ impl SemanticEmbedStage {
         semantic: Arc<Mutex<SimpleSemanticSearch>>,
         config: SemanticWorkerClientConfig,
     ) -> PipelineResult<Self> {
-        let worker =
-            SemanticWorkerClient::new(config).map_err(|e| PipelineError::ChannelRecv(e))?;
+        let worker = SemanticWorkerClient::new(config).map_err(PipelineError::ChannelRecv)?;
         Ok(Self {
             backend: EmbedBackend::Worker(Mutex::new(worker)),
             semantic,

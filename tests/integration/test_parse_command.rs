@@ -7,16 +7,16 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Get the codanna binary path, using CODANNA_BIN env var or building debug binary
-fn get_codanna_binary() -> PathBuf {
+/// Get the quarry binary path, using QUARRY_BIN env var or building debug binary
+fn get_quarry_binary() -> PathBuf {
     // 1. Check environment variable (set by full-test.sh or CI)
-    if let Ok(bin_path) = env::var("CODANNA_BIN") {
+    if let Ok(bin_path) = env::var("QUARRY_BIN") {
         let path = PathBuf::from(bin_path);
         if path.exists() {
             return path;
         }
         eprintln!(
-            "Warning: CODANNA_BIN set to '{}' but file doesn't exist",
+            "Warning: QUARRY_BIN set to '{}' but file doesn't exist",
             path.display()
         );
     }
@@ -27,7 +27,7 @@ fn get_codanna_binary() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| env::current_dir().expect("Failed to get current directory"));
 
-    let debug_bin = manifest_dir.join("target/debug/codanna");
+    let debug_bin = manifest_dir.join("target/debug/quarry");
 
     if !debug_bin.exists() {
         eprintln!("Building debug binary for tests...");
@@ -42,20 +42,20 @@ fn get_codanna_binary() -> PathBuf {
         }
 
         let status = Command::new("cargo")
-            .args(["build", "--bin", "codanna"])
+            .args(["build", "--bin", "quarry"])
             .current_dir(&manifest_dir)
             .status()
-            .expect("Failed to build codanna binary");
+            .expect("Failed to build quarry binary");
 
         if !status.success() {
-            panic!("Failed to build codanna binary");
+            panic!("Failed to build quarry binary");
         }
     }
 
     debug_bin
 }
 
-/// Helper to run codanna parse and capture output
+/// Helper to run quarry parse and capture output
 fn run_parse_command(code: &str, lang_ext: &str, max_depth: Option<usize>) -> String {
     // Create a truly unique temporary file using uuid-like naming
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -73,7 +73,7 @@ fn run_parse_command(code: &str, lang_ext: &str, max_depth: Option<usize>) -> St
 
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!(
-        "codanna_test_{}_{}_{}_{}.{}",
+        "quarry_test_{}_{}_{}_{}.{}",
         std::process::id(),
         thread_id,
         timestamp,
@@ -87,7 +87,7 @@ fn run_parse_command(code: &str, lang_ext: &str, max_depth: Option<usize>) -> St
     }
 
     // Get the binary path using our centralized helper
-    let binary_path = get_codanna_binary();
+    let binary_path = get_quarry_binary();
 
     let mut cmd = Command::new(&binary_path);
     cmd.arg("parse").arg(&temp_file);

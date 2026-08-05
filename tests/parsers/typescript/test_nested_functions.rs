@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use codanna::parsing::LanguageParser;
-    use codanna::parsing::typescript::TypeScriptParser;
-    use codanna::types::{FileId, SymbolCounter};
+    use quarry::parsing::LanguageParser;
+    use quarry::parsing::typescript::TypeScriptParser;
+    use quarry::types::{FileId, SymbolCounter};
 
     #[test]
     fn test_nested_function_extraction() {

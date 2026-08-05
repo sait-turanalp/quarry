@@ -2,7 +2,7 @@
 """Verify that every gold file is actually reachable in the index, and repair the set.
 
 Why this exists: a gold file the indexer never ingested is scored as a retrieval miss,
-so an indexing rule silently becomes a "quality" result. That happened twice — codanna
+so an indexing rule silently becomes a "quality" result. That happened twice — quarry
 skips test files by default, and Go/TypeScript keep tests next to source
 (`pathparser_test.go`, `__tests__/x.spec.ts`) while Python/Rust isolate them in `tests/`.
 The result looked like a 2x language gap and was mostly the harness.
@@ -24,9 +24,9 @@ label = sys.argv[4] if len(sys.argv) > 4 else os.path.basename(evalset)
 rows = [json.loads(line) for line in open(evalset)]
 
 ENV = {
-    "CI_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
-    "CI_RERANKING__ENABLED": "false",
-    "CI_INDEXING__INCLUDE_TESTS": "true",
+    "QUARRY_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
+    "QUARRY_RERANKING__ENABLED": "false",
+    "QUARRY_INDEXING__INCLUDE_TESTS": "true",
 }
 
 gold_files = sorted({g for row in rows for g in row["gold"]})

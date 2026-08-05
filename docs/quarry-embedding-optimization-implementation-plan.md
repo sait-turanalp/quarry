@@ -1,4 +1,4 @@
-# Codanna Embedding Optimization Plan (Final)
+# Quarry Embedding Optimization Plan (Final)
 
 ## Summary
 - Goal: Keep current hybrid retrieval architecture, reduce indexing cost, and keep query quality stable.
@@ -57,7 +57,7 @@
 2. End-to-end smoke tests (done)
 - Model2Vec backend:
   - `init --force`
-  - set backend/model in `.codanna/settings.toml`
+  - set backend/model in `.quarry/settings.toml`
   - `index src --force`
   - verified semantic files exist:
     - `binary_index.bin`

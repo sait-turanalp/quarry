@@ -10,12 +10,12 @@ Options:
   --mode <fast|prod>                    Calibration preset (default: fast)
   --calib-size <N>                      Override calibration sample size
   --model-src <DIR>                     Source model dir (default: auto-resolve Jina v1 FP32 snapshot cache)
-  --config <PATH>                       settings.toml for benchmark (default: /tmp/codanna-rerank-realdata/settings.bench.toml)
-  --queries <PATH>                      queries.v1.jsonl (default: /tmp/codanna-rerank-realdata/queries.v1.jsonl)
-  --qrels <PATH>                        qrels.v1.jsonl (default: /tmp/codanna-rerank-realdata/qrels.v1.jsonl)
-  --calibration-jsonl <PATH>            candidates.raw.jsonl (default: /tmp/codanna-rerank-realdata/candidates.raw.jsonl)
-  --out-root <DIR>                      Output root dir (default: /tmp/codanna-static-int8)
-  --codanna-bin <PATH>                  codanna binary (default: /Users/sait/Documents/lut-app/codanna/target/release/codanna)
+  --config <PATH>                       settings.toml for benchmark (default: /tmp/quarry-rerank-realdata/settings.bench.toml)
+  --queries <PATH>                      queries.v1.jsonl (default: /tmp/quarry-rerank-realdata/queries.v1.jsonl)
+  --qrels <PATH>                        qrels.v1.jsonl (default: /tmp/quarry-rerank-realdata/qrels.v1.jsonl)
+  --calibration-jsonl <PATH>            candidates.raw.jsonl (default: /tmp/quarry-rerank-realdata/candidates.raw.jsonl)
+  --out-root <DIR>                      Output root dir (default: /tmp/quarry-static-int8)
+  --quarry-bin <PATH>                  quarry binary (default: /Users/sait/Documents/lut-app/quarry/target/release/quarry)
   --workspace-cwd <DIR>                 Working directory for smoke mcp call (default: /Users/sait/Documents/gemini-cli)
   --bootstrap-pydeps <true|false>       Create venv + install Python deps (default: true)
   --calibration-method <name>           percentile|entropy|minmax (default: percentile)
@@ -32,12 +32,12 @@ EOF
 MODE="fast"
 CALIB_SIZE=""
 MODEL_SRC=""
-CFG="/tmp/codanna-rerank-realdata/settings.bench.toml"
-QUERIES="/tmp/codanna-rerank-realdata/queries.v1.jsonl"
-QRELS="/tmp/codanna-rerank-realdata/qrels.v1.jsonl"
-CALIB_JSONL="/tmp/codanna-rerank-realdata/candidates.raw.jsonl"
-OUT_ROOT="/tmp/codanna-static-int8"
-CODANNA_BIN="/Users/sait/Documents/lut-app/codanna/target/release/codanna"
+CFG="/tmp/quarry-rerank-realdata/settings.bench.toml"
+QUERIES="/tmp/quarry-rerank-realdata/queries.v1.jsonl"
+QRELS="/tmp/quarry-rerank-realdata/qrels.v1.jsonl"
+CALIB_JSONL="/tmp/quarry-rerank-realdata/candidates.raw.jsonl"
+OUT_ROOT="/tmp/quarry-static-int8"
+QUARRY_BIN="/Users/sait/Documents/lut-app/quarry/target/release/quarry"
 WORKSPACE_CWD="/Users/sait/Documents/gemini-cli"
 BOOTSTRAP_PYDEPS="true"
 CALIB_METHOD="percentile"
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
     --qrels) QRELS="${2:-}"; shift 2 ;;
     --calibration-jsonl) CALIB_JSONL="${2:-}"; shift 2 ;;
     --out-root) OUT_ROOT="${2:-}"; shift 2 ;;
-    --codanna-bin) CODANNA_BIN="${2:-}"; shift 2 ;;
+    --quarry-bin) QUARRY_BIN="${2:-}"; shift 2 ;;
     --workspace-cwd) WORKSPACE_CWD="${2:-}"; shift 2 ;;
     --bootstrap-pydeps) BOOTSTRAP_PYDEPS="${2:-}"; shift 2 ;;
     --calibration-method) CALIB_METHOD="${2:-}"; shift 2 ;;
@@ -72,7 +72,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 resolve_default_model_src() {
-  local snapshots_root="$HOME/.codanna/models/models--jinaai--jina-reranker-v1-turbo-en/snapshots"
+  local snapshots_root="$HOME/.quarry/models/models--jinaai--jina-reranker-v1-turbo-en/snapshots"
   if [[ -d "$snapshots_root" ]]; then
     local snap
     snap="$(find "$snapshots_root" -mindepth 1 -maxdepth 1 -type d | head -n 1 || true)"
@@ -83,7 +83,7 @@ resolve_default_model_src() {
   fi
 
   # Fallback to local dynamic INT8 copy if snapshot cache is unavailable.
-  local fallback="$HOME/.codanna/models/jina-reranker-v1-turbo-en-int8"
+  local fallback="$HOME/.quarry/models/jina-reranker-v1-turbo-en-int8"
   if [[ -d "$fallback" ]]; then
     echo "$fallback"
     return 0
@@ -110,7 +110,7 @@ if [[ -z "$CALIB_SIZE" ]]; then
   CALIB_SIZE="$DEFAULT_CALIB"
 fi
 
-for p in "$MODEL_SRC" "$CFG" "$QUERIES" "$QRELS" "$CALIB_JSONL" "$CODANNA_BIN"; do
+for p in "$MODEL_SRC" "$CFG" "$QUERIES" "$QRELS" "$CALIB_JSONL" "$QUARRY_BIN"; do
   if [[ ! -e "$p" ]]; then
     echo "Missing required path: $p" >&2
     exit 1
@@ -171,7 +171,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   run_dir: $RUN_DIR
   model_out_dir: $MODEL_OUT_DIR
   benchmark_out_dir: $BENCH_OUT_DIR
-  codanna_bin: $CODANNA_BIN
+  quarry_bin: $QUARRY_BIN
   workspace_cwd: $WORKSPACE_CWD
   bootstrap_pydeps: $BOOTSTRAP_PYDEPS
   calibration_method: $CALIB_METHOD
@@ -223,7 +223,7 @@ perl -0pi -e \
 echo "[smoke] static INT8 model check"
 (
   cd "$WORKSPACE_CWD"
-  "$CODANNA_BIN" -c "$SMOKE_CFG" mcp semantic_search_chunks query:"edit tool" limit:8 >/tmp/static_int8_smoke.out 2>/tmp/static_int8_smoke.err || true
+  "$QUARRY_BIN" -c "$SMOKE_CFG" mcp semantic_search_chunks query:"edit tool" limit:8 >/tmp/static_int8_smoke.out 2>/tmp/static_int8_smoke.err || true
 )
 if rg -q "Reranker init failed|Failed to load custom reranker|Error:" /tmp/static_int8_smoke.err /tmp/static_int8_smoke.out; then
   echo "Smoke test failed. See:" >&2
@@ -254,7 +254,7 @@ top_n = 30
 post_rerank_heuristics_enabled = false
 EOF
 
-"$CODANNA_BIN" -c "$CFG" benchmark-rerank \
+"$QUARRY_BIN" -c "$CFG" benchmark-rerank \
   --queries "$QUERIES" \
   --qrels "$QRELS" \
   --profiles "$PROFILE_TOML" \

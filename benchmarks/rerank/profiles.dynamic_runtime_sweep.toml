@@ -1,5 +1,5 @@
 # Dynamic runtime-tuning sweep against canonical Jina v1 base profile.
-# baseline_current_default is auto-added by codanna benchmark-rerank.
+# baseline_current_default is auto-added by quarry benchmark-rerank.
 
 [defaults]
 model = "JINARerankerV1TurboEn"

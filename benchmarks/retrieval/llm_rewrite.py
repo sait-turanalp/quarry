@@ -37,7 +37,7 @@ BATCH = int(os.environ.get("LLM_BATCH", "20"))
 MODEL = os.environ.get("LLM_MODEL", "haiku")
 
 rows = [json.loads(line) for line in open(evalset)][:n_max]
-ENV = {"CI_INDEXING__INCLUDE_TESTS": "true"}
+ENV = {"QUARRY_INDEXING__INCLUDE_TESTS": "true"}
 
 
 def ask(prompt):

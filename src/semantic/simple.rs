@@ -1,8 +1,8 @@
 //! Simple semantic search implementation for documentation comments
 
-use crate::vector::BinaryVector;
 use crate::SymbolId;
 use crate::semantic::static_model::OptimizedStaticModel;
+use crate::vector::BinaryVector;
 use fastembed::{EmbeddingModel, TextEmbedding};
 use std::collections::HashMap;
 use std::fs::File;
@@ -170,10 +170,7 @@ impl SimpleSemanticSearch {
             SemanticSearchError::ModelInitError("Failed to lock embedding model".to_string())
         })?;
         if model_guard.is_none() {
-            *model_guard = Some(Self::init_model(
-                &self.model_name,
-                show_progress,
-            )?);
+            *model_guard = Some(Self::init_model(&self.model_name, show_progress)?);
         }
         let model = model_guard.as_mut().ok_or_else(|| {
             SemanticSearchError::ModelInitError("Embedding model missing".to_string())
@@ -770,7 +767,7 @@ impl SimpleSemanticSearch {
                 expected: metadata.dimension,
                 actual: storage.dimension().get(),
                 suggestion: format!(
-                    "Index was created with a {}-dimension model. Re-index with: codanna index <path> --force",
+                    "Index was created with a {}-dimension model. Re-index with: quarry index <path> --force",
                     storage.dimension().get()
                 ),
             });
@@ -789,7 +786,7 @@ impl SimpleSemanticSearch {
                     metadata.embedding_count,
                     embeddings_vec.len()
                 ),
-                suggestion: "Rebuild the semantic index: codanna index <path> --force".to_string(),
+                suggestion: "Rebuild the semantic index: quarry index <path> --force".to_string(),
             });
         }
 

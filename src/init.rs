@@ -1,4 +1,4 @@
-//! Global initialization module for Codanna
+//! Global initialization module for Quarry
 //!
 //! Manages:
 //! - Global models directory for FastEmbed
@@ -14,24 +14,24 @@ use std::sync::OnceLock;
 // Configurable directory names for testing
 // Change these to production values when ready
 #[cfg(test)]
-const GLOBAL_DIR_NAME: &str = ".codanna-test";
+const GLOBAL_DIR_NAME: &str = ".quarry-test";
 #[cfg(test)]
-const LOCAL_DIR_NAME: &str = ".codanna-test-local";
+const LOCAL_DIR_NAME: &str = ".quarry-test-local";
 #[cfg(test)]
 const FASTEMBED_CACHE_NAME: &str = ".fastembed_cache";
 
 #[cfg(not(test))]
-const GLOBAL_DIR_NAME: &str = ".codanna";
+const GLOBAL_DIR_NAME: &str = ".quarry";
 #[cfg(not(test))]
-const LOCAL_DIR_NAME: &str = ".codanna";
+const LOCAL_DIR_NAME: &str = ".quarry";
 #[cfg(not(test))]
 const FASTEMBED_CACHE_NAME: &str = ".fastembed_cache";
 
 // Global directory cache
 static GLOBAL_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-/// Get the global Codanna directory
-/// Returns ~/.codanna-dev (or test variant) on Unix-like systems
+/// Get the global Quarry directory
+/// Returns ~/.quarry-dev (or test variant) on Unix-like systems
 pub fn global_dir() -> PathBuf {
     GLOBAL_DIR
         .get_or_init(|| {
@@ -43,13 +43,13 @@ pub fn global_dir() -> PathBuf {
 }
 
 /// Get the models cache directory
-/// Returns ~/.codanna-dev/models/
+/// Returns ~/.quarry-dev/models/
 pub fn models_dir() -> PathBuf {
     global_dir().join("models")
 }
 
 /// Get the projects registry file
-/// Returns ~/.codanna-dev/projects.json
+/// Returns ~/.quarry-dev/projects.json
 pub fn projects_file() -> PathBuf {
     global_dir().join("projects.json")
 }
@@ -96,7 +96,7 @@ pub fn init_global_dirs() -> Result<(), std::io::Error> {
 }
 
 /// Initialize profile system infrastructure
-/// Creates ~/.codanna/providers.json if it doesn't exist
+/// Creates ~/.quarry/providers.json if it doesn't exist
 pub fn init_profile_infrastructure() -> Result<(), std::io::Error> {
     let providers_file = global_dir().join("providers.json");
 
@@ -412,7 +412,7 @@ impl ProjectRegistry {
     ) -> Result<(), IndexError> {
         let project = self.projects.get_mut(project_id).ok_or_else(|| {
             IndexError::General(format!(
-                "Project {project_id} not found\nSuggestion: Run 'codanna init' in the project directory"
+                "Project {project_id} not found\nSuggestion: Run 'quarry init' in the project directory"
             ))
         })?;
 
@@ -483,8 +483,8 @@ mod tests {
     #[test]
     fn test_directory_names() {
         // Verify test configuration
-        assert_eq!(GLOBAL_DIR_NAME, ".codanna-test");
-        assert_eq!(LOCAL_DIR_NAME, ".codanna-test-local");
+        assert_eq!(GLOBAL_DIR_NAME, ".quarry-test");
+        assert_eq!(LOCAL_DIR_NAME, ".quarry-test-local");
         assert_eq!(FASTEMBED_CACHE_NAME, ".fastembed_cache"); // FastEmbed requires this exact name
     }
 

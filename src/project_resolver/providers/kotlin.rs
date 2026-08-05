@@ -270,7 +270,7 @@ sourceSets {
     fn test_rebuild_cache_creates_resolution_json() {
         let temp_dir = TempDir::new().unwrap();
         let gradle_path = temp_dir.path().join("build.gradle.kts");
-        let codanna_dir = temp_dir.path().join(crate::init::local_dir_name());
+        let quarry_dir = temp_dir.path().join(crate::init::local_dir_name());
 
         fs::write(&gradle_path, "plugins { kotlin(\"jvm\") }").unwrap();
 
@@ -287,14 +287,14 @@ config_files = ["{}"]
 
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
-        fs::create_dir_all(&codanna_dir).unwrap();
+        fs::create_dir_all(&quarry_dir).unwrap();
 
         let provider = KotlinProvider::new();
         provider.rebuild_cache(&settings).unwrap();
 
         std::env::set_current_dir(&original_dir).unwrap();
 
-        let cache_path = codanna_dir.join("index/resolvers/kotlin_resolution.json");
+        let cache_path = quarry_dir.join("index/resolvers/kotlin_resolution.json");
         assert!(
             cache_path.exists(),
             "Cache file should be created at {}",

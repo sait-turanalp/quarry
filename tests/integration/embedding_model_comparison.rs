@@ -11,7 +11,7 @@ use std::time::Instant;
 fn get_test_cache_dir(test_name: &str) -> std::path::PathBuf {
     let temp_dir = std::env::temp_dir();
     temp_dir.join(format!(
-        "codanna_test_fastembed_{}_{}",
+        "quarry_test_fastembed_{}_{}",
         test_name,
         std::process::id()
     ))

@@ -1,6 +1,6 @@
 //! Test to verify MCP schema generation for usize fields
 
-use codanna::mcp::{AnalyzeImpactRequest, SearchSymbolsRequest, SemanticSearchRequest};
+use quarry::mcp::{AnalyzeImpactRequest, SearchSymbolsRequest, SemanticSearchRequest};
 
 #[test]
 fn test_mcp_schema_uint_format() {

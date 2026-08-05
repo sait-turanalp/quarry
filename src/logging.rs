@@ -17,8 +17,8 @@
 //!
 //! `RUST_LOG` takes precedence over config:
 //! ```bash
-//! RUST_LOG=debug codanna index
-//! RUST_LOG=cli=debug,indexer=trace codanna mcp
+//! RUST_LOG=debug quarry index
+//! RUST_LOG=cli=debug,indexer=trace quarry mcp
 //! ```
 
 use std::sync::Once;
@@ -41,7 +41,7 @@ impl FormatTime for CompactTime {
 }
 
 /// Modules that use explicit `target: "name"` or are external crates.
-/// These don't need the `codanna::` prefix in filter strings.
+/// These don't need the `quarry::` prefix in filter strings.
 const EXTERNAL_TARGETS: &[&str] = &["cli", "tantivy", "pipeline", "semantic", "rag"];
 
 /// Initialize logging with configuration.
@@ -68,11 +68,11 @@ pub fn init_with_config(config: &LoggingConfig) {
             // Build filter string from config
             let mut filter_str = config.default.clone();
             for (module, level) in &config.modules {
-                // Internal modules need codanna:: prefix to match module paths
+                // Internal modules need quarry:: prefix to match module paths
                 let target = if EXTERNAL_TARGETS.contains(&module.as_str()) {
                     module.clone()
                 } else {
-                    format!("codanna::{module}")
+                    format!("quarry::{module}")
                 };
                 filter_str.push_str(&format!(",{target}={level}"));
             }

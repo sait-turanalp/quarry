@@ -1,6 +1,6 @@
 //! Global provider registry management
 //!
-//! Manages registered providers in ~/.codanna/providers.json
+//! Manages registered providers in ~/.quarry/providers.json
 //! Similar to how plugin marketplaces are managed.
 
 use super::error::ProfileResult;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Global provider registry stored at ~/.codanna/providers.json
+/// Global provider registry stored at ~/.quarry/providers.json
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProviderRegistry {
     /// Registry format version
@@ -293,7 +293,7 @@ mod tests {
         registry.add_provider(
             "test-provider".to_string(),
             &manifest,
-            ProviderSource::from_github_shorthand("codanna/claude-provider"),
+            ProviderSource::from_github_shorthand("quarry/claude-provider"),
         );
 
         registry.save(&registry_path).unwrap();
@@ -315,9 +315,9 @@ mod tests {
                 url: None,
             },
             profiles: vec![super::super::provider::ProviderProfile {
-                name: "codanna".to_string(),
+                name: "quarry".to_string(),
                 source: super::super::provider::ProviderProfileSource::Path(
-                    "./profiles/codanna".to_string(),
+                    "./profiles/quarry".to_string(),
                 ),
                 description: Some("Test profile".to_string()),
                 version: Some("1.0.0".to_string()),
@@ -333,7 +333,7 @@ mod tests {
         registry.add_provider(
             "test".to_string(),
             &manifest,
-            ProviderSource::from_github_shorthand("codanna/test"),
+            ProviderSource::from_github_shorthand("quarry/test"),
         );
         assert_eq!(registry.providers.len(), 1);
 
@@ -353,9 +353,9 @@ mod tests {
                 url: None,
             },
             profiles: vec![super::super::provider::ProviderProfile {
-                name: "codanna".to_string(),
+                name: "quarry".to_string(),
                 source: super::super::provider::ProviderProfileSource::Path(
-                    "./profiles/codanna".to_string(),
+                    "./profiles/quarry".to_string(),
                 ),
                 description: None,
                 version: Some("1.0.0".to_string()),
@@ -371,10 +371,10 @@ mod tests {
         registry.add_provider(
             "test".to_string(),
             &manifest,
-            ProviderSource::from_github_shorthand("codanna/test"),
+            ProviderSource::from_github_shorthand("quarry/test"),
         );
 
-        let provider = registry.find_provider_for_profile("codanna");
+        let provider = registry.find_provider_for_profile("quarry");
         assert!(provider.is_some());
         assert_eq!(provider.unwrap().name, "claude");
 
@@ -384,10 +384,10 @@ mod tests {
 
     #[test]
     fn test_parse_github_shorthand() {
-        let source = ProviderSource::parse("codanna/claude-provider");
+        let source = ProviderSource::parse("quarry/claude-provider");
         match source {
             ProviderSource::Github { repo } => {
-                assert_eq!(repo, "codanna/claude-provider");
+                assert_eq!(repo, "quarry/claude-provider");
             }
             _ => panic!("Expected Github source"),
         }
@@ -395,10 +395,10 @@ mod tests {
 
     #[test]
     fn test_parse_git_url() {
-        let source = ProviderSource::parse("https://github.com/codanna/claude-provider.git");
+        let source = ProviderSource::parse("https://github.com/quarry/claude-provider.git");
         match source {
             ProviderSource::Url { url } => {
-                assert_eq!(url, "https://github.com/codanna/claude-provider.git");
+                assert_eq!(url, "https://github.com/quarry/claude-provider.git");
             }
             _ => panic!("Expected Url source"),
         }
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_git_url_conversion() {
-        let source = ProviderSource::from_github_shorthand("codanna/test");
+        let source = ProviderSource::from_github_shorthand("quarry/test");
         let provider = RegisteredProvider {
             name: "test".to_string(),
             source,
@@ -427,6 +427,6 @@ mod tests {
         };
 
         let url = provider.git_url();
-        assert_eq!(url, Some("https://github.com/codanna/test.git".to_string()));
+        assert_eq!(url, Some("https://github.com/quarry/test.git".to_string()));
     }
 }

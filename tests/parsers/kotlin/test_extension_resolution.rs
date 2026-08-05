@@ -1,5 +1,5 @@
-use codanna::parsing::{LanguageParser, kotlin::KotlinParser};
-use codanna::types::SymbolCounter;
+use quarry::parsing::{LanguageParser, kotlin::KotlinParser};
+use quarry::types::SymbolCounter;
 
 #[test]
 fn test_extension_function_resolution_with_literals() {
@@ -24,7 +24,7 @@ fun testDirectCalls() {
 
     // Step 1: Parse and extract symbols
     let mut counter = SymbolCounter::new();
-    let symbols = parser.parse(code, codanna::FileId(1), &mut counter);
+    let symbols = parser.parse(code, quarry::FileId(1), &mut counter);
 
     println!("\n=== SYMBOLS EXTRACTED ===");
     for symbol in &symbols {

@@ -249,7 +249,7 @@ mod tests {
 
         let initial = json!({
             "mcpServers": {
-                "codanna": {
+                "quarry": {
                     "command": "existing"
                 }
             }
@@ -257,13 +257,13 @@ mod tests {
         std::fs::write(&mcp_path, serde_json::to_string(&initial)?)?;
 
         let plugin_servers = json!({
-            "codanna": {
+            "quarry": {
                 "command": "replacement"
             }
         });
 
         let mut allowed = HashSet::new();
-        allowed.insert("codanna".to_string());
+        allowed.insert("quarry".to_string());
 
         let check = check_mcp_conflicts(&mcp_path, &plugin_servers, false, &allowed);
         assert!(check.is_ok());
@@ -278,7 +278,7 @@ mod tests {
 
         let initial = r#"{
   "mcpServers": {
-    "codanna": {
+    "quarry": {
       "command": "npx",
       "args": ["start"]
     },
@@ -292,14 +292,14 @@ mod tests {
         std::fs::write(&mcp_path, initial)?;
 
         let plugin_servers = json!({
-            "codanna": {
+            "quarry": {
                 "command": "npx",
                 "args": ["start"]
             }
         });
 
         let outcome = merge_mcp_servers(&mcp_path, &plugin_servers, false)?;
-        assert_eq!(outcome.added_keys, vec!["codanna".to_string()]);
+        assert_eq!(outcome.added_keys, vec!["quarry".to_string()]);
 
         let final_content = std::fs::read_to_string(&mcp_path)?;
         assert_eq!(final_content, initial);

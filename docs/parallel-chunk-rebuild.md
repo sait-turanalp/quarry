@@ -2,7 +2,7 @@
 
 ## Problem
 
-Codanna'nin indeksleme pipeline'i 3 ana fazdan olusuyor:
+Quarry'nin indeksleme pipeline'i 3 ana fazdan olusuyor:
 
 ```
 Phase 1 (PARSE+COLLECT+EMBED)  →  Phase 2 (LINKS)  →  Chunk Rebuild  →  Save

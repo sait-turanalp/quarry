@@ -3,11 +3,11 @@
 //! Provides multiple TextEmbedding instances that can be used concurrently
 //! by different threads, enabling parallel embedding generation.
 
+use crate::SymbolId;
 use crate::config::SemanticBackend;
 use crate::semantic::static_model::OptimizedStaticModel;
 use crate::vector::EmbeddingRuntimeConfig;
-use crate::SymbolId;
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use fastembed::TextEmbedding;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -91,14 +91,13 @@ impl EmbeddingPool {
         for i in 0..pool_size {
             let model_instance = match backend {
                 SemanticBackend::Model2vec => {
-                    let opt_model =
-                        OptimizedStaticModel::from_local(model_name).map_err(|e| {
-                            SemanticSearchError::ModelInitError(format!(
-                                "Failed to initialize optimized static model {}: {}",
-                                i + 1,
-                                e
-                            ))
-                        })?;
+                    let opt_model = OptimizedStaticModel::from_local(model_name).map_err(|e| {
+                        SemanticSearchError::ModelInitError(format!(
+                            "Failed to initialize optimized static model {}: {}",
+                            i + 1,
+                            e
+                        ))
+                    })?;
                     if i == 0 {
                         dimensions = opt_model.dim();
                     }
@@ -106,27 +105,24 @@ impl EmbeddingPool {
                 }
                 SemanticBackend::Fastembed => {
                     let show_progress = i == 0; // Only show progress for first model
-                    let (mut text_model, _) =
-                        crate::vector::create_text_embedding_with_runtime(
-                            model_name,
-                            show_progress,
-                            Some(max_sequence_length),
-                            Some(&runtime_config),
-                        )
-                        .map_err(|e| {
-                            SemanticSearchError::ModelInitError(format!(
-                                "Failed to initialize model instance {}: {}",
-                                i + 1,
-                                e
-                            ))
-                        })?;
+                    let (mut text_model, _) = crate::vector::create_text_embedding_with_runtime(
+                        model_name,
+                        show_progress,
+                        Some(max_sequence_length),
+                        Some(&runtime_config),
+                    )
+                    .map_err(|e| {
+                        SemanticSearchError::ModelInitError(format!(
+                            "Failed to initialize model instance {}: {}",
+                            i + 1,
+                            e
+                        ))
+                    })?;
 
                     if i == 0 {
                         let test_embedding = text_model
                             .embed(vec!["test"], None)
-                            .map_err(|e| {
-                                SemanticSearchError::EmbeddingError(e.to_string())
-                            })?;
+                            .map_err(|e| SemanticSearchError::EmbeddingError(e.to_string()))?;
                         dimensions = test_embedding.into_iter().next().unwrap().len();
                     }
                     ModelBackendInstance::Fastembed(text_model)
@@ -267,9 +263,7 @@ impl EmbeddingPool {
             ModelBackendInstance::Optimized(model) => {
                 model.encode_batch_parallel(texts, Some(self.max_sequence_length))
             }
-            ModelBackendInstance::Fastembed(model) => {
-                model.embed(texts.to_vec(), None).unwrap_or_default()
-            }
+            ModelBackendInstance::Fastembed(model) => model.embed(texts, None).unwrap_or_default(),
         };
         self.release(instance);
         result
@@ -343,10 +337,7 @@ impl EmbeddingPool {
             let mut instance = self.acquire();
             let embeddings = match &mut instance.model {
                 ModelBackendInstance::Optimized(model) => {
-                    model.encode_batch_parallel(
-                        &text_strings,
-                        Some(self.max_sequence_length),
-                    )
+                    model.encode_batch_parallel(&text_strings, Some(self.max_sequence_length))
                 }
                 _ => unreachable!(),
             };

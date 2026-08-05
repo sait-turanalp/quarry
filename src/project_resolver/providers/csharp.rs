@@ -72,8 +72,8 @@ impl CSharpProvider {
     /// Example: RootNamespace=MyApp, file Controllers/UserController.cs
     /// becomes namespace MyApp.Controllers
     pub fn namespace_for_file(&self, file_path: &Path) -> Option<String> {
-        let codanna_dir = Path::new(crate::init::local_dir_name());
-        let persistence = ResolutionPersistence::new(codanna_dir);
+        let quarry_dir = Path::new(crate::init::local_dir_name());
+        let persistence = ResolutionPersistence::new(quarry_dir);
 
         let index = persistence.load("csharp").ok()?;
 
@@ -460,7 +460,7 @@ mod tests {
     fn test_rebuild_cache_creates_resolution_json() {
         let temp_dir = TempDir::new().unwrap();
         let csproj_path = temp_dir.path().join("MyApp.csproj");
-        let codanna_dir = temp_dir.path().join(crate::init::local_dir_name());
+        let quarry_dir = temp_dir.path().join(crate::init::local_dir_name());
 
         let csproj_content = r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -485,9 +485,9 @@ config_files = ["{}"]
         // Save original directory
         let original_dir = std::env::current_dir().unwrap();
 
-        // Use temp .codanna directory
+        // Use temp .quarry directory
         std::env::set_current_dir(&temp_dir).unwrap();
-        fs::create_dir_all(&codanna_dir).unwrap();
+        fs::create_dir_all(&quarry_dir).unwrap();
 
         let provider = CSharpProvider::new();
         provider.rebuild_cache(&settings).unwrap();
@@ -496,7 +496,7 @@ config_files = ["{}"]
         std::env::set_current_dir(&original_dir).unwrap();
 
         // Verify cache file exists
-        let cache_path = codanna_dir.join("index/resolvers/csharp_resolution.json");
+        let cache_path = quarry_dir.join("index/resolvers/csharp_resolution.json");
         assert!(
             cache_path.exists(),
             "Cache file should exist at {}",

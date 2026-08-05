@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use codanna::parsing::LanguageParser;
-    use codanna::parsing::typescript::TypeScriptParser;
+    use quarry::parsing::LanguageParser;
+    use quarry::parsing::typescript::TypeScriptParser;
 
     #[test]
     fn test_typescript_call_tracking() {

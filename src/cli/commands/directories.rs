@@ -166,7 +166,7 @@ pub fn run_list_dirs(config: &Settings) {
     println!("Indexed directories:");
     if config.indexing.indexed_paths.is_empty() {
         println!("  (none configured)");
-        println!("\nTo add directories: codanna add-dir <path>");
+        println!("\nTo add directories: quarry add-dir <path>");
     } else {
         for path in &config.indexing.indexed_paths {
             println!("  - {}", path.display());
@@ -179,7 +179,7 @@ fn resolve_config_path(cli_config: Option<&Path>) -> PathBuf {
         custom_path.to_path_buf()
     } else {
         Settings::find_workspace_config().unwrap_or_else(|| {
-            eprintln!("Error: No configuration file found. Run 'codanna init' first.");
+            eprintln!("Error: No configuration file found. Run 'quarry init' first.");
             std::process::exit(1);
         })
     }

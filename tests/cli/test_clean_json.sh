@@ -17,10 +17,10 @@ test_json() {
     echo -n "Testing $desc... "
     
     # Run command and capture both stdout and stderr
-    OUTPUT=$(./target/release/codanna $cmd --json 2>&1)
+    OUTPUT=$(./target/release/quarry $cmd --json 2>&1)
     
     # Check if stderr contains any output (debug messages would go here)
-    STDERR=$(./target/release/codanna $cmd --json 2>&1 1>/dev/null)
+    STDERR=$(./target/release/quarry $cmd --json 2>&1 1>/dev/null)
     
     # Check if output is valid JSON
     if echo "$OUTPUT" | jq '.' > /dev/null 2>&1; then
@@ -51,9 +51,9 @@ echo
 
 # Test piping between commands
 echo -n "Testing pipe chain... "
-PIPE_RESULT=$(./target/release/codanna retrieve symbol main --json 2>/dev/null | \
+PIPE_RESULT=$(./target/release/quarry retrieve symbol main --json 2>/dev/null | \
     jq -r '.data.items[0].symbol.name' 2>/dev/null | \
-    xargs -I {} ./target/release/codanna retrieve callers {} --json 2>/dev/null | \
+    xargs -I {} ./target/release/quarry retrieve callers {} --json 2>/dev/null | \
     jq '.data.count' 2>/dev/null)
 
 if [ -n "$PIPE_RESULT" ]; then

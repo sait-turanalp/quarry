@@ -46,8 +46,8 @@ impl OptimizedStaticModel {
     ///
     /// Priority order:
     /// 1. If `model_path` is already a directory with `model.safetensors` → use it
-    /// 2. Try `~/.codanna/models/{name}-int8/` (preferred int8 variant)
-    /// 3. Try `~/.codanna/models/{name}/`
+    /// 2. Try `~/.quarry/models/{name}-int8/` (preferred int8 variant)
+    /// 3. Try `~/.quarry/models/{name}/`
     ///
     /// For HuggingFace identifiers like `minishlab/potion-retrieval-32M`,
     /// extracts the repo name (`potion-retrieval-32M`) for lookup.
@@ -65,7 +65,7 @@ impl OptimizedStaticModel {
 
         let models_dir = dirs::home_dir()
             .ok_or_else(|| "cannot determine home directory".to_string())?
-            .join(".codanna")
+            .join(".quarry")
             .join("models");
 
         // Try name-int8 first (preferred).
@@ -95,7 +95,7 @@ impl OptimizedStaticModel {
     ///
     /// If `model_path` is not a local directory (e.g. a HuggingFace identifier
     /// like `minishlab/potion-retrieval-32M`), attempts to resolve it under
-    /// `~/.codanna/models/` by extracting the model name and trying common
+    /// `~/.quarry/models/` by extracting the model name and trying common
     /// suffixes (`-int8`, as-is).
     pub fn from_local(model_path: &str) -> Result<Self, String> {
         let base = Self::resolve_model_path(model_path)?;
@@ -233,10 +233,7 @@ impl OptimizedStaticModel {
 
             let encodings = self
                 .tokenizer
-                .encode_batch_fast::<String>(
-                    truncated.into_iter().map(Into::into).collect(),
-                    false,
-                )
+                .encode_batch_fast::<String>(truncated.into_iter().map(Into::into).collect(), false)
                 .expect("tokenization failed");
 
             for encoding in encodings {
@@ -348,7 +345,7 @@ impl OptimizedStaticModel {
 mod tests {
     use super::*;
 
-    const MODEL_PATH: &str = "/Users/sait/.codanna/models/potion-retrieval-32M-int8";
+    const MODEL_PATH: &str = "/Users/sait/.quarry/models/potion-retrieval-32M-int8";
 
     fn model_available() -> bool {
         Path::new(MODEL_PATH).join("model.safetensors").exists()
@@ -369,10 +366,7 @@ mod tests {
 
         // Verify L2-normalized (norm ≈ 1.0).
         let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
-        assert!(
-            (norm - 1.0).abs() < 0.01,
-            "expected unit norm, got {norm}"
-        );
+        assert!((norm - 1.0).abs() < 0.01, "expected unit norm, got {norm}");
     }
 
     #[test]
@@ -394,5 +388,4 @@ mod tests {
             assert_eq!(emb.len(), 512);
         }
     }
-
 }

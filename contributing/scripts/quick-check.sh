@@ -1,6 +1,6 @@
 #!/bin/bash
 # Quick pre-push check - matches GitHub Actions quick-check.yml
-# For full test suite, use test-codanna-local.sh
+# For full test suite, use test-quarry-local.sh
 # To auto-fix issues, use auto-fix.sh
 
 set -e

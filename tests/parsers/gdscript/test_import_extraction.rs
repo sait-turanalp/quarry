@@ -1,6 +1,6 @@
-use codanna::FileId;
-use codanna::parsing::LanguageParser;
-use codanna::parsing::gdscript::GdscriptParser;
+use quarry::FileId;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::gdscript::GdscriptParser;
 
 #[test]
 fn test_gdscript_extends_import_extraction() {

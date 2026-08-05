@@ -1,8 +1,8 @@
 //! Tests for profile installation orchestration
 
-use codanna::profiles::error::ProfileError;
-use codanna::profiles::lockfile::ProfileLockfile;
-use codanna::profiles::orchestrator::install_profile;
+use quarry::profiles::error::ProfileError;
+use quarry::profiles::lockfile::ProfileLockfile;
+use quarry::profiles::orchestrator::install_profile;
 use std::fs;
 use tempfile::tempdir;
 
@@ -37,7 +37,7 @@ fn test_install_profile_creates_structure() {
     assert!(workspace.join("CLAUDE.md").exists());
 
     // Verify lockfile created
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     assert!(lockfile_path.exists());
 
     // Verify profile entry in lockfile
@@ -88,7 +88,7 @@ fn test_install_profile_updates_manifest() {
     install_profile("claude", &profiles_dir, &workspace, false, None, None, None).unwrap();
 
     // Verify lockfile content
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = ProfileLockfile::load(&lockfile_path).unwrap();
 
     // Verify profile entry exists with correct name
@@ -190,7 +190,7 @@ fn test_install_profile_calculates_integrity() {
     install_profile("claude", &profiles_dir, &workspace, false, None, None, None).unwrap();
 
     // Verify integrity was calculated
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = ProfileLockfile::load(&lockfile_path).unwrap();
     let entry = lockfile.get_profile("claude").unwrap();
 

@@ -1,7 +1,7 @@
-use codanna::parsing::rust::parser::RustParser;
-use codanna::parsing::rust::resolution::RustResolutionContext;
-use codanna::parsing::{ResolutionScope, ScopeLevel};
-use codanna::{FileId, Range, Symbol, SymbolId, SymbolKind, Visibility};
+use quarry::parsing::rust::parser::RustParser;
+use quarry::parsing::rust::resolution::RustResolutionContext;
+use quarry::parsing::{ResolutionScope, ScopeLevel};
+use quarry::{FileId, Range, Symbol, SymbolId, SymbolKind, Visibility};
 
 #[test]
 fn test_cross_module_call_resolution_step_by_step() {

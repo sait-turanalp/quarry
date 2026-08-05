@@ -1,6 +1,6 @@
 //! Tests for profile lockfile
 
-use codanna::profiles::lockfile::{ProfileLockEntry, ProfileLockfile};
+use quarry::profiles::lockfile::{ProfileLockEntry, ProfileLockfile};
 
 #[test]
 fn test_new_lockfile() {

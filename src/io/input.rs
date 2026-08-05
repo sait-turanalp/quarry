@@ -68,7 +68,7 @@ pub mod error_codes {
 }
 
 // Future implementation for parsing JSON-RPC requests from stdin
-// This would enable codanna to be used as a backend for IDEs
+// This would enable quarry to be used as a backend for IDEs
 //
 // Example future usage:
 // ```

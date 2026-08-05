@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use codanna::plugins::error::PluginError;
-use codanna::{Settings, plugins};
 use git2::{IndexAddOption, Repository, Signature};
+use quarry::plugins::error::PluginError;
+use quarry::{Settings, plugins};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -35,7 +35,7 @@ fn read_json(workspace: &Path, relative: &str) -> Value {
 }
 
 fn load_workspace_settings(workspace: &Path) -> Settings {
-    let config_dir = workspace.join(".codanna");
+    let config_dir = workspace.join(".quarry");
     fs::create_dir_all(&config_dir).expect("create .codanna directory");
 
     let settings_path = config_dir.join("settings.toml");
@@ -143,7 +143,7 @@ fn add_plugin_installs_codanna_cc_plugin() {
         );
 
         // Lockfile should have plugin entry with tracked files
-        let lockfile = read_json(workspace, ".codanna/plugins/lockfile.json");
+        let lockfile = read_json(workspace, ".quarry/plugins/lockfile.json");
         let entry = &lockfile["plugins"]["codanna-cc-plugin"];
         assert_eq!(entry["name"], "codanna-cc-plugin");
         assert!(
@@ -183,7 +183,7 @@ fn dry_run_does_not_modify_workspace() {
             "dry-run install must not create .claude"
         );
         assert!(
-            !workspace.join(".codanna/plugins/lockfile.json").exists(),
+            !workspace.join(".quarry/plugins/lockfile.json").exists(),
             "dry-run install must not create lockfile"
         );
         assert!(
@@ -219,7 +219,7 @@ fn remove_plugin_cleans_files_and_lockfile() {
         );
         assert!(!workspace.join(".claude/scripts/codanna-cc-plugin").exists());
 
-        let lockfile = read_json(workspace, ".codanna/plugins/lockfile.json");
+        let lockfile = read_json(workspace, ".quarry/plugins/lockfile.json");
         assert!(
             lockfile
                 .get("plugins")
@@ -338,7 +338,7 @@ fn update_plugin_dry_run_does_not_modify_workspace() {
         )
         .expect("install succeeds");
 
-        let lockfile_before = read_json(workspace, ".codanna/plugins/lockfile.json");
+        let lockfile_before = read_json(workspace, ".quarry/plugins/lockfile.json");
         let commit_before = lockfile_before["plugins"]["codanna-cc-plugin"]["commit"]
             .as_str()
             .unwrap()
@@ -347,7 +347,7 @@ fn update_plugin_dry_run_does_not_modify_workspace() {
         plugins::update_plugin(&settings, "codanna-cc-plugin", None, false, true)
             .expect("dry-run update succeeds");
 
-        let lockfile_after = read_json(workspace, ".codanna/plugins/lockfile.json");
+        let lockfile_after = read_json(workspace, ".quarry/plugins/lockfile.json");
         let commit_after = lockfile_after["plugins"]["codanna-cc-plugin"]["commit"]
             .as_str()
             .unwrap()
@@ -454,7 +454,7 @@ fn install_fails_on_mcp_conflict() {
             "conflicting plugin should not leave installed commands"
         );
 
-        let lockfile = read_json(workspace, ".codanna/plugins/lockfile.json");
+        let lockfile = read_json(workspace, ".quarry/plugins/lockfile.json");
         assert!(
             lockfile["plugins"].get("conflict-plugin").is_none(),
             "lockfile should not record failed plugin"

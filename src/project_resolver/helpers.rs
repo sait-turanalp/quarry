@@ -134,8 +134,8 @@ pub fn module_for_file_generic(
     separator: &str,
 ) -> Option<String> {
     // Load cached resolution rules
-    let codanna_dir = Path::new(crate::init::local_dir_name());
-    let persistence = ResolutionPersistence::new(codanna_dir);
+    let quarry_dir = Path::new(crate::init::local_dir_name());
+    let persistence = ResolutionPersistence::new(quarry_dir);
 
     let index = persistence.load(language_id).ok()?;
 

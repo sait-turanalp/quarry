@@ -9,9 +9,9 @@
 //! 3. Resolution API (Tier 2) - Symbol resolution helpers
 //! 4. GDScript-specific - res:// paths, extends, class_name
 
-use codanna::parsing::gdscript::{GdscriptBehavior, GdscriptResolutionContext};
-use codanna::parsing::{Import, LanguageBehavior};
-use codanna::{FileId, Visibility};
+use quarry::parsing::gdscript::{GdscriptBehavior, GdscriptResolutionContext};
+use quarry::parsing::{Import, LanguageBehavior};
+use quarry::{FileId, Visibility};
 use std::path::Path;
 
 // =============================================================================
@@ -315,12 +315,12 @@ fn test_import_matches_symbol_relative_paths() {
 
 #[test]
 fn test_is_resolvable_symbol() {
-    use codanna::symbol::ScopeContext;
-    use codanna::{Range, Symbol, SymbolKind};
+    use quarry::symbol::ScopeContext;
+    use quarry::{Range, Symbol, SymbolKind};
 
     let behavior = GdscriptBehavior::new();
     let file_id = FileId::new(1).expect("valid file id");
-    let symbol_id = codanna::SymbolId::new(1).expect("valid symbol id");
+    let symbol_id = quarry::SymbolId::new(1).expect("valid symbol id");
 
     // Resolvable: Class
     let class_symbol = Symbol::new(
@@ -358,12 +358,12 @@ fn test_is_resolvable_symbol() {
 
 #[test]
 fn test_is_symbol_visible_from_file() {
-    use codanna::{Range, Symbol, SymbolKind};
+    use quarry::{Range, Symbol, SymbolKind};
 
     let behavior = GdscriptBehavior::new();
     let file1 = FileId::new(1).expect("valid file id");
     let file2 = FileId::new(2).expect("valid file id");
-    let symbol_id = codanna::SymbolId::new(1).expect("valid symbol id");
+    let symbol_id = quarry::SymbolId::new(1).expect("valid symbol id");
 
     // Same file: always visible
     let symbol = Symbol::new(

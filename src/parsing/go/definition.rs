@@ -1,6 +1,6 @@
 //! Go language definition and registration
 //!
-//! This module defines the Go language support for Codanna, providing
+//! This module defines the Go language support for Quarry, providing
 //! Tree-sitter-based parsing and symbol extraction for Go codebases.
 //!
 //! ## AST Node Types and Symbol Mappings

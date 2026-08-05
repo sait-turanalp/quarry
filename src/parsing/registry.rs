@@ -103,12 +103,12 @@ impl<'de> Deserialize<'de> for LanguageId {
 #[derive(Error, Debug)]
 pub enum RegistryError {
     #[error(
-        "Language '{0}' not found in registry\nSuggestion: Check available languages with 'codanna list-languages' or ensure the language module is compiled in"
+        "Language '{0}' not found in registry\nSuggestion: Check available languages with 'quarry list-languages' or ensure the language module is compiled in"
     )]
     LanguageNotFound(LanguageId),
 
     #[error(
-        "Language '{0}' is available but disabled\nSuggestion: Enable it in .codanna/settings.toml by setting languages.{0}.enabled = true"
+        "Language '{0}' is available but disabled\nSuggestion: Enable it in .quarry/settings.toml by setting languages.{0}.enabled = true"
     )]
     LanguageDisabled(LanguageId),
 

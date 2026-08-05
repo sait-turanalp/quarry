@@ -22,8 +22,8 @@ pub fn run(action: ProfileAction) {
                 // Legacy direct installation from git source (not yet implemented)
                 eprintln!("Direct git source installation not yet implemented");
                 eprintln!("Use provider-based installation instead:");
-                eprintln!("  1. codanna profile provider add <source>");
-                eprintln!("  2. codanna profile install {profile_name}");
+                eprintln!("  1. quarry profile provider add <source>");
+                eprintln!("  2. quarry profile install {profile_name}");
                 Err(profiles::error::ProfileError::InvalidManifest {
                     reason: "Git source installation not yet implemented. Use provider registry."
                         .to_string(),

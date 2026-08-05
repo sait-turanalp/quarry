@@ -20,7 +20,7 @@ fun String.bar(): String {
 
 /**
  * Test function demonstrating the challenge:
- * Can Codanna track that:
+ * Can Quarry track that:
  * 1. foo(3) returns Int (generic type inference)
  * 2. .bar() on Int resolves to Int.bar() (not String.bar())
  * 3. foo("abc") returns String

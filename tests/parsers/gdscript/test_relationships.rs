@@ -1,5 +1,5 @@
-use codanna::parsing::LanguageParser;
-use codanna::parsing::gdscript::GdscriptParser;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::gdscript::GdscriptParser;
 
 fn load_fixture() -> &'static str {
     include_str!("../../fixtures/gdscript/player.gd")

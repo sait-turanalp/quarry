@@ -1,4 +1,4 @@
-//! C# language support for codanna
+//! C# language support for quarry
 //!
 //! This module provides complete C# language parsing and analysis capabilities:
 //!
@@ -31,8 +31,8 @@
 //! # Example
 //!
 //! ```no_run
-//! use codanna::parsing::csharp::{CSharpParser, CSharpBehavior};
-//! use codanna::parsing::LanguageParser;
+//! use quarry::parsing::csharp::{CSharpParser, CSharpBehavior};
+//! use quarry::parsing::LanguageParser;
 //!
 //! // Create parser and parse C# code
 //! let mut parser = CSharpParser::new().expect("Failed to create parser");

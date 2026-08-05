@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 
-# codanna installer - reads dist-manifest.json from GitHub releases
+# quarry installer - reads dist-manifest.json from GitHub releases
 
 REPO="bartolli/codanna"
-INSTALL_DIR="${CODANNA_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${QUARRY_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Colors (respects NO_COLOR and non-terminal output)
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -18,8 +18,8 @@ else
     GREEN='' BLUE='' YELLOW='' RED='' BOLD='' RESET=''
 fi
 
-say() { printf "%b\n" "${BLUE}codanna:${RESET} $1"; }
-err() { printf "%b\n" "${RED}codanna: ERROR:${RESET} $1" >&2; exit 1; }
+say() { printf "%b\n" "${BLUE}quarry:${RESET} $1"; }
+err() { printf "%b\n" "${RED}quarry: ERROR:${RESET} $1" >&2; exit 1; }
 
 # Detect platform
 detect_platform() {
@@ -50,8 +50,8 @@ get_latest_version() {
 # Check for existing installation
 check_existing() {
     ver="${version#v}"  # strip 'v' prefix for display
-    if command -v codanna >/dev/null 2>&1; then
-        current=$(codanna --version 2>/dev/null | cut -d' ' -f2 | sed 's/^v//' || echo "unknown")
+    if command -v quarry >/dev/null 2>&1; then
+        current=$(quarry --version 2>/dev/null | cut -d' ' -f2 | sed 's/^v//' || echo "unknown")
         say "updating ${BOLD}$current${RESET} -> ${GREEN}$ver${RESET}"
     else
         say "installing ${GREEN}$ver${RESET}"
@@ -61,7 +61,7 @@ check_existing() {
 # Main
 main() {
     platform=$(detect_platform)
-    version="${CODANNA_VERSION:-$(get_latest_version)}"
+    version="${QUARRY_VERSION:-$(get_latest_version)}"
 
     check_existing
     say "platform: $platform"
@@ -117,12 +117,12 @@ main() {
 
     # Install
     mkdir -p "$INSTALL_DIR"
-    binary=$(find "$tmpdir" -name 'codanna' -type f | head -1)
+    binary=$(find "$tmpdir" -name 'quarry' -type f | head -1)
     [ -z "$binary" ] && err "binary not found in archive"
     cp "$binary" "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/codanna" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/quarry" 2>/dev/null || true
 
-    say "${GREEN}installed${RESET} to $INSTALL_DIR/codanna"
+    say "${GREEN}installed${RESET} to $INSTALL_DIR/quarry"
 
     # PATH check
     case ":$PATH:" in

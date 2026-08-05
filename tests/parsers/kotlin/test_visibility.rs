@@ -2,12 +2,12 @@
 //!
 //! Tests that visibility modifiers are correctly extracted using node-based detection
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::kotlin::KotlinParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, Visibility};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::kotlin::KotlinParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, Visibility};
 
-fn parse_kotlin(code: &str) -> Vec<codanna::Symbol> {
+fn parse_kotlin(code: &str) -> Vec<quarry::Symbol> {
     let mut parser = KotlinParser::new().expect("Failed to create Kotlin parser");
     let mut counter = SymbolCounter::new();
     parser.parse(code, FileId(1), &mut counter)

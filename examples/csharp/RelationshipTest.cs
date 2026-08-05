@@ -1,5 +1,5 @@
 /// <summary>
-/// Relationship and Call Graph Test File for Codanna.
+/// Relationship and Call Graph Test File for Quarry.
 ///
 /// This file is specifically designed to test:
 /// 1. Method call tracking (get_calls MCP tool)
@@ -29,7 +29,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Codanna.Examples.Relationships
+namespace Quarry.Examples.Relationships
 {
     // === SIMPLE CALL CHAIN: A -> B -> C ===
 

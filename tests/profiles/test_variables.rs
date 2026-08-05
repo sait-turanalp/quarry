@@ -1,6 +1,6 @@
 //! Tests for variable merging
 
-use codanna::profiles::variables::Variables;
+use quarry::profiles::variables::Variables;
 
 #[test]
 fn test_merge_empty() {

@@ -1,8 +1,8 @@
 //! Debug helper to dump relationship extraction results
 //! Run with: cargo test debug_dump_swift --test parsers_tests -- --nocapture --ignored
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::swift::SwiftParser;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::swift::SwiftParser;
 use std::fs;
 use std::path::Path;
 

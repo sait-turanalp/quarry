@@ -24,10 +24,10 @@ sample = int(sys.argv[5]) if len(sys.argv) > 5 else 120
 
 RANGE = re.compile(r"File:\s+(\S+?):(\d+)-(\d+)")
 ENV = {
-    "CI_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
-    "CI_RERANKING__ENABLED": "false",
-    "CI_INDEXING__INCLUDE_TESTS": "true",
-    "CI_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": "999",
+    "QUARRY_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
+    "QUARRY_RERANKING__ENABLED": "false",
+    "QUARRY_INDEXING__INCLUDE_TESTS": "true",
+    "QUARRY_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": "999",
 }
 
 rows = [json.loads(line) for line in open(evalset)]

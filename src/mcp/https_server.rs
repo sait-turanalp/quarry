@@ -72,7 +72,7 @@ pub async fn serve_https(config: crate::Settings, watch: bool, bind: String) -> 
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        let settings_path = workspace_root.join(".codanna/settings.toml");
+        let settings_path = workspace_root.join(".quarry/settings.toml");
         let debounce_ms = config.file_watch.debounce_ms;
 
         // Build unified watcher with handlers
@@ -406,7 +406,7 @@ async fn oauth_authorize(
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Authorize Codanna</title>
+    <title>Authorize Quarry</title>
     <meta charset="utf-8">
     <style>
         body {{
@@ -470,9 +470,9 @@ async fn oauth_authorize(
 </head>
 <body>
     <div class="container">
-        <h1>🔐 Authorize Codanna</h1>
+        <h1>🔐 Authorize Quarry</h1>
         <div class="spinner"></div>
-        <p>Authorizing access to Codanna MCP Server...</p>
+        <p>Authorizing access to Quarry MCP Server...</p>
         <p>You will be redirected automatically.</p>
         <button onclick="window.location.href='{callback_url}'">
             Continue Manually
@@ -504,7 +504,7 @@ async fn get_or_create_certificate(bind: &str) -> anyhow::Result<(Vec<u8>, Vec<u
     // Determine certificate storage directory
     let cert_dir = dirs::config_dir()
         .context("Failed to get config directory")?
-        .join("codanna")
+        .join("quarry")
         .join("certs");
 
     let cert_path = cert_dir.join("server.pem");

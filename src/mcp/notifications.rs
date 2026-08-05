@@ -82,7 +82,7 @@ impl super::CodeIntelligenceServer {
                                 let _ = peer
                                     .notify_logging_message(LoggingMessageNotificationParam {
                                         level: LoggingLevel::Info,
-                                        logger: Some("codanna".to_string()),
+                                        logger: Some("quarry".to_string()),
                                         data: serde_json::json!({
                                             "action": "re-indexed",
                                             "file": path_str
@@ -94,7 +94,7 @@ impl super::CodeIntelligenceServer {
                                 let _ = peer
                                     .send_notification(ServerNotification::CustomNotification(
                                         CustomNotification::new(
-                                            "notifications/codanna/file-reindexed",
+                                            "notifications/quarry/file-reindexed",
                                             Some(serde_json::json!({
                                                 "path": path_str
                                             })),
@@ -116,7 +116,7 @@ impl super::CodeIntelligenceServer {
                                 let _ = peer
                                     .send_notification(ServerNotification::CustomNotification(
                                         CustomNotification::new(
-                                            "notifications/codanna/file-created",
+                                            "notifications/quarry/file-created",
                                             Some(serde_json::json!({
                                                 "path": path_str
                                             })),
@@ -139,7 +139,7 @@ impl super::CodeIntelligenceServer {
                                 let _ = peer
                                     .send_notification(ServerNotification::CustomNotification(
                                         CustomNotification::new(
-                                            "notifications/codanna/file-deleted",
+                                            "notifications/quarry/file-deleted",
                                             Some(serde_json::json!({
                                                 "path": path_str
                                             })),
@@ -161,7 +161,7 @@ impl super::CodeIntelligenceServer {
                                 let _ = peer
                                     .send_notification(ServerNotification::CustomNotification(
                                         CustomNotification::new(
-                                            "notifications/codanna/index-reloaded",
+                                            "notifications/quarry/index-reloaded",
                                             Some(serde_json::json!({})),
                                         ),
                                     ))

@@ -1,10 +1,10 @@
 //! PHP readonly class SymbolKind tests
 
-use codanna::parsing::php::PhpParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, SymbolKind};
+use quarry::parsing::php::PhpParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, SymbolKind};
 
-fn parse_php(code: &str) -> Vec<codanna::Symbol> {
+fn parse_php(code: &str) -> Vec<quarry::Symbol> {
     let mut parser = PhpParser::new().expect("Failed to create PHP parser");
     let mut counter = SymbolCounter::new();
     parser.parse(code, FileId(1), &mut counter)

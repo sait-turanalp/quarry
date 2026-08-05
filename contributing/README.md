@@ -1,6 +1,6 @@
-# Contributing to Codanna
+# Contributing to Quarry
 
-Thank you for your interest in contributing to Codanna! This guide focuses on the development workflow and contributor-specific requirements.
+Thank you for your interest in contributing to Quarry! This guide focuses on the development workflow and contributor-specific requirements.
 
 ## Quick Links
 
@@ -47,7 +47,7 @@ sudo dnf install pkgconfig openssl-devel
 1. **Fork and clone the repository:**
    ```bash
    git clone https://github.com/bartolli/codanna.git
-   cd codanna
+   cd quarry
    ```
 
 2. **Build the project:**
@@ -69,23 +69,23 @@ sudo dnf install pkgconfig openssl-devel
    ./contributing/scripts/quick-check.sh
    ```
 
-### Recommended: Codanna Plugin for Claude Code
+### Recommended: Quarry Plugin for Claude Code
 
-If you use Claude Code, install the Codanna plugin for better code navigation:
+If you use Claude Code, install the Quarry plugin for better code navigation:
 
 ```bash
-# Add the Codanna marketplace
+# Add the Quarry marketplace
 /plugin marketplace add bartolli/codanna-plugins
 
 # Install the plugin
-/plugin install codanna-cc@codanna-plugins
+/plugin install quarry-cc@quarry-plugins
 
 # Navigate the codebase with /x-ray
-/codanna-cc:x-ray "How does symbol resolution work?"
-/codanna-cc:x-ray "Where is JSX component tracking implemented?"
+/quarry-cc:x-ray "How does symbol resolution work?"
+/quarry-cc:x-ray "Where is JSX component tracking implemented?"
 
 # Look up specific symbols
-/codanna-cc:symbol TypeScriptParser
+/quarry-cc:symbol TypeScriptParser
 ```
 
 The plugin indexes this codebase and provides semantic search, making it easier to understand the architecture and find implementation details.
@@ -93,7 +93,7 @@ The plugin indexes this codebase and provides semantic search, making it easier 
 ## Project Structure
 
 ```
-codanna/
+quarry/
 ├── src/
 │   ├── parsing/         # Language parsers (rust/, typescript/, python/, php/, go/)
 │   ├── indexing/        # Symbol indexing and resolution
@@ -107,19 +107,19 @@ codanna/
 
 ### Parse Command
 
-The `codanna parse` command is essential for parser development and debugging:
+The `quarry parse` command is essential for parser development and debugging:
 
 ```bash
 # Parse a file and output AST nodes in JSONL format
-codanna parse file.rs                      # Named nodes only (like tree-sitter)
-codanna parse file.rs --all-nodes          # Include all nodes (punctuation, keywords)
-codanna parse file.rs --max-depth 3        # Limit traversal depth
-codanna parse file.rs -o ast.jsonl         # Output to file
+quarry parse file.rs                      # Named nodes only (like tree-sitter)
+quarry parse file.rs --all-nodes          # Include all nodes (punctuation, keywords)
+quarry parse file.rs --max-depth 3        # Limit traversal depth
+quarry parse file.rs -o ast.jsonl         # Output to file
 
 # Analyze AST structure
-codanna parse file.rs | jq -r .node | sort -u     # List unique node types
-codanna parse file.rs | jq 'select(.depth == 1)'  # Show top-level nodes
-codanna parse file.rs | jq 'select(.node == "function_item")'  # Find specific nodes
+quarry parse file.rs | jq -r .node | sort -u     # List unique node types
+quarry parse file.rs | jq 'select(.depth == 1)'  # Show top-level nodes
+quarry parse file.rs | jq 'select(.node == "function_item")'  # Find specific nodes
 ```
 
 **Key Features:**
@@ -141,7 +141,7 @@ Install tree-sitter grammars for testing:
 ```
 
 #### compare-nodes.sh
-Compare codanna parser with tree-sitter (two modes):
+Compare quarry parser with tree-sitter (two modes):
 
 **Language mode** - Runs audit tests and generates reports:
 ```bash
@@ -160,7 +160,7 @@ This mode:
 ./contributing/tree-sitter/scripts/compare-nodes.sh examples/rust/main.rs
 ```
 This mode:
-- Uses `codanna parse` to analyze the file
+- Uses `quarry parse` to analyze the file
 - Compares with tree-sitter output
 - Saves detailed comparison to `{filename}_comparison.log`
 - Shows matching statistics
@@ -168,7 +168,7 @@ This mode:
 #### explore-ast.sh
 Quick AST exploration:
 ```bash
-# Use codanna (default)
+# Use quarry (default)
 ./contributing/tree-sitter/scripts/explore-ast.sh file.rs
 
 # Use tree-sitter

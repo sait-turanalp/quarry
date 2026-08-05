@@ -148,6 +148,8 @@ pub async fn run(
         .create(true)
         .read(true)
         .write(true)
+        // A lock file holds no content; truncating it would be meaningless.
+        .truncate(false)
         .open(&lock_path)
     {
         Ok(file) => file,
@@ -161,7 +163,7 @@ pub async fn run(
     };
     if let Err(e) = _lock_file.try_lock_exclusive() {
         eprintln!(
-            "Error: another 'codanna mcp' query is already running for this workspace (lock: '{}'). Wait for it to finish and retry. ({e})",
+            "Error: another 'quarry mcp' query is already running for this workspace (lock: '{}'). Wait for it to finish and retry. ({e})",
             lock_path.display()
         );
         std::process::exit(1);
@@ -2044,7 +2046,7 @@ pub async fn run(
                     }
                     if outcome.bm25_only_fallback {
                         envelope = envelope.with_hint(
-                            "Vector recall unavailable; results are BM25-only fallback. Rebuild embeddings with: codanna index . --force",
+                            "Vector recall unavailable; results are BM25-only fallback. Rebuild embeddings with: quarry index . --force",
                         );
                     }
 
@@ -2135,7 +2137,7 @@ pub async fn run(
                     )
                     .with_entity_type(EntityType::Document)
                     .with_query(query)
-                    .with_hint("Run 'codanna documents index' to create the index");
+                    .with_hint("Run 'quarry documents index' to create the index");
 
                     println!("{}", envelope.to_json().expect("envelope serialization"));
                     std::process::exit(1);

@@ -1,9 +1,9 @@
 //! Integration test for C++ resolution using real C++ code
 
-use codanna::parsing::LanguageBehavior;
-use codanna::parsing::cpp::parser::CppParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, SymbolKind};
+use quarry::parsing::LanguageBehavior;
+use quarry::parsing::cpp::parser::CppParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, SymbolKind};
 
 #[test]
 fn test_cpp_resolution_with_real_code() {
@@ -16,7 +16,7 @@ fn test_cpp_resolution_with_real_code() {
 
     // Create parser and behavior
     let mut parser = CppParser::new().expect("Failed to create CppParser");
-    let behavior = codanna::parsing::cpp::behavior::CppBehavior::new();
+    let behavior = quarry::parsing::cpp::behavior::CppBehavior::new();
     let file_id = FileId(1);
     let mut symbol_counter = SymbolCounter::new();
 
@@ -39,7 +39,7 @@ fn test_cpp_resolution_with_real_code() {
         context.add_symbol(
             symbol.name.to_string(),
             symbol.id,
-            codanna::parsing::resolution::ScopeLevel::Module,
+            quarry::parsing::resolution::ScopeLevel::Module,
         );
     }
 
@@ -183,24 +183,24 @@ fn test_cpp_resolution_with_real_code() {
 #[test]
 fn test_cpp_resolution_context_basic() {
     // Basic unit test for C++ context creation
-    let behavior = codanna::parsing::cpp::behavior::CppBehavior::new();
+    let behavior = quarry::parsing::cpp::behavior::CppBehavior::new();
     let file_id = FileId(1);
     let mut context = behavior.create_resolution_context(file_id);
 
     // Add test symbols manually
-    let class_id = codanna::SymbolId(200);
-    let method_id = codanna::SymbolId(201);
+    let class_id = quarry::SymbolId(200);
+    let method_id = quarry::SymbolId(201);
 
     context.add_symbol(
         "TestClass".to_string(),
         class_id,
-        codanna::parsing::resolution::ScopeLevel::Module,
+        quarry::parsing::resolution::ScopeLevel::Module,
     );
 
     context.add_symbol(
         "test_method".to_string(),
         method_id,
-        codanna::parsing::resolution::ScopeLevel::Local,
+        quarry::parsing::resolution::ScopeLevel::Local,
     );
 
     // Test resolution

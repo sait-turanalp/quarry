@@ -13,18 +13,18 @@ import re
 import sys
 import time
 
-sys.path.insert(0, "/private/tmp/claude-501/-Users-sait-Developer-tools-codanna/ea346bec-efbb-436c-816c-5792dde8dd17/scratchpad")
+sys.path.insert(0, "/private/tmp/claude-501/-Users-sait-Developer-tools-quarry/ea346bec-efbb-436c-816c-5792dde8dd17/scratchpad")
 from sweep import Session, FILE_LINE  # noqa: E402  (reuses the MCP stdio client)
 
 queries_path, repo, binary = sys.argv[1], sys.argv[2], sys.argv[3]
 rows = [json.loads(line) for line in open(queries_path)]
 
-ENV = {"CI_RERANKING__ENABLED": "false"}
+ENV = {"QUARRY_RERANKING__ENABLED": "false"}
 if not os.environ.get("EVAL_DEFAULT_POOL"):
     ENV.update({
-        "CI_CHUNK_SEARCH__RRF_K": "5",
-        "CI_CHUNK_SEARCH__TOP_K_VECTOR": "25",
-        "CI_CHUNK_SEARCH__TOP_K_BM25": "25",
+        "QUARRY_CHUNK_SEARCH__RRF_K": "5",
+        "QUARRY_CHUNK_SEARCH__TOP_K_VECTOR": "25",
+        "QUARRY_CHUNK_SEARCH__TOP_K_BM25": "25",
     })
 
 LEAD = re.compile(

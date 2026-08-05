@@ -77,7 +77,7 @@ pub struct GetCallTreeRequest {
    - Getters: `len`, `is_empty`, `is_some`, `value`, `metadata`
    - Iterator utils: `iter`, `collect`, `map`, `filter`
    - Stdlib constructors: `Vec::new`, `HashMap::new`, `Option::Some`
-   - Codanna-specific: `symbols_in_file`, `merge`
+   - Quarry-specific: `symbols_in_file`, `merge`
 
 2. **`group_duplicate_calls(nodes)`** - HashMap-based grouping
    - Counts occurrences by `symbol_id`
@@ -96,26 +96,26 @@ pub struct GetCallTreeRequest {
 
 ### Default Behavior (duplicate collapsing enabled)
 ```bash
-codanna mcp get_call_tree symbol_id:4062 max_depth:2
+quarry mcp get_call_tree symbol_id:4062 max_depth:2
 # Shows: 55 calls with [×N] markers
 ```
 
 ### Clean Business Logic View
 ```bash
-codanna mcp get_call_tree symbol_id:4062 max_depth:2 exclude_trivial:true
+quarry mcp get_call_tree symbol_id:4062 max_depth:2 exclude_trivial:true
 # Shows: 41 calls, only meaningful business logic
 ```
 
 ### Maximum Noise (disable all features)
 ```bash
-codanna mcp get_call_tree symbol_id:4062 max_depth:2 \
+quarry mcp get_call_tree symbol_id:4062 max_depth:2 \
   collapse_duplicates:false exclude_trivial:false
 # Shows: 95 calls, all duplicates and trivial calls
 ```
 
 ### Combined Mode (cleanest output)
 ```bash
-codanna mcp get_call_tree symbol_id:4062 max_depth:2 \
+quarry mcp get_call_tree symbol_id:4062 max_depth:2 \
   collapse_duplicates:true exclude_trivial:true
 # Shows: 41 calls, 87% noise reduction
 ```

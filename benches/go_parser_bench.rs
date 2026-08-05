@@ -6,9 +6,9 @@
 //! - Performance comparable to other language parsers
 //! - Scalability with large codebases
 
-use codanna::parsing::go::GoParser;
-use codanna::types::{FileId, SymbolCounter};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use quarry::parsing::go::GoParser;
+use quarry::types::{FileId, SymbolCounter};
 use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;

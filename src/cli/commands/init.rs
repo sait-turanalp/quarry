@@ -6,7 +6,7 @@ use crate::config::Settings;
 
 /// Run init command - create configuration file.
 pub fn run_init(force: bool) {
-    let config_path = PathBuf::from(".codanna/settings.toml");
+    let config_path = PathBuf::from(".quarry/settings.toml");
 
     if config_path.exists() && !force {
         eprintln!(

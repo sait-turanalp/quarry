@@ -1,7 +1,7 @@
-use codanna::Visibility;
-use codanna::parsing::LanguageParser;
-use codanna::parsing::gdscript::GdscriptParser;
-use codanna::types::{FileId, SymbolCounter, SymbolKind};
+use quarry::Visibility;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::gdscript::GdscriptParser;
+use quarry::types::{FileId, SymbolCounter, SymbolKind};
 
 fn build_parser() -> (GdscriptParser, FileId, SymbolCounter) {
     let parser = GdscriptParser::new().expect("Failed to create GDScript parser");

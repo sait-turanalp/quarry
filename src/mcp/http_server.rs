@@ -100,7 +100,7 @@ pub async fn serve_http(config: crate::Settings, watch: bool, bind: String) -> a
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        let settings_path = workspace_root.join(".codanna/settings.toml");
+        let settings_path = workspace_root.join(".quarry/settings.toml");
         let debounce_ms = config.file_watch.debounce_ms;
 
         // Build unified watcher with handlers
@@ -332,7 +332,7 @@ pub async fn serve_http(config: crate::Settings, watch: bool, bind: String) -> a
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Authorize Codanna</title>
+    <title>Authorize Quarry</title>
     <meta charset="utf-8">
     <style>
         body {{
@@ -377,7 +377,7 @@ pub async fn serve_http(config: crate::Settings, watch: bool, bind: String) -> a
 </head>
 <body>
     <div class="container">
-        <h1>🔐 Authorize Codanna</h1>
+        <h1>🔐 Authorize Quarry</h1>
         <p>Grant access to Claude Code?</p>
         <p>Click Continue to complete the authorization.</p>
         <button onclick="window.location.href='{callback_url}'">Continue</button>

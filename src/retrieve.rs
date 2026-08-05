@@ -104,7 +104,7 @@ impl<'a> QueryContext<'a> {
             .with_entity_type(self.entity_type)
             .with_query(query)
             .with_hint(
-                "Use codanna retrieve symbol <name> to search, or try semantic_search_with_context"
+                "Use quarry retrieve symbol <name> to search, or try semantic_search_with_context"
                     .to_string(),
             );
 
@@ -136,7 +136,7 @@ impl<'a> QueryContext<'a> {
             .with_entity_type(self.entity_type)
             .with_query(query)
             .with_hint(format!(
-                "Use: codanna retrieve {} symbol_id:<id>",
+                "Use: quarry retrieve {} symbol_id:<id>",
                 self.command_name
             ));
 
@@ -182,7 +182,7 @@ impl<'a> QueryContext<'a> {
                 eprintln!("  ... and {} more", symbols.len() - 10);
             }
             eprintln!(
-                "\nUse: codanna retrieve {} symbol_id:<id>",
+                "\nUse: quarry retrieve {} symbol_id:<id>",
                 self.command_name
             );
             ExitCode::GeneralError
@@ -305,7 +305,7 @@ pub fn retrieve_symbol(
             let envelope: Envelope<()> = Envelope::not_found(format!("No symbol found for '{name}'"))
                 .with_entity_type(EnvelopeEntityType::Symbol)
                 .with_query(name)
-                .with_hint("Use codanna retrieve search <query> for fuzzy matching, or try semantic_search_with_context");
+                .with_hint("Use quarry retrieve search <query> for fuzzy matching, or try semantic_search_with_context");
             println!("{}", envelope.to_json().expect("envelope serialization"));
         } else {
             eprintln!("Not found: '{name}'");

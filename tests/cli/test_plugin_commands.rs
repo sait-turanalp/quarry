@@ -14,7 +14,7 @@ where
 }
 
 fn prepare_workspace(workspace: &Path) {
-    let config_dir = workspace.join(".codanna");
+    let config_dir = workspace.join(".quarry");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
     let settings_path = config_dir.join("settings.toml");
     if !settings_path.exists() {
@@ -80,12 +80,12 @@ fn create_marketplace_repo(workspace: &Path, plugin_name: &str) -> String {
     repo_path.to_str().unwrap().to_string()
 }
 
-fn codanna_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codanna") {
+fn quarry_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_quarry") {
         return PathBuf::from(path);
     }
 
-    if let Ok(path) = env::var("CODANNA_BIN") {
+    if let Ok(path) = env::var("QUARRY_BIN") {
         let bin = PathBuf::from(path);
         if bin.exists() {
             return bin;
@@ -96,25 +96,25 @@ fn codanna_binary() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| env::current_dir().expect("current dir"));
 
-    let debug_bin = manifest_dir.join("target/debug/codanna");
+    let debug_bin = manifest_dir.join("target/debug/quarry");
     if debug_bin.exists() {
         return debug_bin;
     }
 
     let status = Command::new("cargo")
-        .args(["build", "--bin", "codanna"])
+        .args(["build", "--bin", "quarry"])
         .current_dir(&manifest_dir)
         .status()
-        .expect("build codanna binary");
+        .expect("build quarry binary");
     assert!(status.success(), "cargo build failed");
     debug_bin
 }
 
 fn run_cli(workspace: &Path, args: &[&str]) -> (i32, String, String) {
-    let bin = codanna_binary();
+    let bin = quarry_binary();
     let test_home = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".codanna-test");
+        .join(".quarry-test");
     std::fs::create_dir_all(&test_home).expect("create test home directory");
 
     let output = Command::new(&bin)
@@ -122,7 +122,7 @@ fn run_cli(workspace: &Path, args: &[&str]) -> (i32, String, String) {
         .current_dir(workspace)
         .env("HOME", &test_home)
         .output()
-        .expect("run codanna CLI");
+        .expect("run quarry CLI");
 
     let code = output.status.code().unwrap_or(-1);
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();

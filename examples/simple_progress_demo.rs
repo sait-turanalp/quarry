@@ -1,6 +1,6 @@
 /// Simple progress templates - self-contained demo
 /// Simulates qtbase case: 8.5K files, 4.6M relationships
-use codanna::io::{
+use quarry::io::{
     ExitCode, ProgressBar, ProgressBarOptions, ProgressBarStyle, Spinner, SpinnerOptions,
     status_line::StatusLine,
 };

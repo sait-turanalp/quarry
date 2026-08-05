@@ -1,7 +1,7 @@
 //! Tests for profile file installation
 
-use codanna::profiles::installer::ProfileInstaller;
-use codanna::profiles::lockfile::{ProfileLockEntry, ProfileLockfile};
+use quarry::profiles::installer::ProfileInstaller;
+use quarry::profiles::lockfile::{ProfileLockEntry, ProfileLockfile};
 use std::fs;
 use tempfile::tempdir;
 
@@ -177,7 +177,7 @@ fn test_sidecar_for_unknown_owner() {
             &dest_dir,
             &files,
             "test-profile",
-            "codanna",
+            "quarry",
             &lockfile,
             true,
         )
@@ -185,17 +185,17 @@ fn test_sidecar_for_unknown_owner() {
 
     // Should create sidecar
     assert_eq!(installed.len(), 1);
-    assert_eq!(installed[0], "CLAUDE.codanna.md");
+    assert_eq!(installed[0], "CLAUDE.quarry.md");
     assert_eq!(sidecars.len(), 1);
     assert_eq!(sidecars[0].0, "CLAUDE.md"); // intended
-    assert_eq!(sidecars[0].1, "CLAUDE.codanna.md"); // actual
+    assert_eq!(sidecars[0].1, "CLAUDE.quarry.md"); // actual
 
     // Original file preserved
     let original_content = fs::read_to_string(dest_dir.join("CLAUDE.md")).unwrap();
     assert_eq!(original_content, "# User's Existing File");
 
     // Sidecar file created
-    let sidecar_content = fs::read_to_string(dest_dir.join("CLAUDE.codanna.md")).unwrap();
+    let sidecar_content = fs::read_to_string(dest_dir.join("CLAUDE.quarry.md")).unwrap();
     assert_eq!(sidecar_content, "# Profile Version");
 }
 
@@ -232,7 +232,7 @@ fn test_sidecar_for_different_profile() {
             &dest_dir,
             &files,
             "profile-b",
-            "codanna",
+            "quarry",
             &lockfile,
             true,
         )
@@ -241,8 +241,8 @@ fn test_sidecar_for_different_profile() {
     // Should create sidecar
     assert_eq!(sidecars.len(), 1);
     assert_eq!(installed.len(), 1);
-    assert_eq!(installed[0], "CLAUDE.codanna.md"); // Installed list contains sidecar path
-    assert!(dest_dir.join("CLAUDE.codanna.md").exists());
+    assert_eq!(installed[0], "CLAUDE.quarry.md"); // Installed list contains sidecar path
+    assert!(dest_dir.join("CLAUDE.quarry.md").exists());
 
     // Profile A's file preserved
     let original_content = fs::read_to_string(dest_dir.join("CLAUDE.md")).unwrap();
@@ -282,7 +282,7 @@ fn test_same_profile_updates_without_sidecar() {
             &dest_dir,
             &files,
             "test-profile",
-            "codanna",
+            "quarry",
             &lockfile,
             true,
         )
@@ -308,10 +308,10 @@ fn test_sidecar_naming_patterns() {
 
     // Test various file naming patterns
     let test_cases = vec![
-        ("CLAUDE.md", "CLAUDE.codanna.md"),
-        (".gitignore", ".gitignore.codanna"),
-        ("docker-compose.yml", "docker-compose.codanna.yml"),
-        ("file.tar.gz", "file.codanna.tar.gz"),
+        ("CLAUDE.md", "CLAUDE.quarry.md"),
+        (".gitignore", ".gitignore.quarry"),
+        ("docker-compose.yml", "docker-compose.quarry.yml"),
+        ("file.tar.gz", "file.quarry.tar.gz"),
     ];
 
     let lockfile = ProfileLockfile::new();
@@ -330,7 +330,7 @@ fn test_sidecar_naming_patterns() {
                 &dest_dir,
                 &files,
                 "test",
-                "codanna",
+                "quarry",
                 &lockfile,
                 true,
             )

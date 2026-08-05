@@ -1,14 +1,14 @@
 //! Provider manifest handling for profile discovery
 //!
 //! Providers are containers for profiles, similar to how marketplaces contain plugins.
-//! A provider manifest lives at `.codanna-profile/provider.json` in provider repositories.
+//! A provider manifest lives at `.quarry-profile/provider.json` in provider repositories.
 
 use super::error::{ProfileError, ProfileResult};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Provider manifest structure
-/// Located at .codanna-profile/provider.json in provider repos
+/// Located at .quarry-profile/provider.json in provider repos
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProviderManifest {
     /// Provider name (e.g., "claude", "codex")
@@ -85,7 +85,7 @@ pub struct ProviderProfile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 
-    /// Profiles this profile requires (e.g., "claude" requires "codanna")
+    /// Profiles this profile requires (e.g., "claude" requires "quarry")
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
 
@@ -234,8 +234,8 @@ mod tests {
         let json = r#"{
             "name": "claude",
             "owner": {
-                "name": "Codanna Team",
-                "email": "team@codanna.dev"
+                "name": "Quarry Team",
+                "email": "team@quarry.dev"
             },
             "metadata": {
                 "namespace": ".claude",
@@ -244,9 +244,9 @@ mod tests {
             },
             "profiles": [
                 {
-                    "name": "codanna",
-                    "source": "./profiles/codanna",
-                    "description": "Base codanna configuration",
+                    "name": "quarry",
+                    "source": "./profiles/quarry",
+                    "description": "Base quarry configuration",
                     "version": "1.0.0"
                 },
                 {
@@ -254,7 +254,7 @@ mod tests {
                     "source": "./profiles/claude",
                     "description": "Claude Code provider setup",
                     "version": "1.0.0",
-                    "requires": ["codanna"]
+                    "requires": ["quarry"]
                 }
             ]
         }"#;
@@ -294,23 +294,23 @@ mod tests {
             "name": "claude",
             "owner": {"name": "Test"},
             "profiles": [
-                {"name": "codanna", "source": "./profiles/codanna"},
+                {"name": "quarry", "source": "./profiles/quarry"},
                 {"name": "claude", "source": "./profiles/claude"}
             ]
         }"#;
 
         let manifest = ProviderManifest::from_json(json).unwrap();
-        assert!(manifest.get_profile("codanna").is_some());
+        assert!(manifest.get_profile("quarry").is_some());
         assert!(manifest.get_profile("claude").is_some());
         assert!(manifest.get_profile("nonexistent").is_none());
     }
 
     #[test]
     fn test_resolve_path_source() {
-        let source = ProviderProfileSource::Path("./profiles/codanna".to_string());
+        let source = ProviderProfileSource::Path("./profiles/quarry".to_string());
         match source.resolve(Some("profiles")) {
             ResolvedProfileSource::ProviderPath { relative } => {
-                assert_eq!(relative, "profiles/./profiles/codanna");
+                assert_eq!(relative, "profiles/./profiles/quarry");
             }
             _ => panic!("Expected ProviderPath"),
         }
@@ -320,10 +320,10 @@ mod tests {
     fn test_resolve_github_source() {
         let source = ProviderProfileSource::Descriptor(ProviderProfileSourceDescriptor {
             source: "github".to_string(),
-            repo: Some("codanna/profiles".to_string()),
+            repo: Some("quarry/profiles".to_string()),
             url: None,
             path: None,
-            subdir: Some("profiles/codanna".to_string()),
+            subdir: Some("profiles/quarry".to_string()),
             git_ref: Some("main".to_string()),
         });
 
@@ -333,9 +333,9 @@ mod tests {
                 git_ref,
                 subdir,
             } => {
-                assert_eq!(url, "https://github.com/codanna/profiles.git");
+                assert_eq!(url, "https://github.com/quarry/profiles.git");
                 assert_eq!(git_ref, Some("main".to_string()));
-                assert_eq!(subdir, Some("profiles/codanna".to_string()));
+                assert_eq!(subdir, Some("profiles/quarry".to_string()));
             }
             _ => panic!("Expected Git source"),
         }

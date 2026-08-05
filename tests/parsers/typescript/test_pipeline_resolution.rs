@@ -3,16 +3,16 @@
 //! Tests that `build_resolution_context_with_pipeline_cache()` works with
 //! TypeScript settings including tsconfig path aliases like `@/components/*`.
 
-use codanna::config::Settings;
-use codanna::indexing::pipeline::types::{CallerContext, SymbolLookupCache};
-use codanna::parsing::resolution::ProjectResolutionEnhancer;
-use codanna::parsing::typescript::resolution::TypeScriptProjectEnhancer;
-use codanna::parsing::{Import, LanguageId, ParserFactory, PipelineSymbolCache};
-use codanna::project_resolver::persist::ResolutionPersistence;
-use codanna::project_resolver::provider::ProjectResolutionProvider;
-use codanna::project_resolver::providers::typescript::TypeScriptProvider;
-use codanna::types::{FileId, Range, SymbolId};
-use codanna::{Symbol, SymbolKind, Visibility};
+use quarry::config::Settings;
+use quarry::indexing::pipeline::types::{CallerContext, SymbolLookupCache};
+use quarry::parsing::resolution::ProjectResolutionEnhancer;
+use quarry::parsing::typescript::resolution::TypeScriptProjectEnhancer;
+use quarry::parsing::{Import, LanguageId, ParserFactory, PipelineSymbolCache};
+use quarry::project_resolver::persist::ResolutionPersistence;
+use quarry::project_resolver::provider::ProjectResolutionProvider;
+use quarry::project_resolver::providers::typescript::TypeScriptProvider;
+use quarry::types::{FileId, Range, SymbolId};
+use quarry::{Symbol, SymbolKind, Visibility};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -39,7 +39,7 @@ fn test_pipeline_cache_local_resolution() {
 
     assert_eq!(
         result,
-        codanna::parsing::ResolveResult::Found(SymbolId::new(1).unwrap()),
+        quarry::parsing::ResolveResult::Found(SymbolId::new(1).unwrap()),
         "Local symbol should resolve"
     );
 }
@@ -79,7 +79,7 @@ fn test_pipeline_cache_language_filter() {
 
     assert_eq!(
         result,
-        codanna::parsing::ResolveResult::Found(SymbolId::new(1).unwrap()),
+        quarry::parsing::ResolveResult::Found(SymbolId::new(1).unwrap()),
         "Should resolve to TypeScript symbol, not Python"
     );
 }
@@ -124,7 +124,7 @@ fn test_behavior_pipeline_cache_local_symbols() {
 #[test]
 fn test_path_alias_enhancement() {
     // Build rules like tsconfig would provide
-    let rules = codanna::project_resolver::persist::ResolutionRules {
+    let rules = quarry::project_resolver::persist::ResolutionRules {
         base_url: None,
         paths: vec![
             (
@@ -163,7 +163,7 @@ fn test_path_alias_enhancement() {
 
 /// Integration test: Pipeline resolution with TypeScript settings.
 #[test]
-#[ignore = "Requires .codanna/settings.toml with TypeScript config_files"]
+#[ignore = "Requires .quarry/settings.toml with TypeScript config_files"]
 fn test_pipeline_resolution_with_settings() {
     // Load settings and rebuild cache
     let settings = Settings::load().expect("Failed to load settings");
@@ -174,7 +174,7 @@ fn test_pipeline_resolution_with_settings() {
         .expect("Failed to rebuild cache");
 
     // Load persisted rules
-    let persistence = ResolutionPersistence::new(Path::new(".codanna"));
+    let persistence = ResolutionPersistence::new(Path::new(".quarry"));
     let index = persistence
         .load("typescript")
         .expect("Should load TypeScript rules");
@@ -231,13 +231,13 @@ fn test_pipeline_cache_import_resolution() {
 
     // Should find the Button symbol (via import path matching)
     match result {
-        codanna::parsing::ResolveResult::Found(id) => {
+        quarry::parsing::ResolveResult::Found(id) => {
             assert_eq!(id, SymbolId::new(1).unwrap());
         }
-        codanna::parsing::ResolveResult::Ambiguous(ids) => {
+        quarry::parsing::ResolveResult::Ambiguous(ids) => {
             assert!(ids.contains(&SymbolId::new(1).unwrap()));
         }
-        codanna::parsing::ResolveResult::NotFound => {
+        quarry::parsing::ResolveResult::NotFound => {
             panic!("Button should be found via import");
         }
     }
@@ -245,7 +245,7 @@ fn test_pipeline_cache_import_resolution() {
 
 /// Integration test: Full pipeline isolation with temp directory.
 ///
-/// Creates isolated test environment with its own .codanna, tsconfig, and source files.
+/// Creates isolated test environment with its own .quarry, tsconfig, and source files.
 /// Tests that build_resolution_context_with_pipeline_cache resolves path aliases correctly.
 #[test]
 fn test_behavior_pipeline_cache_isolated() {
@@ -258,9 +258,9 @@ fn test_behavior_pipeline_cache_isolated() {
     let temp_path = temp_dir.path();
 
     // Create directory structure
-    let codanna_dir = temp_path.join(".codanna/index/resolvers");
+    let quarry_dir = temp_path.join(".quarry/index/resolvers");
     let src_dir = temp_path.join("src/components");
-    fs::create_dir_all(&codanna_dir).expect("Failed to create .codanna");
+    fs::create_dir_all(&quarry_dir).expect("Failed to create .quarry");
     fs::create_dir_all(&src_dir).expect("Failed to create src/components");
 
     // Create tsconfig.json
@@ -301,19 +301,19 @@ fn test_behavior_pipeline_cache_isolated() {
         tsconfig_path
     );
     fs::write(
-        codanna_dir.join("typescript_resolution.json"),
+        quarry_dir.join("typescript_resolution.json"),
         resolution_rules,
     )
     .expect("Failed to write resolution rules");
 
-    // Change to temp directory so .codanna is found
+    // Change to temp directory so .quarry is found
     let original_dir = env::current_dir().expect("Failed to get cwd");
     env::set_current_dir(temp_path).expect("Failed to change to temp dir");
 
     // Now run the actual test
-    use codanna::parsing::typescript::behavior::TypeScriptBehavior;
-    use codanna::parsing::{LanguageBehavior, TypeScriptParser};
-    use codanna::types::SymbolCounter;
+    use quarry::parsing::typescript::behavior::TypeScriptBehavior;
+    use quarry::parsing::{LanguageBehavior, TypeScriptParser};
+    use quarry::types::SymbolCounter;
 
     let behavior = TypeScriptBehavior::new();
     let button_path = src_dir.join("Button.ts");
@@ -444,7 +444,7 @@ fn test_caller_context_visibility_model() {
     let result = cache.resolve("helper", &caller_same_file, None, &[]);
     assert_eq!(
         result,
-        codanna::parsing::ResolveResult::Found(SymbolId::new(2).unwrap()),
+        quarry::parsing::ResolveResult::Found(SymbolId::new(2).unwrap()),
         "Private symbol should be visible from same file"
     );
 
@@ -457,7 +457,7 @@ fn test_caller_context_visibility_model() {
     let result = cache.resolve("Icon", &caller_same_module, None, &[]);
     assert_eq!(
         result,
-        codanna::parsing::ResolveResult::Found(SymbolId::new(3).unwrap()),
+        quarry::parsing::ResolveResult::Found(SymbolId::new(3).unwrap()),
         "Private symbol should be visible from same module"
     );
 
@@ -470,7 +470,7 @@ fn test_caller_context_visibility_model() {
     let result = cache.resolve("format", &caller_diff_module, None, &[]);
     assert_eq!(
         result,
-        codanna::parsing::ResolveResult::NotFound,
+        quarry::parsing::ResolveResult::NotFound,
         "Private symbol should NOT be visible from different module"
     );
 
@@ -483,7 +483,7 @@ fn test_caller_context_visibility_model() {
     let result = cache.resolve("Button", &caller_from_utils, None, &[]);
     assert_eq!(
         result,
-        codanna::parsing::ResolveResult::Found(SymbolId::new(1).unwrap()),
+        quarry::parsing::ResolveResult::Found(SymbolId::new(1).unwrap()),
         "Public symbol should be visible from different module"
     );
 }

@@ -1,12 +1,12 @@
 //! Test nested type extraction in Swift
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::swift::SwiftParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, SymbolKind};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::swift::SwiftParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, SymbolKind};
 use std::path::Path;
 
-fn parse_swift(code: &str) -> Vec<codanna::Symbol> {
+fn parse_swift(code: &str) -> Vec<quarry::Symbol> {
     let mut parser = SwiftParser::new().expect("Failed to create Swift parser");
     let mut counter = SymbolCounter::new();
     parser.parse(code, FileId(1), &mut counter)

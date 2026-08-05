@@ -136,8 +136,7 @@ impl CodeIntelligenceClient {
                     .min(sorted.len().saturating_sub(1));
                 let p95 = sorted[p95_idx];
                 println!(
-                    "\nTiming summary (ms): min={:.2}, median={:.2}, p95={:.2}, max={:.2}",
-                    min, median, p95, max
+                    "\nTiming summary (ms): min={min:.2}, median={median:.2}, p95={p95:.2}, max={max:.2}"
                 );
             }
         }
@@ -146,9 +145,9 @@ impl CodeIntelligenceClient {
         println!("\n--- Testing Custom Requests ---");
 
         // Test index-stats custom request
-        println!("\nSending custom request: requests/codanna/index-stats");
+        println!("\nSending custom request: requests/quarry/index-stats");
         let stats_request =
-            ClientRequest::CustomRequest(CustomRequest::new("requests/codanna/index-stats", None));
+            ClientRequest::CustomRequest(CustomRequest::new("requests/quarry/index-stats", None));
         match client.peer().send_request(stats_request).await {
             Ok(rmcp::model::ServerResult::CustomResult(custom)) => {
                 println!("Response: {}", serde_json::to_string_pretty(&custom.0)?);
@@ -158,9 +157,9 @@ impl CodeIntelligenceClient {
         }
 
         // Test force-reindex custom request (with a small path)
-        println!("\nSending custom request: requests/codanna/force-reindex");
+        println!("\nSending custom request: requests/quarry/force-reindex");
         let reindex_request = ClientRequest::CustomRequest(CustomRequest::new(
-            "requests/codanna/force-reindex",
+            "requests/quarry/force-reindex",
             Some(serde_json::json!({"paths": ["src/mcp/client.rs"]})),
         ));
         match client.peer().send_request(reindex_request).await {

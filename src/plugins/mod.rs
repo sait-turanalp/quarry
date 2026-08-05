@@ -63,7 +63,7 @@ impl WorkspacePaths {
         let hooks_dir = claude_dir.join("hooks");
         let scripts_dir = claude_dir.join("scripts");
         let plugins_dir = claude_dir.join("plugins");
-        let lockfile_path = root.join(".codanna/plugins/lockfile.json");
+        let lockfile_path = root.join(".quarry/plugins/lockfile.json");
         let mcp_path = root.join(".mcp.json");
 
         Self {
@@ -317,7 +317,7 @@ pub fn list_plugins(settings: &Settings, verbose: bool, json: bool) -> Result<()
     } else if entries.is_empty() {
         println!("No plugins installed in workspace {}", paths.root.display());
         if verbose {
-            println!("\nUse 'codanna plugin add <marketplace> <plugin>' to install a plugin");
+            println!("\nUse 'quarry plugin add <marketplace> <plugin>' to install a plugin");
         }
     } else {
         println!("Plugins in workspace {}:", paths.root.display());

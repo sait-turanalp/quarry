@@ -18,8 +18,8 @@ import (
 
 // Local module imports (relative to module root)
 import (
-    "github.com/codanna/testproject/internal/config"
-    "github.com/codanna/testproject/pkg/utils"
+    "github.com/quarry/testproject/internal/config"
+    "github.com/quarry/testproject/pkg/utils"
 )
 
 // Relative imports (uncommon in Go but valid)

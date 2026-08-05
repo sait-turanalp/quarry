@@ -1,5 +1,5 @@
 /// <summary>
-/// Comprehensive C# test file for Codanna parser validation.
+/// Comprehensive C# test file for Quarry parser validation.
 /// Tests all major C# language features and relationship tracking.
 ///
 /// This file is designed to validate:
@@ -17,7 +17,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace Codanna.Examples.CSharp
+namespace Quarry.Examples.CSharp
 {
     // === TEST SCENARIO 1: Clear Interface Implementation ===
 
@@ -242,7 +242,7 @@ namespace Codanna.Examples.CSharp
         /// <summary>
         /// Application name constant.
         /// </summary>
-        public const string ApplicationName = "Codanna C# Test Suite";
+        public const string ApplicationName = "Quarry C# Test Suite";
     }
 
     // === TEST SCENARIO 5: Interface Dependencies (Multiple Interfaces) ===

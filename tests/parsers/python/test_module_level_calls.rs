@@ -1,7 +1,7 @@
-use codanna::parsing::LanguageParser;
-use codanna::parsing::python::PythonParser;
-use codanna::types::SymbolKind;
-use codanna::types::{FileId, SymbolCounter};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::python::PythonParser;
+use quarry::types::SymbolKind;
+use quarry::types::{FileId, SymbolCounter};
 
 #[test]
 fn test_module_level_class_instantiation_detection() {

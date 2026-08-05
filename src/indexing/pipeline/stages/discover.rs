@@ -17,8 +17,8 @@ use ignore::WalkBuilder;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Discover stage for parallel file walking.
 pub struct DiscoverStage {
@@ -105,10 +105,7 @@ impl DiscoverStage {
     /// Fast path: use `git ls-files` to discover tracked files.
     ///
     /// Returns `Ok(Some(count))` on success, `Ok(None)` to signal fallback.
-    fn try_git_ls_files(
-        &self,
-        sender: &Sender<PathBuf>,
-    ) -> PipelineResult<Option<usize>> {
+    fn try_git_ls_files(&self, sender: &Sender<PathBuf>) -> PipelineResult<Option<usize>> {
         // Check if root is inside a git repo
         if !self.root.join(".git").exists() {
             // Walk up to find .git (root might be a subdirectory)
@@ -208,8 +205,8 @@ impl DiscoverStage {
             .require_git(false) // Allow gitignore to work in non-git directories
             .threads(self.threads);
 
-        // Support .codannaignore files (matches FileWalker behavior)
-        builder.add_custom_ignore_filename(".codannaignore");
+        // Support .quarryignore files (matches FileWalker behavior)
+        builder.add_custom_ignore_filename(".quarryignore");
 
         let walker = builder.build_parallel();
 
@@ -360,8 +357,8 @@ impl DiscoverStage {
             .follow_links(false) // Don't follow symlinks
             .require_git(false); // Allow gitignore to work in non-git directories
 
-        // Support .codannaignore files (matches FileWalker behavior)
-        builder.add_custom_ignore_filename(".codannaignore");
+        // Support .quarryignore files (matches FileWalker behavior)
+        builder.add_custom_ignore_filename(".quarryignore");
 
         let walker = builder.build();
 

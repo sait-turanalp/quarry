@@ -14,17 +14,17 @@ use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use tantivy::DocId;
 use tantivy::{
+    Index, IndexReader, IndexSettings, IndexWriter, ReloadPolicy, TantivyDocument as Document,
+    Term,
     collector::TopDocs,
     directory::MmapDirectory,
     indexer::NoMergePolicy,
     query::{BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, TermQuery},
     schema::{
-        Field, IndexRecordOption, NumericOptions, Schema, SchemaBuilder, TextFieldIndexing,
-        TextOptions, Value, FAST, STORED, STRING,
+        FAST, Field, IndexRecordOption, NumericOptions, STORED, STRING, Schema, SchemaBuilder,
+        TextFieldIndexing, TextOptions, Value,
     },
     tokenizer::{NgramTokenizer, TextAnalyzer},
-    Index, IndexReader, IndexSettings, IndexWriter, ReloadPolicy, TantivyDocument as Document,
-    Term,
 };
 
 /// Schema fields for the document index
@@ -1041,8 +1041,8 @@ impl DocumentIndex {
                             \nOriginal error: {e}\n\
                             \nTry:\n\
                             - Reducing tantivy_heap_mb in settings (15-25MB)\n\
-                            - Adding .codanna to security software exclusions\n\
-                            - Ensuring no other codanna processes are running"
+                            - Adding .quarry to security software exclusions\n\
+                            - Ensuring no other quarry processes are running"
                         )));
                     }
                     return Err(e.into());
@@ -1072,7 +1072,6 @@ impl DocumentIndex {
         }
         Ok(())
     }
-
 
     /// Remove documents for a specific file
     pub fn remove_file_documents(&self, file_path: &str) -> StorageResult<()> {
@@ -2312,7 +2311,9 @@ impl DocumentIndex {
         let writer_lock = match self.writer.read() {
             Ok(lock) => lock,
             Err(poisoned) => {
-                eprintln!("Warning: Recovering from poisoned writer rwlock in store_relationships_batch");
+                eprintln!(
+                    "Warning: Recovering from poisoned writer rwlock in store_relationships_batch"
+                );
                 poisoned.into_inner()
             }
         };
@@ -3310,8 +3311,8 @@ mod tests {
 
     #[test]
     fn test_vector_metadata_tantivy_roundtrip() {
-        use tantivy::schema::{SchemaBuilder, STORED, TEXT};
-        use tantivy::{doc, Index, TantivyDocument};
+        use tantivy::schema::{STORED, SchemaBuilder, TEXT};
+        use tantivy::{Index, TantivyDocument, doc};
 
         // Create a simple schema with a metadata field
         let mut schema_builder = SchemaBuilder::default();
@@ -4576,13 +4577,13 @@ mod tests {
     #[ignore] // Run with: cargo test test_java_owner_extends_person -- --ignored --nocapture
     fn test_java_owner_extends_person() {
         // Verify Java import resolution: Owner extends Person across packages
-        // This test queries the production .codanna/index to verify relationships exist
+        // This test queries the production .quarry/index to verify relationships exist
 
-        let index_base = Path::new(".codanna/index");
+        let index_base = Path::new(".quarry/index");
         let tantivy_path = index_base.join("tantivy");
         if !tantivy_path.exists() {
             eprintln!(
-                "Skipping test: .codanna/index/tantivy not found. Run: ./target/release/codanna index test_monorepos/spring-petclinic"
+                "Skipping test: .quarry/index/tantivy not found. Run: ./target/release/quarry index test_monorepos/spring-petclinic"
             );
             return;
         }

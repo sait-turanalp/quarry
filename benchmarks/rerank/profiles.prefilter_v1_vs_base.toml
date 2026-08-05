@@ -1,5 +1,5 @@
 # Prefilter v1 sweep against the current default Jina TN30 profile.
-# baseline_current_default is auto-added by codanna benchmark-rerank.
+# baseline_current_default is auto-added by quarry benchmark-rerank.
 
 [defaults]
 model = "JINARerankerV1TurboEn"

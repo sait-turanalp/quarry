@@ -1,7 +1,7 @@
 //! Resolution index persistence for project resolvers
 //!
 //! Implements Sprint 1 Epic D: Resolution Index & Watch
-//! Persists resolution mappings to `.codanna/index/resolvers/` with SHA validation
+//! Persists resolution mappings to `.quarry/index/resolvers/` with SHA validation
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ pub const RESOLUTION_INDEX_VERSION: &str = "1.0";
 
 /// Resolution index schema v1 for TypeScript
 ///
-/// Stored at `.codanna/index/resolvers/typescript_resolution.json`
+/// Stored at `.quarry/index/resolvers/typescript_resolution.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolutionIndex {
     /// Schema version for forward compatibility
@@ -137,9 +137,9 @@ pub struct ResolutionPersistence {
 
 impl ResolutionPersistence {
     /// Create a new persistence manager
-    pub fn new(codanna_dir: &Path) -> Self {
+    pub fn new(quarry_dir: &Path) -> Self {
         Self {
-            base_dir: codanna_dir.join("index").join("resolvers"),
+            base_dir: quarry_dir.join("index").join("resolvers"),
         }
     }
 

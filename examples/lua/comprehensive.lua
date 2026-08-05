@@ -2,7 +2,7 @@
 --- Tests all major Lua language features and constructs
 ---
 --- @module comprehensive
---- @author Codanna
+--- @author Quarry
 
 local M = {}
 

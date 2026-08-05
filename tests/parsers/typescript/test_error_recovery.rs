@@ -1,10 +1,10 @@
 //! TypeScript ERROR node recovery tests
 
-use codanna::FileId;
-use codanna::parsing::typescript::TypeScriptParser;
-use codanna::types::SymbolCounter;
+use quarry::FileId;
+use quarry::parsing::typescript::TypeScriptParser;
+use quarry::types::SymbolCounter;
 
-fn parse_typescript(code: &str) -> Vec<codanna::Symbol> {
+fn parse_typescript(code: &str) -> Vec<quarry::Symbol> {
     let mut parser = TypeScriptParser::new().expect("Failed to create TypeScript parser");
     let mut counter = SymbolCounter::new();
     parser.parse(code, FileId(1), &mut counter)

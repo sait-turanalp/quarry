@@ -87,8 +87,8 @@ impl TypeScriptProvider {
         file_path: &std::path::Path,
     ) -> Option<ResolutionRules> {
         // Load the resolution index
-        let codanna_dir = std::path::Path::new(".codanna");
-        let persistence = ResolutionPersistence::new(codanna_dir);
+        let quarry_dir = std::path::Path::new(".quarry");
+        let persistence = ResolutionPersistence::new(quarry_dir);
 
         let index = persistence.load("typescript").ok()?;
 
@@ -134,8 +134,8 @@ impl ProjectResolutionProvider for TypeScriptProvider {
         let config_paths = self.config_paths(settings);
 
         // Create persistence manager
-        let codanna_dir = std::path::Path::new(crate::init::local_dir_name());
-        let persistence = ResolutionPersistence::new(codanna_dir);
+        let quarry_dir = std::path::Path::new(crate::init::local_dir_name());
+        let persistence = ResolutionPersistence::new(quarry_dir);
 
         // Load or create resolution index (graceful fallback if cache doesn't exist yet)
         let mut index = persistence

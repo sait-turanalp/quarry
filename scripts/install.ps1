@@ -1,13 +1,13 @@
-# codanna installer for Windows
-# Usage: irm https://codanna.dev/install.ps1 | iex
+# quarry installer for Windows
+# Usage: irm https://quarry.dev/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
 $Repo = "bartolli/codanna"
-$InstallDir = if ($env:CODANNA_INSTALL_DIR) { $env:CODANNA_INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
+$InstallDir = if ($env:QUARRY_INSTALL_DIR) { $env:QUARRY_INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
 
-function Say($msg) { Write-Host "codanna: $msg" }
-function Err($msg) { Write-Host "codanna: ERROR: $msg" -ForegroundColor Red; exit 1 }
+function Say($msg) { Write-Host "quarry: $msg" }
+function Err($msg) { Write-Host "quarry: ERROR: $msg" -ForegroundColor Red; exit 1 }
 
 # Detect platform
 function Get-Platform {
@@ -27,9 +27,9 @@ function Get-LatestVersion {
 # Main
 function Main {
     $platform = Get-Platform
-    $version = if ($env:CODANNA_VERSION) { $env:CODANNA_VERSION } else { Get-LatestVersion }
+    $version = if ($env:QUARRY_VERSION) { $env:QUARRY_VERSION } else { Get-LatestVersion }
 
-    Say "installing codanna $version for $platform"
+    Say "installing quarry $version for $platform"
 
     # Fetch manifest
     $manifestUrl = "https://github.com/$Repo/releases/download/$version/dist-manifest.json"
@@ -53,7 +53,7 @@ function Main {
     $filename = $artifact.name
 
     # Download
-    $tmpDir = New-Item -ItemType Directory -Path "$env:TEMP\codanna_install_$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
+    $tmpDir = New-Item -ItemType Directory -Path "$env:TEMP\quarry_install_$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
     $downloadPath = Join-Path $tmpDir $filename
 
     Say "downloading $filename"
@@ -80,13 +80,13 @@ function Main {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
 
-    $binary = Get-ChildItem -Path $extractDir -Recurse -Filter "codanna.exe" | Select-Object -First 1
+    $binary = Get-ChildItem -Path $extractDir -Recurse -Filter "quarry.exe" | Select-Object -First 1
     if (-not $binary) {
-        Err "codanna.exe not found in archive"
+        Err "quarry.exe not found in archive"
     }
 
     Copy-Item -Path $binary.FullName -Destination $InstallDir -Force
-    Say "installed to $InstallDir\codanna.exe"
+    Say "installed to $InstallDir\quarry.exe"
 
     # Cleanup
     Remove-Item -Path $tmpDir -Recurse -Force
@@ -95,7 +95,7 @@ function Main {
     $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
     if ($currentPath -notlike "*$InstallDir*") {
         Say ""
-        Say "To add codanna to your PATH, run:"
+        Say "To add quarry to your PATH, run:"
         Say ""
         Say "  `$env:PATH = `"$InstallDir;`$env:PATH`""
         Say ""

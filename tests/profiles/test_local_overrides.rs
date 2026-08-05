@@ -1,6 +1,6 @@
 //! Tests for local overrides parsing
 
-use codanna::profiles::local::LocalOverrides;
+use quarry::profiles::local::LocalOverrides;
 
 #[test]
 fn test_parse_local_overrides() {

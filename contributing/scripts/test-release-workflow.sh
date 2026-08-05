@@ -32,12 +32,12 @@ echo ""
 
 # Test 3: Packaging
 echo "3. Testing packaging..."
-test_dir="/tmp/codanna-release-test-$$"
+test_dir="/tmp/quarry-release-test-$$"
 mkdir -p "$test_dir"
 
-bin="target/$target/release/codanna"
-dst_full="$test_dir/codanna-$version-macos-arm64"
-dst_slim="$test_dir/codanna-$version-macos-arm64-slim"
+bin="target/$target/release/quarry"
+dst_full="$test_dir/quarry-$version-macos-arm64"
+dst_slim="$test_dir/quarry-$version-macos-arm64-slim"
 
 # Package full
 mkdir "$dst_full"
@@ -69,12 +69,12 @@ echo "5. Testing manifest generation..."
   --arg version "$version" \
   --arg files "$(ls *.tar.xz 2>/dev/null | tr '\n' ' ')" \
   '{
-    app: "codanna",
+    app: "quarry",
     version: $version,
     artifacts: ($files | split(" ") | map(select(length > 0)) | map({
       name: .,
       variant: (if test("-slim") then "slim" else "full" end),
-      platform: (capture("codanna-[^-]+-(?<p>[^.]+)").p | sub("-slim$"; "")),
+      platform: (capture("quarry-[^-]+-(?<p>[^.]+)").p | sub("-slim$"; "")),
       features: (if test("-slim") then [] else ["http-server", "https-server"] end)
     }))
   }' | tee dist-manifest.json)

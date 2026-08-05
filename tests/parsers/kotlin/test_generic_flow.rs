@@ -1,5 +1,5 @@
-use codanna::Range;
-use codanna::parsing::{LanguageParser, kotlin::KotlinParser};
+use quarry::Range;
+use quarry::parsing::{LanguageParser, kotlin::KotlinParser};
 
 fn infer_types(code: &str) -> Vec<(&str, &str, Range)> {
     let mut parser = KotlinParser::new().unwrap();

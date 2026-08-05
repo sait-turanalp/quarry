@@ -26,7 +26,7 @@ K = int(os.environ.get("BUDGET_K", "50"))
 
 rows = [json.loads(line) for line in open(evalset)][:n_max]
 # Only the test-file switch, which is a property of the eval set, not a tuning knob.
-ENV = {"CI_INDEXING__INCLUDE_TESTS": "true"}
+ENV = {"QUARRY_INDEXING__INCLUDE_TESTS": "true"}
 
 
 def rank_of(text, gold):

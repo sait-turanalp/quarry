@@ -11,9 +11,7 @@
 
 use crate::semantic::static_model::OptimizedStaticModel;
 use crate::semantic::{SemanticMetadata, SimpleSemanticSearch};
-use crate::vector::{
-    cosine_similarity, BinaryVector, MmapVectorStorage, SegmentOrdinal,
-};
+use crate::vector::{BinaryVector, MmapVectorStorage, SegmentOrdinal, cosine_similarity};
 use crate::{IndexError, SymbolId};
 use fastembed::TextEmbedding;
 use std::collections::HashMap;
@@ -114,8 +112,7 @@ impl SymbolVectorBackend {
             })
             .collect();
 
-        results
-            .sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(limit);
         Ok(results)
     }

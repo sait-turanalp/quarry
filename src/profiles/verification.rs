@@ -15,7 +15,7 @@ use std::path::Path;
 /// - `NotInstalled` if profile is not in lockfile
 /// - `IntegrityCheckFailed` if files have been modified or are missing
 pub fn verify_profile(workspace: &Path, profile_name: &str, verbose: bool) -> ProfileResult<()> {
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = ProfileLockfile::load(&lockfile_path)?;
 
     let entry = lockfile
@@ -34,7 +34,7 @@ pub fn verify_profile(workspace: &Path, profile_name: &str, verbose: bool) -> Pr
 /// # Errors
 /// - `IntegrityCheckFailed` if any profile fails verification
 pub fn verify_all_profiles(workspace: &Path, verbose: bool) -> ProfileResult<()> {
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = ProfileLockfile::load(&lockfile_path)?;
 
     if lockfile.profiles.is_empty() {
@@ -128,7 +128,7 @@ mod tests {
         let integrity = calculate_integrity(&files).unwrap();
 
         // Create lockfile with correct integrity
-        let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+        let lockfile_path = workspace.join(".quarry/profiles.lock.json");
         fs::create_dir_all(lockfile_path.parent().unwrap()).unwrap();
 
         let entry = ProfileLockEntry {
@@ -167,7 +167,7 @@ mod tests {
         let integrity = calculate_integrity(&files).unwrap();
 
         // Create lockfile
-        let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+        let lockfile_path = workspace.join(".quarry/profiles.lock.json");
         fs::create_dir_all(lockfile_path.parent().unwrap()).unwrap();
 
         let entry = ProfileLockEntry {
@@ -215,7 +215,7 @@ mod tests {
         let integrity = calculate_integrity(&files).unwrap();
 
         // Create lockfile
-        let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+        let lockfile_path = workspace.join(".quarry/profiles.lock.json");
         fs::create_dir_all(lockfile_path.parent().unwrap()).unwrap();
 
         let entry = ProfileLockEntry {
@@ -261,7 +261,7 @@ mod tests {
         let integrity2 = calculate_integrity(&files2).unwrap();
 
         // Create lockfile with two profiles
-        let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+        let lockfile_path = workspace.join(".quarry/profiles.lock.json");
         fs::create_dir_all(lockfile_path.parent().unwrap()).unwrap();
 
         let mut lockfile = ProfileLockfile::new();
@@ -304,7 +304,7 @@ mod tests {
         fs::write(workspace.join("test.txt"), "content").unwrap();
 
         // Create lockfile without integrity (legacy)
-        let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+        let lockfile_path = workspace.join(".quarry/profiles.lock.json");
         fs::create_dir_all(lockfile_path.parent().unwrap()).unwrap();
 
         let entry = ProfileLockEntry {
@@ -333,7 +333,7 @@ mod tests {
         let workspace = temp.path();
 
         // Create empty lockfile
-        let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+        let lockfile_path = workspace.join(".quarry/profiles.lock.json");
         fs::create_dir_all(lockfile_path.parent().unwrap()).unwrap();
         let lockfile = ProfileLockfile::new();
         lockfile.save(&lockfile_path).unwrap();

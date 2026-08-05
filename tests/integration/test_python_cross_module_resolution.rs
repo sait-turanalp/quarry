@@ -1,7 +1,7 @@
-use codanna::parsing::python::parser::PythonParser;
-use codanna::parsing::python::resolution::PythonResolutionContext;
-use codanna::parsing::{LanguageParser, ResolutionScope, ScopeLevel};
-use codanna::{FileId, Range, Symbol, SymbolId, SymbolKind, Visibility};
+use quarry::parsing::python::parser::PythonParser;
+use quarry::parsing::python::resolution::PythonResolutionContext;
+use quarry::parsing::{LanguageParser, ResolutionScope, ScopeLevel};
+use quarry::{FileId, Range, Symbol, SymbolId, SymbolKind, Visibility};
 
 #[test]
 fn test_python_cross_module_call_resolution_step_by_step() {

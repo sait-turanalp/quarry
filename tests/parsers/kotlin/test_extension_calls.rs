@@ -1,5 +1,5 @@
-use codanna::parsing::{LanguageParser, kotlin::KotlinParser};
-use codanna::types::SymbolCounter;
+use quarry::parsing::{LanguageParser, kotlin::KotlinParser};
+use quarry::types::SymbolCounter;
 
 #[test]
 fn test_extension_function_signatures() {
@@ -15,7 +15,7 @@ fun String.bar(): String {
 
     let mut parser = KotlinParser::new().unwrap();
     let mut counter = SymbolCounter::new();
-    let symbols = parser.parse(code, codanna::FileId(1), &mut counter);
+    let symbols = parser.parse(code, quarry::FileId(1), &mut counter);
 
     println!("\nFound {} symbols:", symbols.len());
     for symbol in &symbols {

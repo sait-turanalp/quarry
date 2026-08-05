@@ -1,5 +1,5 @@
-use codanna::parsing::LanguageParser;
-use codanna::parsing::lua::LuaParser;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::lua::LuaParser;
 
 fn load_oop_fixture() -> &'static str {
     include_str!("../../fixtures/lua/oop.lua")

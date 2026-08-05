@@ -24,8 +24,8 @@ mod tests {
     use super::tree_sitter_kotlin;
 
     // Import the timestamp utility from the main codebase
-    use codanna::io::format::format_utc_timestamp as get_formatted_timestamp;
-    use codanna::parsing::{
+    use quarry::io::format::format_utc_timestamp as get_formatted_timestamp;
+    use quarry::parsing::{
         c::audit::CParserAudit, cpp::audit::CppParserAudit, csharp::audit::CSharpParserAudit,
         gdscript::audit::GdscriptParserAudit, go::audit::GoParserAudit,
         java::audit::JavaParserAudit, javascript::audit::JavaScriptParserAudit,

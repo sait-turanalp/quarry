@@ -10,9 +10,9 @@
 //!
 //! Environment variables must be prefixed with `CI_` and use double underscores
 //! to separate nested levels:
-//! - `CI_INDEXING__PARALLELISM=8` sets `indexing.parallelism`
-//! - `CI_LOGGING__DEFAULT=debug` sets `logging.default`
-//! - `CI_INDEXING__INCLUDE_TESTS=false` sets `indexing.include_tests`
+//! - `QUARRY_INDEXING__PARALLELISM=8` sets `indexing.parallelism`
+//! - `QUARRY_LOGGING__DEFAULT=debug` sets `logging.default`
+//! - `QUARRY_INDEXING__INCLUDE_TESTS=false` sets `indexing.include_tests`
 //!
 //! For logging, use `RUST_LOG` environment variable directly (standard Rust pattern).
 
@@ -35,7 +35,7 @@ pub struct Settings {
     #[serde(default = "default_index_path")]
     pub index_path: PathBuf,
 
-    /// Workspace root directory (where .codanna is located)
+    /// Workspace root directory (where .quarry is located)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_root: Option<PathBuf>,
 
@@ -970,7 +970,7 @@ fn default_batches_per_commit() -> usize {
 fn default_global_ignore_patterns() -> Vec<String> {
     vec![
         ".git/**".to_string(),
-        ".codanna/**".to_string(),
+        ".quarry/**".to_string(),
         "target/**".to_string(),
         "**/target/**".to_string(),
         "node_modules/**".to_string(),
@@ -1266,7 +1266,7 @@ fn default_guidance_templates() -> HashMap<String, GuidanceTemplate> {
 
     // Analyze impact
     templates.insert("analyze_impact".to_string(), GuidanceTemplate {
-        no_results: Some("No impact detected. This symbol appears isolated. Consider using the codanna-navigator agent for comprehensive multi-hop analysis of complex relationships.".to_string()),
+        no_results: Some("No impact detected. This symbol appears isolated. Consider using the quarry-navigator agent for comprehensive multi-hop analysis of complex relationships.".to_string()),
         single_result: Some("Minimal impact radius. This symbol has limited dependencies.".to_string()),
         multiple_results: Some("Impact analysis shows {result_count} affected symbols. Focus on critical paths or use 'find_symbol' on key dependencies.".to_string()),
         custom: vec![
@@ -1317,7 +1317,7 @@ fn default_guidance_templates() -> HashMap<String, GuidanceTemplate> {
 
 fn default_guidance_variables() -> HashMap<String, String> {
     let mut vars = HashMap::new();
-    vars.insert("project".to_string(), "codanna".to_string());
+    vars.insert("project".to_string(), "quarry".to_string());
     vars
 }
 
@@ -1422,7 +1422,7 @@ impl Settings {
             // Layer in environment variables with CI_ prefix
             // Use double underscore (__) to separate nested levels
             // Single underscore (_) remains as is within field names
-            .merge(Env::prefixed("CI_").map(|key| {
+            .merge(Env::prefixed("QUARRY_").map(|key| {
                 key.as_str()
                     .to_lowercase()
                     .replace("__", ".") // Double underscore becomes dot
@@ -1442,7 +1442,7 @@ impl Settings {
             })
     }
 
-    /// Find the workspace root by looking for .codanna directory
+    /// Find the workspace root by looking for .quarry directory
     /// Searches from current directory up to root
     pub fn find_workspace_config() -> Option<PathBuf> {
         let current = std::env::current_dir().ok()?;
@@ -1465,7 +1465,7 @@ impl Settings {
             path
         } else {
             // No workspace found, check current directory
-            PathBuf::from(".codanna/settings.toml")
+            PathBuf::from(".quarry/settings.toml")
         };
 
         // Check if settings.toml exists
@@ -1478,7 +1478,7 @@ impl Settings {
             Ok(content) => {
                 if let Err(e) = toml::from_str::<Settings>(&content) {
                     return Err(format!(
-                        "Configuration file is corrupted: {e}\nRun 'codanna init --force' to regenerate."
+                        "Configuration file is corrupted: {e}\nRun 'quarry init --force' to regenerate."
                     ));
                 }
             }
@@ -1511,7 +1511,7 @@ impl Settings {
             .merge(Serialized::defaults(Settings::default()))
             .merge(Toml::file(path))
             .merge(
-                Env::prefixed("CI_")
+                Env::prefixed("QUARRY_")
                     .map(|key| key.as_str().to_lowercase().replace("__", ".").into()),
             )
             .extract()
@@ -1573,7 +1573,7 @@ impl Settings {
             );
         }
 
-        // Create default .codannaignore file
+        // Create default .quarryignore file
         Self::create_default_ignore_file(force)?;
 
         // Initialize global directories and symlink
@@ -1623,7 +1623,7 @@ impl Settings {
     /// Add helpful comments to the generated TOML configuration
     fn add_config_comments(toml: String) -> String {
         let mut result = String::from(
-            "# Codanna Configuration File\n\
+            "# Quarry Configuration File\n\
              # https://github.com/bartolli/codanna\n\n",
         );
 
@@ -1688,9 +1688,9 @@ impl Settings {
                 );
             } else if line.starts_with("indexed_paths = ") {
                 result.push_str("\n# List of directories to index\n");
-                result.push_str("# Add folders using: codanna add-dir <path>\n");
-                result.push_str("# Remove folders using: codanna remove-dir <path>\n");
-                result.push_str("# List all folders using: codanna list-dirs\n");
+                result.push_str("# Add folders using: quarry add-dir <path>\n");
+                result.push_str("# Remove folders using: quarry remove-dir <path>\n");
+                result.push_str("# List all folders using: quarry list-dirs\n");
             } else if line.starts_with("batch_size = ") {
                 result.push_str("\n# Items per batch before flushing to index (default: 5000)\n");
             } else if line.starts_with("batches_per_commit = ") {
@@ -1732,7 +1732,7 @@ impl Settings {
             } else if in_semantic_section && line.starts_with("model = ") {
                 result.push_str("\n# Model to use for embeddings\n");
                 result.push_str(
-                    "# Note: Changing models requires re-indexing (codanna index --force)\n",
+                    "# Note: Changing models requires re-indexing (quarry index --force)\n",
                 );
                 result.push_str(
                     "# - minishlab/potion-retrieval-32M: static retrieval embeddings (default)\n",
@@ -1741,8 +1741,7 @@ impl Settings {
                 result.push_str(
                     "# - GraniteSmallEnglishR2: 384 dimensions, transformer long-context\n",
                 );
-                result
-                    .push_str("#   Requires model files at ~/.codanna/models/granite-small-r2/\n");
+                result.push_str("#   Requires model files at ~/.quarry/models/granite-small-r2/\n");
                 result.push_str("# - AllMiniLML6V2: English-only, 384 dimensions\n");
                 result.push_str("# - MultilingualE5Small: 94 languages including, 384 dimensions (recommended for multilingual)\n");
                 result.push_str(
@@ -1811,7 +1810,7 @@ impl Settings {
                     "\n# Reranker model (fastembed) or custom ONNX path via custom:/path/to/model-or-dir\n",
                 );
                 result.push_str(
-                    "# Example custom INT8: model = \"custom:~/.codanna/models/reranker-int8\"\n",
+                    "# Example custom INT8: model = \"custom:~/.quarry/models/reranker-int8\"\n",
                 );
             } else if in_reranking_section && line.starts_with("top_n = ") {
                 result.push_str("\n# Number of fused candidates sent to reranker\n");
@@ -1966,7 +1965,7 @@ impl Settings {
                 result.push_str("\n[logging]\n");
                 result.push_str("# Logging configuration\n");
                 result.push_str("# Levels: \"error\", \"warn\" (default/quiet), \"info\", \"debug\", \"trace\"\n");
-                result.push_str("# Override with RUST_LOG env var: RUST_LOG=debug codanna index\n");
+                result.push_str("# Override with RUST_LOG env var: RUST_LOG=debug quarry index\n");
                 prev_line_was_section = true;
                 continue;
             } else if line.starts_with("default = ") && !in_languages_section {
@@ -1974,7 +1973,7 @@ impl Settings {
             } else if line == "[logging.modules]" {
                 result.push_str("\n[logging.modules]\n");
                 result.push_str("# Per-module log level overrides\n");
-                result.push_str("# Internal modules (auto-prefixed with codanna::): watcher, mcp, indexing, storage\n");
+                result.push_str("# Internal modules (auto-prefixed with quarry::): watcher, mcp, indexing, storage\n");
                 result.push_str(
                     "# External targets (used as-is): cli, tantivy, pipeline, semantic, rag\n",
                 );
@@ -2144,19 +2143,19 @@ impl Settings {
         result
     }
 
-    /// Create a default .codannaignore file with helpful patterns
+    /// Create a default .quarryignore file with helpful patterns
     fn create_default_ignore_file(force: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let ignore_path = PathBuf::from(".codannaignore");
+        let ignore_path = PathBuf::from(".quarryignore");
 
         if !force && ignore_path.exists() {
-            println!("Found existing .codannaignore file");
+            println!("Found existing .quarryignore file");
             return Ok(());
         }
 
-        let default_content = r#"# Codanna ignore patterns (gitignore syntax)
+        let default_content = r#"# Quarry ignore patterns (gitignore syntax)
 # https://git-scm.com/docs/gitignore
 #
-# This file tells codanna which files to exclude from indexing.
+# This file tells quarry which files to exclude from indexing.
 # Each line specifies a pattern. Patterns follow the same rules as .gitignore.
 
 # Build artifacts
@@ -2192,8 +2191,8 @@ coverage/
 *~
 .DS_Store
 
-# Codanna's own directory
-.codanna/
+# Quarry's own directory
+.quarry/
 
 # Dependency directories
 node_modules/
@@ -2245,9 +2244,9 @@ __pycache__/
         std::fs::write(&ignore_path, default_content)?;
 
         if force && ignore_path.exists() {
-            println!("Overwrote .codannaignore file");
+            println!("Overwrote .quarryignore file");
         } else {
-            println!("Created default .codannaignore file");
+            println!("Created default .quarryignore file");
         }
 
         Ok(())
@@ -2505,9 +2504,11 @@ confidence_gate_require_dual_source = false
         let settings = Settings::default();
         assert!(settings.chunk_search.enabled);
         assert!(!settings.chunk_search.rebuild_logging_verbose);
-        assert_eq!(settings.chunk_search.top_k_vector, 100);
-        assert_eq!(settings.chunk_search.top_k_bm25, 100);
-        assert_eq!(settings.chunk_search.top_k_fused, 50);
+        // Recall width, measured: see default_chunk_top_k_vector. 500 is the knee of the
+        // curve, and top_k_fused below it silently caps file-level recall around 0.80.
+        assert_eq!(settings.chunk_search.top_k_vector, 500);
+        assert_eq!(settings.chunk_search.top_k_bm25, 500);
+        assert_eq!(settings.chunk_search.top_k_fused, 500);
         assert!(settings.chunk_search.result_filter_enabled);
         assert!((settings.chunk_search.relative_score_delta - 0.8).abs() < f32::EPSILON);
         assert!((settings.chunk_search.cliff_min_drop - 1.2).abs() < f32::EPSILON);
@@ -2608,8 +2609,8 @@ default = "info"
 
         // Set environment variables that should override config file
         unsafe {
-            std::env::set_var("CI_INDEXING__PARALLELISM", "16");
-            std::env::set_var("CI_LOGGING__DEFAULT", "debug");
+            std::env::set_var("QUARRY_INDEXING__PARALLELISM", "16");
+            std::env::set_var("QUARRY_LOGGING__DEFAULT", "debug");
         }
 
         let settings = Settings::load().unwrap();
@@ -2625,8 +2626,8 @@ default = "info"
 
         // Clean up
         unsafe {
-            std::env::remove_var("CI_INDEXING__PARALLELISM");
-            std::env::remove_var("CI_LOGGING__DEFAULT");
+            std::env::remove_var("QUARRY_INDEXING__PARALLELISM");
+            std::env::remove_var("QUARRY_LOGGING__DEFAULT");
         }
         std::env::set_current_dir(original_dir).unwrap();
     }
@@ -2638,9 +2639,9 @@ default = "info"
         fs::write(&config_path, "[indexing]\nparallelism = 2\n").unwrap();
 
         unsafe {
-            std::env::set_var("CI_INDEXING__PIPELINE_TRACING", "true");
-            std::env::set_var("CI_INDEXING__SEMANTIC_SINGLE_SAVE_MODE", "true");
-            std::env::set_var("CI_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE", "true");
+            std::env::set_var("QUARRY_INDEXING__PIPELINE_TRACING", "true");
+            std::env::set_var("QUARRY_INDEXING__SEMANTIC_SINGLE_SAVE_MODE", "true");
+            std::env::set_var("QUARRY_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE", "true");
         }
 
         let settings = Settings::load_from(&config_path).unwrap();
@@ -2649,9 +2650,9 @@ default = "info"
         assert!(settings.chunk_search.rebuild_logging_verbose);
 
         unsafe {
-            std::env::remove_var("CI_INDEXING__PIPELINE_TRACING");
-            std::env::remove_var("CI_INDEXING__SEMANTIC_SINGLE_SAVE_MODE");
-            std::env::remove_var("CI_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE");
+            std::env::remove_var("QUARRY_INDEXING__PIPELINE_TRACING");
+            std::env::remove_var("QUARRY_INDEXING__SEMANTIC_SINGLE_SAVE_MODE");
+            std::env::remove_var("QUARRY_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE");
         }
     }
 

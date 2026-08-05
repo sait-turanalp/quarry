@@ -1,6 +1,6 @@
 # Development Documentation
 
-Comprehensive guides for contributing to Codanna.
+Comprehensive guides for contributing to Quarry.
 
 ## Language Implementation
 

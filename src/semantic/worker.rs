@@ -171,13 +171,13 @@ impl SemanticWorkerClient {
         })
     }
 
-    fn spawn_worker_process(
-    ) -> Result<(Child, BufWriter<ChildStdin>, BufReader<ChildStdout>), String> {
+    fn spawn_worker_process()
+    -> Result<(Child, BufWriter<ChildStdin>, BufReader<ChildStdout>), String> {
         let exe = std::env::current_exe()
             .map_err(|e| format!("Failed to resolve current executable: {e}"))?;
         let mut command = Command::new(exe);
         command
-            .env("CODANNA_SEMANTIC_WORKER", "1")
+            .env("QUARRY_SEMANTIC_WORKER", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
@@ -226,8 +226,7 @@ impl SemanticWorkerClient {
                 Err(format!("Semantic worker init failed: {message}"))
             }
             other => Err(format!(
-                "Unexpected semantic worker init response: {:?}",
-                other
+                "Unexpected semantic worker init response: {other:?}"
             )),
         }
     }
@@ -307,8 +306,7 @@ impl SemanticWorkerClient {
             } => {
                 if response_id != batch_id {
                     return Err(format!(
-                        "Mismatched semantic worker batch id: expected {}, got {}",
-                        batch_id, response_id
+                        "Mismatched semantic worker batch id: expected {batch_id}, got {response_id}"
                     ));
                 }
                 let mut result = Vec::with_capacity(items.len());
@@ -320,7 +318,7 @@ impl SemanticWorkerClient {
                 Ok(result)
             }
             WorkerResponse::Error { message, .. } => Err(message),
-            other => Err(format!("Unexpected semantic worker response: {:?}", other)),
+            other => Err(format!("Unexpected semantic worker response: {other:?}")),
         }
     }
 
@@ -343,8 +341,7 @@ impl SemanticWorkerClient {
                 self.embed_batch_once(batch_id, items)
                     .map_err(|second_err| {
                         format!(
-                            "Semantic worker failed after restart (first: {}; second: {})",
-                            first_err, second_err
+                            "Semantic worker failed after restart (first: {first_err}; second: {second_err})"
                         )
                     })
             }

@@ -1,8 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use codanna::{Settings, plugins};
 use git2::{IndexAddOption, Repository, Signature};
+use quarry::{Settings, plugins};
 use tempfile::TempDir;
 
 fn with_temp_workspace<F>(test: F)
@@ -14,7 +14,7 @@ where
 }
 
 fn load_workspace_settings(workspace: &Path) -> Settings {
-    let config_dir = workspace.join(".codanna");
+    let config_dir = workspace.join(".quarry");
     fs::create_dir_all(&config_dir).expect("create .codanna directory");
 
     let settings_path = config_dir.join("settings.toml");
@@ -227,7 +227,7 @@ fn update_external_plugin_detects_up_to_date() {
         plugins::add_plugin(&settings, &repo_url, "external-plugin", None, false, false)
             .expect("install succeeds");
 
-        let lockfile_path = workspace.join(".codanna/plugins/lockfile.json");
+        let lockfile_path = workspace.join(".quarry/plugins/lockfile.json");
         let before: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&lockfile_path).expect("read lockfile"))
                 .expect("parse lockfile");

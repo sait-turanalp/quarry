@@ -6,8 +6,8 @@
 //! - Language filtering
 //! - Hidden file handling
 
-use crate::parsing::get_registry;
 use crate::Settings;
+use crate::parsing::get_registry;
 use glob::Pattern;
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
@@ -42,15 +42,15 @@ impl FileWalker {
             .max_depth(None) // No depth limit
             .require_git(false); // Allow gitignore to work in non-git directories
 
-        // Always support .codannaignore files for custom ignore patterns (follows .gitignore pattern)
-        builder.add_custom_ignore_filename(".codannaignore");
+        // Always support .quarryignore files for custom ignore patterns (follows .gitignore pattern)
+        builder.add_custom_ignore_filename(".quarryignore");
 
         // The ignore crate's override feature is for INCLUDING files, not excluding them.
         // To add custom ignore patterns, we need to use a different approach.
-        // For now, we'll rely on .gitignore and .codannaignore files.
+        // For now, we'll rely on .gitignore and .quarryignore files.
 
         // TODO: Add support for custom ignore patterns from settings
-        // One approach would be to create a temporary .codanna-ignore file
+        // One approach would be to create a temporary .quarry-ignore file
         // or use the glob filtering in the iterator below
 
         // Get enabled extensions from the registry

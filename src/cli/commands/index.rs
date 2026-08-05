@@ -45,7 +45,7 @@ pub fn run(
             custom_path
         } else {
             Settings::find_workspace_config().unwrap_or_else(|| {
-                eprintln!("Error: No configuration file found. Run 'codanna init' first.");
+                eprintln!("Error: No configuration file found. Run 'quarry init' first.");
                 std::process::exit(1);
             })
         };
@@ -88,8 +88,8 @@ pub fn run(
             eprintln!("Error: No paths to index");
             eprintln!();
             eprintln!("Options:");
-            eprintln!("  1. Provide paths: codanna index <path> [<path>...]");
-            eprintln!("  2. Configure paths: codanna add-dir <path>");
+            eprintln!("  1. Provide paths: quarry index <path> [<path>...]");
+            eprintln!("  2. Configure paths: quarry add-dir <path>");
             std::process::exit(1);
         }
 
@@ -274,7 +274,11 @@ fn save_index(indexer: &mut IndexFacade, persistence: &IndexPersistence, config:
     let save_start = std::time::Instant::now();
     match persistence.save_facade(indexer) {
         Ok(_) => {
-            eprintln!("Index saved to: {} ({:.1}s)", config.index_path.display(), save_start.elapsed().as_secs_f64());
+            eprintln!(
+                "Index saved to: {} ({:.1}s)",
+                config.index_path.display(),
+                save_start.elapsed().as_secs_f64()
+            );
         }
         Err(e) => {
             eprintln!("Error: Could not save index: {e}");

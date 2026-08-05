@@ -1,4 +1,4 @@
-//! Swift language support for Codanna
+//! Swift language support for Quarry
 //!
 //! Provides parsing, behavior, and resolution for Swift source files.
 

@@ -7,17 +7,17 @@ Usage:
   run_dynamic_runtime_pipeline.sh [options]
 
 Options:
-  --bin <PATH>           codanna binary
-                         (default: /Users/sait/Documents/lut-app/codanna/target/release/codanna)
+  --bin <PATH>           quarry binary
+                         (default: /Users/sait/Documents/lut-app/quarry/target/release/quarry)
   --config <PATH>        settings.toml used for benchmark
-                         (default: /tmp/codanna-rerank-realdata/settings.bench.toml)
+                         (default: /tmp/quarry-rerank-realdata/settings.bench.toml)
   --queries <PATH>       query jsonl
-                         (default: /tmp/codanna-rerank-realdata/queries.v1.jsonl)
+                         (default: /tmp/quarry-rerank-realdata/queries.v1.jsonl)
   --qrels <PATH>         qrels jsonl
-                         (default: /tmp/codanna-rerank-realdata/qrels.v1.jsonl)
+                         (default: /tmp/quarry-rerank-realdata/qrels.v1.jsonl)
   --profiles <PATH>      profile matrix TOML
                          (default: benchmarks/rerank/profiles.dynamic_runtime_sweep.toml)
-  --out <DIR>            output directory (default: /tmp/codanna-dynamic-runtime)
+  --out <DIR>            output directory (default: /tmp/quarry-dynamic-runtime)
   --cold-runs <N>        cold runs per query (default: 1)
   --warm-runs <N>        warm runs per query (default: 3)
   --limit <N>            search limit (default: 10)
@@ -28,12 +28,12 @@ Options:
 EOF
 }
 
-BIN="/Users/sait/Documents/lut-app/codanna/target/release/codanna"
-CFG="/tmp/codanna-rerank-realdata/settings.bench.toml"
-QUERIES="/tmp/codanna-rerank-realdata/queries.v1.jsonl"
-QRELS="/tmp/codanna-rerank-realdata/qrels.v1.jsonl"
-PROFILES="/Users/sait/Documents/lut-app/codanna/benchmarks/rerank/profiles.dynamic_runtime_sweep.toml"
-OUT="/tmp/codanna-dynamic-runtime"
+BIN="/Users/sait/Documents/lut-app/quarry/target/release/quarry"
+CFG="/tmp/quarry-rerank-realdata/settings.bench.toml"
+QUERIES="/tmp/quarry-rerank-realdata/queries.v1.jsonl"
+QRELS="/tmp/quarry-rerank-realdata/qrels.v1.jsonl"
+PROFILES="/Users/sait/Documents/lut-app/quarry/benchmarks/rerank/profiles.dynamic_runtime_sweep.toml"
+OUT="/tmp/quarry-dynamic-runtime"
 COLD_RUNS=1
 WARM_RUNS=3
 LIMIT=10

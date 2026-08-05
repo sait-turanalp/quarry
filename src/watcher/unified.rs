@@ -363,7 +363,7 @@ impl UnifiedWatcher {
                     for path in &removed {
                         tracing::info!("  - {}", path.display());
                     }
-                    tracing::info!("Run 'codanna clean' to remove symbols from these directories");
+                    tracing::info!("Run 'quarry clean' to remove symbols from these directories");
                 }
 
                 if !added.is_empty() || !removed.is_empty() {
@@ -517,7 +517,7 @@ impl UnifiedWatcherBuilder {
 
         let index_path = self
             .index_path
-            .unwrap_or_else(|| workspace_root.join(".codanna/index"));
+            .unwrap_or_else(|| workspace_root.join(".quarry/index"));
 
         // Create channel for events
         let (tx, rx) = mpsc::channel(100);

@@ -11,7 +11,7 @@ pub enum PluginError {
     MarketplaceNotFound { url: String },
 
     #[error(
-        "Plugin '{name}' not found in marketplace\nSuggestion: Use 'codanna plugin list' to see available plugins"
+        "Plugin '{name}' not found in marketplace\nSuggestion: Use 'quarry plugin list' to see available plugins"
     )]
     PluginNotFound { name: String },
 
@@ -45,22 +45,22 @@ pub enum PluginError {
     },
 
     #[error(
-        "Lockfile corrupted or invalid\nSuggestion: Remove .codanna/plugins/lockfile.json and reinstall plugins"
+        "Lockfile corrupted or invalid\nSuggestion: Remove .quarry/plugins/lockfile.json and reinstall plugins"
     )]
     LockfileCorrupted,
 
     #[error(
-        "Permission denied accessing {path}\nSuggestion: Check file permissions and ensure codanna has write access"
+        "Permission denied accessing {path}\nSuggestion: Check file permissions and ensure quarry has write access"
     )]
     PermissionDenied { path: PathBuf },
 
     #[error(
-        "Plugin '{name}' is already installed at version {version}\nSuggestion: Use 'codanna plugin update' to change versions"
+        "Plugin '{name}' is already installed at version {version}\nSuggestion: Use 'quarry plugin update' to change versions"
     )]
     AlreadyInstalled { name: String, version: String },
 
     #[error(
-        "Plugin '{name}' is not installed\nSuggestion: Use 'codanna plugin add' to install it first"
+        "Plugin '{name}' is not installed\nSuggestion: Use 'quarry plugin add' to install it first"
     )]
     NotInstalled { name: String },
 

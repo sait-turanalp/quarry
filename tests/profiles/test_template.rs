@@ -1,6 +1,6 @@
 //! Tests for template substitution
 
-use codanna::profiles::template::substitute_variables;
+use quarry::profiles::template::substitute_variables;
 use std::collections::HashMap;
 
 #[test]

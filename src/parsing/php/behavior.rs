@@ -122,7 +122,7 @@ impl LanguageBehavior for PhpBehavior {
                 .unwrap_or(true);
 
             if needs_reload {
-                let persistence = ResolutionPersistence::new(Path::new(".codanna"));
+                let persistence = ResolutionPersistence::new(Path::new(".quarry"));
                 if let Ok(index) = persistence.load("php") {
                     *cache_ref = Some((Instant::now(), index));
                 }

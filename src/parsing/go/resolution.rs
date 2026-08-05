@@ -1593,7 +1593,7 @@ mod tests {
         let context = GoResolutionContext::new(FileId::new(1).unwrap());
 
         // Create a minimal DocumentIndex for testing
-        let temp_dir = std::env::temp_dir().join("codanna_test_go_resolution");
+        let temp_dir = std::env::temp_dir().join("quarry_test_go_resolution");
         std::fs::create_dir_all(&temp_dir).unwrap();
         let settings = crate::config::Settings::default();
         let document_index = DocumentIndex::new(&temp_dir, &settings).unwrap();
@@ -1626,7 +1626,7 @@ mod tests {
         );
 
         // Create a minimal DocumentIndex for testing
-        let temp_dir = std::env::temp_dir().join("codanna_test_go_resolution_2");
+        let temp_dir = std::env::temp_dir().join("quarry_test_go_resolution_2");
         std::fs::create_dir_all(&temp_dir).unwrap();
         let settings = crate::config::Settings::default();
         let document_index = DocumentIndex::new(&temp_dir, &settings).unwrap();
@@ -1762,7 +1762,7 @@ replace github.com/another/module => github.com/fork/module v1.2.3
 "#;
 
         // Create a temporary go.mod file for testing
-        let temp_dir = std::env::temp_dir().join("codanna_test_go_mod");
+        let temp_dir = std::env::temp_dir().join("quarry_test_go_mod");
         std::fs::create_dir_all(&temp_dir).unwrap();
         let go_mod_path = temp_dir.join("go.mod");
         std::fs::write(&go_mod_path, go_mod_content).unwrap();

@@ -2,16 +2,16 @@
 //!
 //! Tests the resolution enhancement during parsing WITHOUT indexing
 
-use codanna::FileId;
-use codanna::config::Settings;
-use codanna::parsing::resolution::ProjectResolutionEnhancer;
-use codanna::parsing::typescript::resolution::TypeScriptProjectEnhancer;
-use codanna::project_resolver::persist::{ResolutionPersistence, ResolutionRules};
-use codanna::project_resolver::providers::typescript::TypeScriptProvider;
+use quarry::FileId;
+use quarry::config::Settings;
+use quarry::parsing::resolution::ProjectResolutionEnhancer;
+use quarry::parsing::typescript::resolution::TypeScriptProjectEnhancer;
+use quarry::project_resolver::persist::{ResolutionPersistence, ResolutionRules};
+use quarry::project_resolver::providers::typescript::TypeScriptProvider;
 use std::path::Path;
 
 #[test]
-#[ignore = "Requires local .codanna/settings.toml with TypeScript config_files and examples/typescript/ directory"]
+#[ignore = "Requires local .quarry/settings.toml with TypeScript config_files and examples/typescript/ directory"]
 fn test_typescript_resolution_pipeline() {
     // Step 1: Load settings (which now has tsconfig paths configured)
     let settings = Settings::load().expect("Failed to load settings");
@@ -46,13 +46,13 @@ fn test_typescript_resolution_pipeline() {
     let provider = TypeScriptProvider::new();
 
     // Step 3: Process and persist the resolution rules
-    use codanna::project_resolver::provider::ProjectResolutionProvider;
+    use quarry::project_resolver::provider::ProjectResolutionProvider;
     provider
         .rebuild_cache(&settings)
         .expect("Failed to process TypeScript configs");
 
     // Step 4: Load the persisted rules
-    let persistence = ResolutionPersistence::new(Path::new(".codanna"));
+    let persistence = ResolutionPersistence::new(Path::new(".quarry"));
     let index = persistence
         .load("typescript")
         .expect("Resolution index should be persisted");
@@ -159,19 +159,19 @@ fn test_typescript_resolution_pipeline() {
 }
 
 #[test]
-#[ignore = "Requires local .codanna/settings.toml with TypeScript config_files and examples/typescript/ directory"]
+#[ignore = "Requires local .quarry/settings.toml with TypeScript config_files and examples/typescript/ directory"]
 fn test_typescript_extends_chain() {
     // Test that the extends chain is properly resolved
     let settings = Settings::load().expect("Failed to load settings");
 
     let provider = TypeScriptProvider::new();
 
-    use codanna::project_resolver::provider::ProjectResolutionProvider;
+    use quarry::project_resolver::provider::ProjectResolutionProvider;
     provider
         .rebuild_cache(&settings)
         .expect("Failed to process configs");
 
-    let persistence = ResolutionPersistence::new(Path::new(".codanna"));
+    let persistence = ResolutionPersistence::new(Path::new(".quarry"));
     let index = persistence.load("typescript").expect("Should load index");
 
     // Skip this test if we only have one config

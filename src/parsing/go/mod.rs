@@ -1,6 +1,6 @@
 //! Go language parser implementation
 //!
-//! This module provides comprehensive Go language support for Codanna's code intelligence system,
+//! This module provides comprehensive Go language support for Quarry's code intelligence system,
 //! enabling precise symbol extraction, relationship tracking, and semantic analysis of Go codebases.
 //!
 //! ## Overview
@@ -41,7 +41,7 @@
 //!
 //! ## Integration
 //!
-//! The Go parser integrates seamlessly with Codanna's MCP server, providing these tools:
+//! The Go parser integrates seamlessly with Quarry's MCP server, providing these tools:
 //! - `find_symbol` / `search_symbols` - Locate Go symbols by name or pattern
 //! - `get_calls` / `find_callers` - Navigate function call relationships
 //! - `analyze_impact` - Assess change impact across Go packages
@@ -50,8 +50,8 @@
 //! ## Example Usage
 //!
 //! ```rust,no_run
-//! use codanna::parsing::go::{GoParser, GoBehavior};
-//! use codanna::parsing::{LanguageParser, LanguageBehavior};
+//! use quarry::parsing::go::{GoParser, GoBehavior};
+//! use quarry::parsing::{LanguageParser, LanguageBehavior};
 //!
 //! // Create parser instance
 //! let parser = GoParser::new();

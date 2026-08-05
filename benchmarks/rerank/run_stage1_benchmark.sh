@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 5 ]]; then
-  echo "Usage: $0 <codanna_bin> <settings_toml> <queries_jsonl> <qrels_jsonl> <out_dir> [profiles_toml]"
+  echo "Usage: $0 <quarry_bin> <settings_toml> <queries_jsonl> <qrels_jsonl> <out_dir> [profiles_toml]"
   exit 1
 fi
 
@@ -11,7 +11,7 @@ CFG="$2"
 QUERIES="$3"
 QRELS="$4"
 OUT="$5"
-PROFILES="${6:-/Users/sait/Documents/lut-app/codanna/benchmarks/rerank/profiles.stage1.toml}"
+PROFILES="${6:-/Users/sait/Documents/lut-app/quarry/benchmarks/rerank/profiles.stage1.toml}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

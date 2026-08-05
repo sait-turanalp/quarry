@@ -71,7 +71,7 @@ def prepare_data():
 
     random.seed(SEED)
 
-    # Collect code files from the codanna codebase
+    # Collect code files from the quarry codebase
     code_files = []
     for ext in ["*.rs", "*.toml", "*.md"]:
         code_files.extend(glob.glob(f"src/**/{ext}", recursive=True))

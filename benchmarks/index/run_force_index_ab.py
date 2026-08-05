@@ -280,23 +280,23 @@ def run_profile(
     if max_files is not None and max_files > 0:
         cmd.extend(["--max-files", str(max_files)])
     env = os.environ.copy()
-    env["CI_INDEXING__PIPELINE_TRACING"] = to_ci_bool(profile.pipeline_tracing)
-    env["CI_INDEXING__CHUNK_INCREMENTAL_REBUILD_ENABLED"] = to_ci_bool(
+    env["QUARRY_INDEXING__PIPELINE_TRACING"] = to_ci_bool(profile.pipeline_tracing)
+    env["QUARRY_INDEXING__CHUNK_INCREMENTAL_REBUILD_ENABLED"] = to_ci_bool(
         profile.chunk_incremental_rebuild_enabled
     )
-    env["CI_INDEXING__SEMANTIC_SINGLE_SAVE_MODE"] = to_ci_bool(
+    env["QUARRY_INDEXING__SEMANTIC_SINGLE_SAVE_MODE"] = to_ci_bool(
         profile.semantic_single_save_mode
     )
-    env["CI_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE"] = to_ci_bool(
+    env["QUARRY_CHUNK_SEARCH__REBUILD_LOGGING_VERBOSE"] = to_ci_bool(
         profile.rebuild_logging_verbose
     )
     if profile.tantivy_heap_mb is not None:
-        env["CI_INDEXING__TANTIVY_HEAP_MB"] = str(profile.tantivy_heap_mb)
+        env["QUARRY_INDEXING__TANTIVY_HEAP_MB"] = str(profile.tantivy_heap_mb)
     if profile.batches_per_commit is not None:
-        env["CI_INDEXING__BATCHES_PER_COMMIT"] = str(profile.batches_per_commit)
+        env["QUARRY_INDEXING__BATCHES_PER_COMMIT"] = str(profile.batches_per_commit)
     if profile.tantivy_writer_threads is not None:
-        env["CI_INDEXING__TANTIVY_WRITER_THREADS"] = str(profile.tantivy_writer_threads)
-    env["CI_INDEXING__TANTIVY_NO_MERGE_POLICY"] = to_ci_bool(profile.tantivy_no_merge_policy)
+        env["QUARRY_INDEXING__TANTIVY_WRITER_THREADS"] = str(profile.tantivy_writer_threads)
+    env["QUARRY_INDEXING__TANTIVY_NO_MERGE_POLICY"] = to_ci_bool(profile.tantivy_no_merge_policy)
     env["RUST_LOG"] = profile.rust_log
 
     row: dict[str, Any] = {
@@ -339,7 +339,7 @@ def run_profile(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--bin", required=True, help="codanna binary path")
+    ap.add_argument("--bin", required=True, help="quarry binary path")
     ap.add_argument("--repo", required=True, help="repository to index")
     ap.add_argument("--config", required=True, help="settings.toml path")
     ap.add_argument(
@@ -349,14 +349,14 @@ def main() -> int:
     )
     ap.add_argument(
         "--out",
-        default="/tmp/codanna-index-force-ab",
+        default="/tmp/quarry-index-force-ab",
         help="output directory",
     )
     ap.add_argument(
         "--max-files",
         type=int,
         default=None,
-        help="optional max files for each run (passed to `codanna index --max-files`)",
+        help="optional max files for each run (passed to `quarry index --max-files`)",
     )
     ap.add_argument("--dry-run", action="store_true", help="print resolved commands only")
     args = ap.parse_args()

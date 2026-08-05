@@ -1,7 +1,7 @@
 //! Test: Project registry can register a project
 //!
 //! These tests use isolated temporary directories to avoid interfering with
-//! the user's actual codanna configuration or with parallel test execution
+//! the user's actual quarry configuration or with parallel test execution
 
 use serde_json::json;
 use std::path::{Path, PathBuf};

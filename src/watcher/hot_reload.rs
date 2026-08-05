@@ -17,7 +17,7 @@ use crate::{IndexPersistence, Settings};
 /// Watches for external index changes and hot-reloads them.
 ///
 /// This watcher polls `meta.json` and `state.json` to detect when the index
-/// is modified by external processes (e.g., `codanna index` in another terminal,
+/// is modified by external processes (e.g., `quarry index` in another terminal,
 /// CI/CD pipelines). It does NOT watch source files - that's handled by UnifiedWatcher.
 pub struct HotReloadWatcher {
     index_path: PathBuf,

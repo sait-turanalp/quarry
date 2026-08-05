@@ -37,8 +37,8 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```rust
-/// use codanna::parsing::MethodCall;
-/// use codanna::Range;
+/// use quarry::parsing::MethodCall;
+/// use quarry::Range;
 ///
 /// let range = Range::new(1, 0, 1, 10);
 ///
@@ -179,8 +179,8 @@ impl MethodCall {
 /// # Example
 ///
 /// ```rust
-/// use codanna::parsing::{MethodCall, MethodCallResolver};
-/// use codanna::Range;
+/// use quarry::parsing::{MethodCall, MethodCallResolver};
+/// use quarry::Range;
 ///
 /// let mut resolver = MethodCallResolver::new();
 ///

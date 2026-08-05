@@ -8,7 +8,7 @@
 //! - Memory usage tracking via sysinfo
 //! - Bottleneck identification
 
-use codanna::indexing::pipeline::metrics::{MemorySnapshot, PipelineMetrics, StageTracker};
+use quarry::indexing::pipeline::metrics::{MemorySnapshot, PipelineMetrics, StageTracker};
 use std::thread;
 use std::time::{Duration, Instant};
 

@@ -8,8 +8,8 @@ use crate::indexing::pipeline::types::{FileContent, PipelineError, PipelineResul
 use crossbeam_channel::{Receiver, Sender};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::thread;
 
 /// Read stage for file content loading.

@@ -44,7 +44,7 @@ pub fn run(args: IndexParallelArgs, settings: &Settings) {
     };
 
     if paths_to_index.is_empty() {
-        tracing::error!(target: "cli", "No paths to index. Use 'codanna index-parallel <path>' or 'codanna add-dir <path>'");
+        tracing::error!(target: "cli", "No paths to index. Use 'quarry index-parallel <path>' or 'quarry add-dir <path>'");
         std::process::exit(1);
     }
 
@@ -105,7 +105,14 @@ pub fn run(args: IndexParallelArgs, settings: &Settings) {
 
         tracing::info!(target: "pipeline", "Indexing directory ({mode}): {}", path.display());
 
-        match pipeline.index_incremental(path, Arc::clone(&index), semantic.clone(), None, force, None) {
+        match pipeline.index_incremental(
+            path,
+            Arc::clone(&index),
+            semantic.clone(),
+            None,
+            force,
+            None,
+        ) {
             Ok(stats) => {
                 display_incremental_stats(&stats, progress);
             }

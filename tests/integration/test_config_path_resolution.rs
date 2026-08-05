@@ -3,7 +3,7 @@
 //! This test verifies ONE thing:
 //! - When using --config with a relative index_path, it resolves correctly
 
-use codanna::{IndexPersistence, Settings};
+use quarry::{IndexPersistence, Settings};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -15,8 +15,8 @@ fn test_config_relative_path_resolution() {
 
     // Create a fake project structure
     let project_dir = temp_dir.path().join("my_project");
-    let codanna_dir = project_dir.join(".codanna");
-    let index_dir = codanna_dir.join("index");
+    let quarry_dir = project_dir.join(".quarry");
+    let index_dir = quarry_dir.join("index");
     let semantic_dir = index_dir.join("semantic");
     let tantivy_dir = index_dir.join("tantivy");
 
@@ -24,10 +24,10 @@ fn test_config_relative_path_resolution() {
     std::fs::create_dir_all(&tantivy_dir).unwrap();
 
     // Create a settings.toml with relative index_path
-    let settings_path = codanna_dir.join("settings.toml");
+    let settings_path = quarry_dir.join("settings.toml");
     let settings_content = r#"
 version = 1
-index_path = ".codanna/index"
+index_path = ".quarry/index"
 
 [semantic_search]
 enabled = true
@@ -49,7 +49,7 @@ enabled = true
     let settings = Settings::load_from(&settings_path).expect("Should load settings");
 
     // The problem: index_path is relative but workspace_root is None
-    assert_eq!(settings.index_path, PathBuf::from(".codanna/index"));
+    assert_eq!(settings.index_path, PathBuf::from(".quarry/index"));
     assert!(settings.workspace_root.is_none());
 
     // This is what currently happens - persistence looks in wrong place
@@ -60,10 +60,10 @@ enabled = true
     );
 
     // Now test that our resolve_index_path function fixes this
-    let resolved_path = codanna::init::resolve_index_path(&settings, Some(&settings_path));
+    let resolved_path = quarry::init::resolve_index_path(&settings, Some(&settings_path));
 
     // The resolved path should point to the project directory, not temp directory
-    assert_eq!(resolved_path, project_dir.join(".codanna/index"));
+    assert_eq!(resolved_path, project_dir.join(".quarry/index"));
 
     // And persistence with the resolved path should find the index
     let correct_persistence = IndexPersistence::new(resolved_path);

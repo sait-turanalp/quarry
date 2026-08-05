@@ -21,7 +21,7 @@ n_max = int(sys.argv[5]) if len(sys.argv) > 5 else 10**9
 out_path = sys.argv[6] if len(sys.argv) > 6 else None
 
 rows = [json.loads(line) for line in open(evalset)][:n_max]
-ENV = {"CI_INDEXING__INCLUDE_TESTS": "true"}
+ENV = {"QUARRY_INDEXING__INCLUDE_TESTS": "true"}
 
 results = {}
 for name, fn in POLICIES.items():

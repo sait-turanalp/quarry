@@ -28,20 +28,20 @@ use source_resolver::resolve_profile_source;
 use std::path::{Path, PathBuf};
 
 /// Get the default profiles directory
-/// Returns ~/.codanna/profiles/
+/// Returns ~/.quarry/profiles/
 pub fn profiles_dir() -> PathBuf {
     crate::init::global_dir().join("profiles")
 }
 
 /// Get the provider registry path
-/// Returns ~/.codanna/providers.json
+/// Returns ~/.quarry/providers.json
 pub fn provider_registry_path() -> PathBuf {
     crate::init::global_dir().join("providers.json")
 }
 
 /// Initialize a profile to the current workspace
 ///
-/// This is the public API for the `codanna profile init` command.
+/// This is the public API for the `quarry profile init` command.
 pub fn init_profile(profile_name: &str, source: Option<&Path>, force: bool) -> ProfileResult<()> {
     let workspace = std::env::current_dir()?;
     let profiles_dir = source.map(|p| p.to_path_buf()).unwrap_or_else(profiles_dir);
@@ -67,7 +67,7 @@ pub fn init_profile(profile_name: &str, source: Option<&Path>, force: bool) -> P
     println!("\nProfile '{profile_name}' installed successfully");
     if force {
         println!("  Note: Conflicting files handled with --force");
-        println!("  Use 'codanna profile verify {profile_name}' to check integrity");
+        println!("  Use 'quarry profile verify {profile_name}' to check integrity");
     }
 
     Ok(())
@@ -75,7 +75,7 @@ pub fn init_profile(profile_name: &str, source: Option<&Path>, force: bool) -> P
 
 /// Add a provider to the global registry
 ///
-/// This is the public API for the `codanna profile provider add` command.
+/// This is the public API for the `quarry profile provider add` command.
 pub fn add_provider(source: &str, provider_id: Option<&str>) -> ProfileResult<()> {
     let registry_path = provider_registry_path();
     let mut registry = ProviderRegistry::load(&registry_path)?;
@@ -116,7 +116,7 @@ pub fn add_provider(source: &str, provider_id: Option<&str>) -> ProfileResult<()
 
 /// Remove a provider from the global registry
 ///
-/// This is the public API for the `codanna profile provider remove` command.
+/// This is the public API for the `quarry profile provider remove` command.
 pub fn remove_provider(provider_id: &str) -> ProfileResult<()> {
     let registry_path = provider_registry_path();
     let mut registry = ProviderRegistry::load(&registry_path)?;
@@ -133,7 +133,7 @@ pub fn remove_provider(provider_id: &str) -> ProfileResult<()> {
 
 /// List registered providers
 ///
-/// This is the public API for the `codanna profile provider list` command.
+/// This is the public API for the `quarry profile provider list` command.
 pub fn list_providers(verbose: bool) -> ProfileResult<()> {
     let registry_path = provider_registry_path();
     let registry = ProviderRegistry::load(&registry_path)?;
@@ -141,7 +141,7 @@ pub fn list_providers(verbose: bool) -> ProfileResult<()> {
     if registry.providers.is_empty() {
         println!("No providers registered");
         println!("\nAdd a provider with:");
-        println!("  codanna profile provider add <source>");
+        println!("  quarry profile provider add <source>");
         return Ok(());
     }
 
@@ -175,7 +175,7 @@ pub fn list_providers(verbose: bool) -> ProfileResult<()> {
 fn derive_provider_id(source: &ProviderSource) -> String {
     match source {
         ProviderSource::Github { repo } => {
-            // Extract last part: "codanna/claude-provider" → "claude-provider"
+            // Extract last part: "quarry/claude-provider" → "claude-provider"
             repo.split('/').next_back().unwrap_or(repo).to_string()
         }
         ProviderSource::Url { url } => {
@@ -201,7 +201,7 @@ fn derive_provider_id(source: &ProviderSource) -> String {
 fn load_provider_manifest(source: &ProviderSource) -> ProfileResult<ProviderManifest> {
     match source {
         ProviderSource::Local { path } => {
-            let manifest_path = Path::new(path).join(".codanna-profile/provider.json");
+            let manifest_path = Path::new(path).join(".quarry-profile/provider.json");
             ProviderManifest::from_file(&manifest_path)
         }
         ProviderSource::Github { repo } => {
@@ -216,13 +216,13 @@ fn load_provider_manifest(source: &ProviderSource) -> ProfileResult<ProviderMani
 fn load_manifest_from_git(url: &str) -> ProfileResult<ProviderManifest> {
     let temp_dir = tempfile::tempdir()?;
     git::clone_repository(url, temp_dir.path(), None)?;
-    let manifest_path = temp_dir.path().join(".codanna-profile/provider.json");
+    let manifest_path = temp_dir.path().join(".quarry-profile/provider.json");
     ProviderManifest::from_file(&manifest_path)
 }
 
 /// Verify integrity of a specific profile
 ///
-/// This is the public API for the `codanna profile verify` command.
+/// This is the public API for the `quarry profile verify` command.
 pub fn verify_profile(profile_name: &str, verbose: bool) -> ProfileResult<()> {
     let workspace = std::env::current_dir()?;
     verification::verify_profile(&workspace, profile_name, verbose)
@@ -230,7 +230,7 @@ pub fn verify_profile(profile_name: &str, verbose: bool) -> ProfileResult<()> {
 
 /// Verify all installed profiles
 ///
-/// This is the public API for the `codanna profile verify --all` command.
+/// This is the public API for the `quarry profile verify --all` command.
 pub fn verify_all_profiles(verbose: bool) -> ProfileResult<()> {
     let workspace = std::env::current_dir()?;
     verification::verify_all_profiles(&workspace, verbose)
@@ -238,7 +238,7 @@ pub fn verify_all_profiles(verbose: bool) -> ProfileResult<()> {
 
 /// List available profiles from all providers
 ///
-/// This is the public API for the `codanna profile list` command.
+/// This is the public API for the `quarry profile list` command.
 pub fn list_profiles(verbose: bool, json: bool) -> ProfileResult<()> {
     use provider_registry::ProviderRegistry;
 
@@ -248,7 +248,7 @@ pub fn list_profiles(verbose: bool, json: bool) -> ProfileResult<()> {
     if registry.providers.is_empty() {
         println!("No providers registered");
         println!("\nAdd a provider with:");
-        println!("  codanna profile provider add <source>");
+        println!("  quarry profile provider add <source>");
         return Ok(());
     }
 
@@ -286,14 +286,14 @@ pub fn list_profiles(verbose: bool, json: bool) -> ProfileResult<()> {
 
 /// Show status of installed profiles
 ///
-/// This is the public API for the `codanna profile status` command.
+/// This is the public API for the `quarry profile status` command.
 pub fn show_status(verbose: bool) -> ProfileResult<()> {
     use lockfile::ProfileLockfile;
     use project::ProfilesConfig;
 
     let workspace = std::env::current_dir()?;
-    let profiles_config_path = workspace.join(".codanna/profiles.json");
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let profiles_config_path = workspace.join(".quarry/profiles.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
 
     // Check for team configuration
     if profiles_config_path.exists() {
@@ -328,7 +328,7 @@ pub fn show_status(verbose: bool) -> ProfileResult<()> {
 
             // Show team config detection if there are missing providers or profiles
             if !missing_providers.is_empty() || !missing_profiles.is_empty() {
-                println!("Team profile configuration detected at .codanna/profiles.json");
+                println!("Team profile configuration detected at .quarry/profiles.json");
                 if !missing_providers.is_empty() {
                     println!("  Missing providers: {}", missing_providers.join(", "));
                 }
@@ -336,7 +336,7 @@ pub fn show_status(verbose: bool) -> ProfileResult<()> {
                     println!("  Missing profiles: {}", missing_profiles.join(", "));
                 }
                 println!();
-                println!("Run 'codanna profile sync' to register providers and install profiles");
+                println!("Run 'quarry profile sync' to register providers and install profiles");
                 println!();
             }
         }
@@ -380,16 +380,16 @@ pub fn show_status(verbose: bool) -> ProfileResult<()> {
 
 /// Sync team configuration
 ///
-/// This is the public API for the `codanna profile sync` command.
+/// This is the public API for the `quarry profile sync` command.
 pub fn sync_team_config(force: bool) -> ProfileResult<()> {
     use project::ProfilesConfig;
 
     let workspace = std::env::current_dir()?;
-    let profiles_config_path = workspace.join(".codanna/profiles.json");
+    let profiles_config_path = workspace.join(".quarry/profiles.json");
 
     // Check if team config exists
     if !profiles_config_path.exists() {
-        println!("No team configuration found at .codanna/profiles.json");
+        println!("No team configuration found at .quarry/profiles.json");
         println!("Nothing to sync");
         return Ok(());
     }
@@ -441,7 +441,7 @@ pub fn sync_team_config(force: bool) -> ProfileResult<()> {
     println!();
 
     // 2. Install required profiles
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = lockfile::ProfileLockfile::load(&lockfile_path).unwrap_or_default();
 
     for profile_ref in &profiles_config.profiles {
@@ -475,12 +475,12 @@ pub fn sync_team_config(force: bool) -> ProfileResult<()> {
 
 /// Remove an installed profile
 ///
-/// This is the public API for the `codanna profile remove` command.
+/// This is the public API for the `quarry profile remove` command.
 pub fn remove_profile(profile_name: &str, verbose: bool) -> ProfileResult<()> {
     use lockfile::ProfileLockfile;
 
     let workspace = std::env::current_dir()?;
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
 
     // Load lockfile
     let mut lockfile = ProfileLockfile::load(&lockfile_path)?;
@@ -578,7 +578,7 @@ pub fn install_profile_from_registry(profile_ref: &str, force: bool) -> ProfileR
 
     if registry.providers.is_empty() {
         return Err(error::ProfileError::InvalidManifest {
-            reason: "No providers registered. Add a provider first:\n  codanna profile provider add <source>".to_string(),
+            reason: "No providers registered. Add a provider first:\n  quarry profile provider add <source>".to_string(),
         });
     }
 
@@ -589,7 +589,7 @@ pub fn install_profile_from_registry(profile_ref: &str, force: bool) -> ProfileR
             let p = registry.get_provider(id).ok_or_else(|| {
                 error::ProfileError::InvalidManifest {
                     reason: format!(
-                        "Provider '{id}' not found\nUse 'codanna profile provider list' to see registered providers"
+                        "Provider '{id}' not found\nUse 'quarry profile provider list' to see registered providers"
                     ),
                 }
             })?;
@@ -601,7 +601,7 @@ pub fn install_profile_from_registry(profile_ref: &str, force: bool) -> ProfileR
                 .find_provider_with_id(&reference.profile)
                 .ok_or_else(|| error::ProfileError::InvalidManifest {
                     reason: format!(
-                        "Profile '{}' not found in any registered provider\nUse 'codanna profile provider list --verbose' to see available profiles",
+                        "Profile '{}' not found in any registered provider\nUse 'quarry profile provider list --verbose' to see available profiles",
                         reference.profile
                     ),
                 })?
@@ -669,7 +669,7 @@ pub fn install_profile_from_registry(profile_ref: &str, force: bool) -> ProfileR
     if force {
         println!("  Note: Conflicting files handled with --force");
         println!(
-            "  Use 'codanna profile verify {}' to check integrity",
+            "  Use 'quarry profile verify {}' to check integrity",
             reference.profile
         );
     }
@@ -679,10 +679,10 @@ pub fn install_profile_from_registry(profile_ref: &str, force: bool) -> ProfileR
 
 /// Update an installed profile from its provider
 ///
-/// This is the public API for the `codanna profile update` command.
+/// This is the public API for the `quarry profile update` command.
 pub fn update_profile(profile_name: &str, force: bool) -> ProfileResult<()> {
     let workspace = std::env::current_dir()?;
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = lockfile::ProfileLockfile::load(&lockfile_path)?;
 
     // Get existing profile entry

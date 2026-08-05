@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use codanna::config::{SemanticSearchConfig, Settings};
-use codanna::indexing::facade::IndexFacade;
-use codanna::mcp::{
+use quarry::config::{SemanticSearchConfig, Settings};
+use quarry::indexing::facade::IndexFacade;
+use quarry::mcp::{
     CodeIntelligenceServer, FindSymbolRequest, SemanticSearchRequest,
     SemanticSearchWithContextRequest,
 };
@@ -132,7 +132,7 @@ async fn test_kotlin_semantic_search_and_dependency_injection() {
         std::fs::write(&full_path, contents).expect("write fixture");
     }
 
-    let index_path = workspace_root.join(".codanna-index");
+    let index_path = workspace_root.join(".quarry-index");
     std::fs::create_dir_all(&index_path).expect("create index directory");
 
     let settings = Settings {
@@ -300,7 +300,7 @@ class UserService(
     let file_path = workspace_root.join("DependencyInjection.kt");
     std::fs::write(&file_path, di_fixture).expect("write fixture");
 
-    let index_path = workspace_root.join(".codanna-index");
+    let index_path = workspace_root.join(".quarry-index");
     std::fs::create_dir_all(&index_path).expect("create index directory");
 
     let settings = Settings {

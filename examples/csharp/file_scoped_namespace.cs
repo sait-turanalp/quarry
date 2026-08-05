@@ -5,7 +5,7 @@
 
 using System;
 
-namespace Codanna.Examples.FileScopedNamespace;
+namespace Quarry.Examples.FileScopedNamespace;
 
 /// <summary>
 /// Example class using file-scoped namespace syntax (C# 10+).

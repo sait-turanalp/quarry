@@ -651,7 +651,7 @@ const typed: Map<string, Session> = new Map();
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(&language).unwrap();
 
-        println!("\n=== PHP DEFINES EXPLORATION - DEBUGGING CODANNA ISSUE ===");
+        println!("\n=== PHP DEFINES EXPLORATION - DEBUGGING QUARRY ISSUE ===");
 
         let code = r#"<?php
 

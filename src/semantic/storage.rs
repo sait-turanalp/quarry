@@ -4,7 +4,7 @@
 //! the existing MmapVectorStorage infrastructure, achieving <1μs access times.
 
 use crate::vector::{MmapVectorStorage, SegmentOrdinal, VectorDimension, VectorId};
-use crate::{semantic::SemanticSearchError, SymbolId};
+use crate::{SymbolId, semantic::SemanticSearchError};
 use std::path::Path;
 
 /// Wrapper around MmapVectorStorage specifically for semantic embeddings.
@@ -245,9 +245,11 @@ mod tests {
         assert_eq!(loaded, embedding);
 
         // Non-existent ID returns None
-        assert!(storage
-            .load_embedding(SymbolId::new(999).unwrap())
-            .is_none());
+        assert!(
+            storage
+                .load_embedding(SymbolId::new(999).unwrap())
+                .is_none()
+        );
     }
 
     #[test]

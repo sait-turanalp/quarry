@@ -1,6 +1,6 @@
 //! Lua language parser implementation
 //!
-//! This module provides Lua language support for Codanna's code intelligence system,
+//! This module provides Lua language support for Quarry's code intelligence system,
 //! enabling symbol extraction, relationship tracking, and semantic analysis of Lua codebases.
 //!
 //! ## Overview
@@ -33,8 +33,8 @@
 //! ## Example Usage
 //!
 //! ```rust,no_run
-//! use codanna::parsing::lua::{LuaParser, LuaBehavior};
-//! use codanna::parsing::{LanguageParser, LanguageBehavior};
+//! use quarry::parsing::lua::{LuaParser, LuaBehavior};
+//! use quarry::parsing::{LanguageParser, LanguageBehavior};
 //!
 //! let parser = LuaParser::new();
 //! let behavior = LuaBehavior::new();

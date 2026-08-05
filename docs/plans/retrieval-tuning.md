@@ -340,7 +340,7 @@ sonra (testleri indeksle + gold kapsamasını index'e sor):
 | vite | 0.573 | **0.720** |
 | hugo | 0.525 | **0.678** |
 
-Yayılım 0.20 → 0.08. Sebep: codanna test dosyalarını indekslemiyor, Go/TS testleri kaynağın
+Yayılım 0.20 → 0.08. Sebep: quarry test dosyalarını indekslemiyor, Go/TS testleri kaynağın
 yanında duruyor (`pathparser_test.go`, `__tests__/*.spec.ts`), Python/Rust ayrı `tests/`
 dizininde → gold'un %40'a varan kısmı tanım gereği bulunamaz durumdaydı.
 
@@ -477,6 +477,6 @@ Dosya seviyesinde isabet. Test dosyaları gold'dan düşülür (indexlenmiyor).
   oturumuyla **tek process'te** koşulmalı (`sweep.py`) — sorgu 4-5 ms'ye düşüyor.
 - Her süpürmede `baseline_dup` koş: gürültü tabanı bilinmeden fark yorumlanamaz.
 - Eval setini tune ederken holdout'a bakma. 20+ config denemesi 60 sorguya overfit eder.
-- `~/.codanna/models/potion-retrieval-32M-int8/` diskte tutulmalı; yoksa index çalışmaz.
+- `~/.quarry/models/potion-retrieval-32M-int8/` diskte tutulmalı; yoksa index çalışmaz.
   Global simetrik int8 kuantizasyon şart — satır-bazlı ölçek L2 normalizasyonda sadeleşmez.
 - Django eval kopyası base commit'te detached HEAD'de duruyor; checkout değiştirme.

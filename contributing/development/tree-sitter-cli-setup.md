@@ -22,7 +22,7 @@ cd contributing/tree-sitter
 tree-sitter parse examples/typescript/comprehensive.ts
 
 # 4. Compare with our parser
-.codanna/scripts/compare-nodes.sh typescript
+.quarry/scripts/compare-nodes.sh typescript
 ```
 
 ## Directory Structure

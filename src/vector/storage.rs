@@ -350,10 +350,7 @@ impl MmapVectorStorage {
     ///
     /// Only touches the mmap pages for the requested IDs (~500 vectors
     /// instead of 420K), avoiding the 860 MB heap copy of `read_all_vectors`.
-    pub fn read_vectors_by_offsets(
-        &self,
-        ids_offsets: &[(u32, usize)],
-    ) -> Vec<(u32, Vec<f32>)> {
+    pub fn read_vectors_by_offsets(&self, ids_offsets: &[(u32, usize)]) -> Vec<(u32, Vec<f32>)> {
         let Some(mmap) = self.mmap.as_ref() else {
             return Vec::new();
         };
@@ -369,12 +366,8 @@ impl MmapVectorStorage {
             let mut vector = Vec::with_capacity(dimension);
             for i in 0..dimension {
                 let bo = data_offset + i * BYTES_PER_F32;
-                let value = f32::from_le_bytes([
-                    mmap[bo],
-                    mmap[bo + 1],
-                    mmap[bo + 2],
-                    mmap[bo + 3],
-                ]);
+                let value =
+                    f32::from_le_bytes([mmap[bo], mmap[bo + 1], mmap[bo + 2], mmap[bo + 3]]);
                 vector.push(value);
             }
             out.push((id, vector));

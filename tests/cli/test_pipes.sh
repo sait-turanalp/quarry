@@ -1,13 +1,13 @@
 #!/bin/bash
 # test_pipes.sh - Verify all commands work in pipes for slash commands
 
-echo "=== Testing Codanna Pipes for Slash Commands ==="
+echo "=== Testing Quarry Pipes for Slash Commands ==="
 echo
 
 # Make sure we have the binary
-CODANNA="./target/release/codanna"
-if [ ! -f "$CODANNA" ]; then
-    echo "Error: Codanna binary not found at $CODANNA"
+QUARRY="./target/release/quarry"
+if [ ! -f "$QUARRY" ]; then
+    echo "Error: Quarry binary not found at $QUARRY"
     echo "Please run: cargo build --release"
     exit 1
 fi
@@ -34,7 +34,7 @@ test_json_output() {
     local desc="$2"
     
     echo -n "  $desc... "
-    if $CODANNA $cmd --json 2>/dev/null | jq '.' > /dev/null 2>&1; then
+    if $QUARRY $cmd --json 2>/dev/null | jq '.' > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC}"
         return 0
     else
@@ -56,7 +56,7 @@ echo
 
 # Test piping between commands
 echo -n "  Simple pipe (symbol -> name extraction)... "
-RESULT=$($CODANNA retrieve symbol main --json 2>/dev/null | jq -r '.data.items[0].symbol.name' 2>/dev/null)
+RESULT=$($QUARRY retrieve symbol main --json 2>/dev/null | jq -r '.data.items[0].symbol.name' 2>/dev/null)
 if [ -n "$RESULT" ]; then
     echo -e "${GREEN}✓${NC} Found: $RESULT"
 else
@@ -64,9 +64,9 @@ else
 fi
 
 echo -n "  Chain pipe (symbol -> callers)... "
-CHAIN_RESULT=$($CODANNA retrieve symbol main --json 2>/dev/null | \
+CHAIN_RESULT=$($QUARRY retrieve symbol main --json 2>/dev/null | \
     jq -r '.data.items[0].symbol.name' 2>/dev/null | \
-    xargs -I {} $CODANNA retrieve callers {} --json 2>/dev/null | \
+    xargs -I {} $QUARRY retrieve callers {} --json 2>/dev/null | \
     jq '.data.count' 2>/dev/null)
 
 if [ -n "$CHAIN_RESULT" ]; then
@@ -76,10 +76,10 @@ else
 fi
 
 echo -n "  Multi-level trace (calls -> calls)... "
-TRACE_RESULT=$($CODANNA retrieve calls main --json 2>/dev/null | \
+TRACE_RESULT=$($QUARRY retrieve calls main --json 2>/dev/null | \
     jq -r '.data.items[:2].symbol.name // empty' 2>/dev/null | \
     head -2 | \
-    xargs -I {} sh -c "echo '{}:' && $CODANNA retrieve calls {} --json 2>/dev/null | jq '.data.count // 0'" 2>/dev/null)
+    xargs -I {} sh -c "echo '{}:' && $QUARRY retrieve calls {} --json 2>/dev/null | jq '.data.count // 0'" 2>/dev/null)
 
 if [ -n "$TRACE_RESULT" ]; then
     echo -e "${GREEN}✓${NC}"
@@ -94,7 +94,7 @@ echo "Testing error handling..."
 echo
 
 echo -n "  Non-existent symbol... "
-ERROR_RESULT=$($CODANNA retrieve symbol nonexistent_symbol_xyz --json 2>/dev/null | jq -r '.status' 2>/dev/null)
+ERROR_RESULT=$($QUARRY retrieve symbol nonexistent_symbol_xyz --json 2>/dev/null | jq -r '.status' 2>/dev/null)
 if [ "$ERROR_RESULT" = "not_found" ]; then
     echo -e "${GREEN}✓${NC} Correctly returns not_found status"
 else
@@ -102,9 +102,9 @@ else
 fi
 
 echo -n "  Exit codes (0=success, 3=not_found)... "
-$CODANNA retrieve symbol main --json > /dev/null 2>&1
+$QUARRY retrieve symbol main --json > /dev/null 2>&1
 SUCCESS_CODE=$?
-$CODANNA retrieve symbol nonexistent_xyz --json > /dev/null 2>&1
+$QUARRY retrieve symbol nonexistent_xyz --json > /dev/null 2>&1
 NOTFOUND_CODE=$?
 
 if [ $SUCCESS_CODE -eq 0 ] && [ $NOTFOUND_CODE -eq 3 ]; then
@@ -119,7 +119,7 @@ echo
 
 echo -n "  Single command response time... "
 START=$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time*1000')
-$CODANNA retrieve symbol main --json > /dev/null 2>&1
+$QUARRY retrieve symbol main --json > /dev/null 2>&1
 END=$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time*1000')
 DURATION=$((END - START))
 
@@ -131,9 +131,9 @@ fi
 
 echo -n "  Pipe chain response time... "
 START=$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time*1000')
-$CODANNA retrieve symbol main --json 2>/dev/null | \
+$QUARRY retrieve symbol main --json 2>/dev/null | \
     jq -r '.data.items[0].symbol.name' | \
-    xargs -I {} $CODANNA retrieve callers {} --json 2>/dev/null | \
+    xargs -I {} $QUARRY retrieve callers {} --json 2>/dev/null | \
     jq '.data.count' > /dev/null 2>&1
 END=$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time*1000')
 PIPE_DURATION=$((END - START))

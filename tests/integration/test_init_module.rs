@@ -3,7 +3,7 @@
 //! This test verifies ONE thing:
 //! - init_global_dirs() creates the models directory
 
-use codanna::init;
+use quarry::init;
 use std::env;
 use tempfile::TempDir;
 

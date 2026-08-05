@@ -7,12 +7,12 @@ Usage:
   run_force_index_ab.sh [options]
 
 Options:
-  --bin <PATH>       codanna binary (required)
+  --bin <PATH>       quarry binary (required)
   --repo <PATH>      repo path to index (required)
   --config <PATH>    settings.toml path (required)
   --profiles <PATH>  profile matrix TOML
                      (default: benchmarks/index/profiles.force_ab.toml)
-  --out <DIR>        output directory (default: /tmp/codanna-index-force-ab)
+  --out <DIR>        output directory (default: /tmp/quarry-index-force-ab)
   --max-files <N>    optional max files per run
   --dry-run          print resolved commands and exit
   -h, --help         show help
@@ -23,7 +23,7 @@ BIN=""
 REPO=""
 CONFIG=""
 PROFILES="benchmarks/index/profiles.force_ab.toml"
-OUT="/tmp/codanna-index-force-ab"
+OUT="/tmp/quarry-index-force-ab"
 DRY_RUN=false
 MAX_FILES=""
 

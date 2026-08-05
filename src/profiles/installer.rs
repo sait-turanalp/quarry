@@ -15,9 +15,9 @@ pub type InstallResult = (Vec<String>, Vec<(String, String)>);
 ///
 /// Pattern: {stem}.{provider}.{ext}
 /// Examples:
-/// - CLAUDE.md + "codanna" → CLAUDE.codanna.md
-/// - .gitignore + "codanna" → .gitignore.codanna
-/// - docker-compose.yml + "codanna" → docker-compose.codanna.yml
+/// - CLAUDE.md + "quarry" → CLAUDE.quarry.md
+/// - .gitignore + "quarry" → .gitignore.quarry
+/// - docker-compose.yml + "quarry" → docker-compose.quarry.yml
 pub fn generate_sidecar_path(original: &Path, provider: &str) -> PathBuf {
     let file_name = original
         .file_name()
@@ -28,7 +28,7 @@ pub fn generate_sidecar_path(original: &Path, provider: &str) -> PathBuf {
 
     let sidecar_name =
         if file_name.starts_with('.') && file_name.chars().filter(|&c| c == '.').count() == 1 {
-            // Dotfile without extension: .gitignore → .gitignore.codanna
+            // Dotfile without extension: .gitignore → .gitignore.quarry
             format!("{file_name}.{provider}")
         } else if let Some(dot_pos) = file_name.find('.') {
             // Has extension: split on first dot
@@ -108,7 +108,7 @@ pub fn check_profile_conflicts(
     files: &[String],
     force: bool,
 ) -> ProfileResult<()> {
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let lockfile = ProfileLockfile::load(&lockfile_path)?;
 
     for file_path in files {

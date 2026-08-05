@@ -13,10 +13,10 @@
 //! 4. Performance on specific Kotlin language constructs
 //! 5. Scalability with systematically generated test data
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::kotlin::KotlinParser;
-use codanna::types::{FileId, SymbolCounter};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::kotlin::KotlinParser;
+use quarry::types::{FileId, SymbolCounter};
 use std::hint::black_box;
 
 // Performance targets and constants

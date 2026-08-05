@@ -276,7 +276,7 @@ mod tests {
         // TDD: Given a pom.xml and settings
         let temp_dir = TempDir::new().unwrap();
         let pom_path = temp_dir.path().join("pom.xml");
-        let codanna_dir = temp_dir.path().join(crate::init::local_dir_name());
+        let quarry_dir = temp_dir.path().join(crate::init::local_dir_name());
 
         let pom_content = r#"<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -303,9 +303,9 @@ config_files = ["{}"]
         // When rebuilding cache
         let provider = JavaProvider::new();
 
-        // Use temp .codanna directory for this test
+        // Use temp .quarry directory for this test
         std::env::set_current_dir(&temp_dir).unwrap();
-        fs::create_dir_all(&codanna_dir).unwrap();
+        fs::create_dir_all(&quarry_dir).unwrap();
 
         provider.rebuild_cache(&settings).unwrap();
 
@@ -313,7 +313,7 @@ config_files = ["{}"]
         std::env::set_current_dir(&original_dir).unwrap();
 
         // Then java_resolution.json should exist
-        let cache_path = codanna_dir.join("index/resolvers/java_resolution.json");
+        let cache_path = quarry_dir.join("index/resolvers/java_resolution.json");
         assert!(
             cache_path.exists(),
             "Cache file should be created at {}",
@@ -412,7 +412,7 @@ config_files = ["{}"]
         let provider = JavaProvider::new();
 
         let owner_file = std::path::Path::new(
-            "/Users/bartolli/Projects/codanna/test_monorepos/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+            "/Users/bartolli/Projects/quarry/test_monorepos/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
         );
 
         let package = provider.module_path_for_file(owner_file);

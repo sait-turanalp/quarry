@@ -7,7 +7,7 @@
 //! # Architecture
 //!
 //! The LanguageBehavior trait is part of a larger refactoring to achieve true
-//! language modularity in the codanna indexing system. It works in conjunction
+//! language modularity in the quarry indexing system. It works in conjunction
 //! with:
 //!
 //! - `LanguageParser`: Handles AST parsing for each language
@@ -17,9 +17,9 @@
 //! # Example Usage
 //!
 //! ```rust
-//! use codanna::parsing::{ParserFactory, Language};
-//! use codanna::types::{FileId, SymbolCounter};
-//! use codanna::Settings;
+//! use quarry::parsing::{ParserFactory, Language};
+//! use quarry::types::{FileId, SymbolCounter};
+//! use quarry::Settings;
 //! use std::sync::Arc;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use codanna::project_resolver::persist::{
+    use quarry::project_resolver::persist::{
         ResolutionIndex, ResolutionPersistence, ResolutionRules,
     };
     use std::collections::HashMap;
@@ -10,7 +10,7 @@ mod tests {
     #[test]
     fn test_resolution_persistence_save_and_load() {
         // Use a temp directory for testing
-        let temp_dir = std::env::temp_dir().join("codanna_test_persist");
+        let temp_dir = std::env::temp_dir().join("quarry_test_persist");
         fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
         let persistence = ResolutionPersistence::new(&temp_dir);
@@ -21,7 +21,7 @@ mod tests {
         // Add some test data
         index.update_sha(
             tsconfig_path,
-            &codanna::project_resolver::Sha256Hash::from_bytes(&[42; 32]),
+            &quarry::project_resolver::Sha256Hash::from_bytes(&[42; 32]),
         );
         index.add_mapping("src/**/*.ts", tsconfig_path);
         index.set_rules(
@@ -50,14 +50,14 @@ mod tests {
         assert!(
             loaded_index.needs_rebuild(
                 tsconfig_path,
-                &codanna::project_resolver::Sha256Hash::from_bytes(&[43; 32])
+                &quarry::project_resolver::Sha256Hash::from_bytes(&[43; 32])
             ),
             "Should need rebuild with different SHA"
         );
         assert!(
             !loaded_index.needs_rebuild(
                 tsconfig_path,
-                &codanna::project_resolver::Sha256Hash::from_bytes(&[42; 32])
+                &quarry::project_resolver::Sha256Hash::from_bytes(&[42; 32])
             ),
             "Should not need rebuild with same SHA"
         );
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_resolution_persistence_file_structure() {
-        let temp_dir = std::env::temp_dir().join("codanna_test_persist_structure");
+        let temp_dir = std::env::temp_dir().join("quarry_test_persist_structure");
         fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
         let persistence = ResolutionPersistence::new(&temp_dir);
@@ -79,7 +79,7 @@ mod tests {
         // Add minimal data
         index.update_sha(
             tsconfig_path,
-            &codanna::project_resolver::Sha256Hash::from_bytes(&[1; 32]),
+            &quarry::project_resolver::Sha256Hash::from_bytes(&[1; 32]),
         );
 
         // Save it

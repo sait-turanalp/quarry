@@ -2,8 +2,8 @@
 //!
 //! Tests find_extends, find_uses, find_defines, find_calls using examples/swift/comprehensive.swift
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::swift::SwiftParser;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::swift::SwiftParser;
 use std::fs;
 use std::path::Path;
 

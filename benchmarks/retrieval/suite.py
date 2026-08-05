@@ -35,7 +35,7 @@ def prepare(workdir, repos):
         # Tests must be indexed: Go and TypeScript keep them beside the source, so
         # excluding them makes a large share of gold unreachable in those repos only.
         # An agent searches test files in real work anyway.
-        os.environ["CI_INDEXING__INCLUDE_TESTS"] = "true"
+        os.environ["QUARRY_INDEXING__INCLUDE_TESTS"] = "true"
         tip = "origin/main"
         if not git(path, "rev-parse", "--verify", "--quiet", tip):
             tip = "origin/master"

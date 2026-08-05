@@ -69,8 +69,8 @@ post_rerank_heuristics_enabled = true
 
 ```bash
 python3 benchmarks/rerank/validate_qrels.py \
-  --queries /tmp/codanna-rerank-realdata/queries.v1.jsonl \
-  --qrels /tmp/codanna-rerank-realdata/qrels.v1.jsonl
+  --queries /tmp/quarry-rerank-realdata/queries.v1.jsonl \
+  --qrels /tmp/quarry-rerank-realdata/qrels.v1.jsonl
 ```
 
 Expected: `status: OK`
@@ -78,11 +78,11 @@ Expected: `status: OK`
 ## 4) Run benchmark
 
 ```bash
-codanna -c /path/to/settings.toml benchmark-rerank \
-  --queries /tmp/codanna-rerank-realdata/queries.v1.jsonl \
-  --qrels /tmp/codanna-rerank-realdata/qrels.v1.jsonl \
+quarry -c /path/to/settings.toml benchmark-rerank \
+  --queries /tmp/quarry-rerank-realdata/queries.v1.jsonl \
+  --qrels /tmp/quarry-rerank-realdata/qrels.v1.jsonl \
   --profiles /tmp/profiles.newmodel.toml \
-  --out /tmp/codanna-rerank-newmodel \
+  --out /tmp/quarry-rerank-newmodel \
   --cold-runs 1 \
   --warm-runs 3 \
   --limit 10 \
@@ -95,10 +95,10 @@ codanna -c /path/to/settings.toml benchmark-rerank \
 
 Main outputs:
 
-- `/tmp/codanna-rerank-newmodel/summary_table.md`
-- `/tmp/codanna-rerank-newmodel/summary.json`
-- `/tmp/codanna-rerank-newmodel/per_query.json`
-- `/tmp/codanna-rerank-newmodel/decision.md`
+- `/tmp/quarry-rerank-newmodel/summary_table.md`
+- `/tmp/quarry-rerank-newmodel/summary.json`
+- `/tmp/quarry-rerank-newmodel/per_query.json`
+- `/tmp/quarry-rerank-newmodel/decision.md`
 
 ## 6) Decision rule (recommended)
 

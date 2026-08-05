@@ -1,6 +1,6 @@
-use codanna::Range;
-use codanna::parsing::{LanguageParser, kotlin::KotlinParser};
-use codanna::types::SymbolCounter;
+use quarry::Range;
+use quarry::parsing::{LanguageParser, kotlin::KotlinParser};
+use quarry::types::SymbolCounter;
 
 #[test]
 fn test_reddit_challenge_parsing() {
@@ -24,7 +24,7 @@ fun testGenericFlow() {
     let mut parser = KotlinParser::new().unwrap();
 
     let mut counter = SymbolCounter::new();
-    let symbols = parser.parse(code, codanna::FileId(1), &mut counter);
+    let symbols = parser.parse(code, quarry::FileId(1), &mut counter);
 
     assert!(
         symbols.iter().any(|s| s.name.as_ref() == "Int.bar"),

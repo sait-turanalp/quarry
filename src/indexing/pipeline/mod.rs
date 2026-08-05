@@ -22,7 +22,7 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use codanna::indexing::pipeline::{Pipeline, PipelineConfig};
+//! use quarry::indexing::pipeline::{Pipeline, PipelineConfig};
 //!
 //! let config = PipelineConfig::default();
 //! let pipeline = Pipeline::new(settings, config);
@@ -39,7 +39,7 @@ pub use metrics::{PipelineMetrics, StageMetrics, StageTracker};
 pub use stages::cleanup::{CleanupStage, CleanupStats};
 pub use stages::context::{ContextStage, ContextStats};
 pub use stages::embed::{EmbedStage, EmbedStats};
-pub use stages::parse::{init_parser_cache, parse_file, ParseStage};
+pub use stages::parse::{ParseStage, init_parser_cache, parse_file};
 pub use stages::resolve::{ResolveStage, ResolveStats};
 pub use stages::semantic_embed::{SemanticEmbedStage, SemanticEmbedStats};
 pub use stages::write::{WriteStage, WriteStats};
@@ -50,15 +50,15 @@ pub use types::{
     UnresolvedRelationship,
 };
 
+use crate::FileId;
+use crate::RelationKind;
+use crate::Settings;
 use crate::indexing::IndexStats;
 use crate::io::status_line::DualProgressBar;
 use crate::parsing::ParserFactory;
 use crate::semantic::{SemanticWorkerClient, SemanticWorkerClientConfig, SimpleSemanticSearch};
 use crate::storage::DocumentIndex;
 use crate::vector::EmbeddingRuntimeConfig;
-use crate::FileId;
-use crate::RelationKind;
-use crate::Settings;
 use crossbeam_channel::{bounded, unbounded};
 use rayon::prelude::*;
 use stages::{CollectStage, DiscoverStage, IndexStage, ReadStage};
@@ -1307,7 +1307,15 @@ impl Pipeline {
         force: bool,
         chunk_config: Option<ChunkRebuildConfig>,
     ) -> PipelineResult<IncrementalStats> {
-        self.index_incremental_with_progress(root, index, semantic, embedding_pool, force, None, chunk_config)
+        self.index_incremental_with_progress(
+            root,
+            index,
+            semantic,
+            embedding_pool,
+            force,
+            None,
+            chunk_config,
+        )
     }
 
     /// Index a directory with progress bars managed internally.
@@ -1330,7 +1338,14 @@ impl Pipeline {
         };
 
         if !show_progress {
-            return self.index_incremental(root, index, semantic, embedding_pool, force, chunk_config);
+            return self.index_incremental(
+                root,
+                index,
+                semantic,
+                embedding_pool,
+                force,
+                chunk_config,
+            );
         }
 
         let start = Instant::now();
@@ -1635,8 +1650,12 @@ impl Pipeline {
                         stats.chunks_indexed, stats.embeddings_indexed
                     );
                 }
-                Ok(Err(e)) => tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}"),
-                Err(_) => tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked"),
+                Ok(Err(e)) => {
+                    tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}")
+                }
+                Err(_) => {
+                    tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked")
+                }
             }
         }
 
@@ -1852,8 +1871,12 @@ impl Pipeline {
                         stats.chunks_indexed, stats.embeddings_indexed
                     );
                 }
-                Ok(Err(e)) => tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}"),
-                Err(_) => tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked"),
+                Ok(Err(e)) => {
+                    tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}")
+                }
+                Err(_) => {
+                    tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked")
+                }
             }
         }
 
@@ -2270,8 +2293,12 @@ impl Pipeline {
                         stats.chunks_indexed, stats.embeddings_indexed
                     );
                 }
-                Ok(Err(e)) => tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}"),
-                Err(_) => tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked"),
+                Ok(Err(e)) => {
+                    tracing::warn!(target: "chunk_search", "Parallel chunk rebuild failed: {e}")
+                }
+                Err(_) => {
+                    tracing::error!(target: "chunk_search", "Parallel chunk rebuild thread panicked")
+                }
             }
         }
 

@@ -1,9 +1,9 @@
-//! Team profile configuration stored at .codanna/profiles.json
+//! Team profile configuration stored at .quarry/profiles.json
 //!
 //! Three-tier configuration system:
-//! 1. Global: ~/.codanna/providers.json (user's registered providers)
-//! 2. Team: .codanna/profiles.json (team contract, committed to git)
-//! 3. Local: .codanna/profiles.lock.json (installation state, not committed)
+//! 1. Global: ~/.quarry/providers.json (user's registered providers)
+//! 2. Team: .quarry/profiles.json (team contract, committed to git)
+//! 3. Local: .quarry/profiles.lock.json (installation state, not committed)
 
 use super::error::{ProfileError, ProfileResult};
 use super::provider_registry::ProviderSource;

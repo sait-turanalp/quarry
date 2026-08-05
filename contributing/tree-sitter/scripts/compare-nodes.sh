@@ -50,82 +50,82 @@ if [ -f "$INPUT" ]; then
         exit 1
     fi
 
-    # Parse with codanna
+    # Parse with quarry
     echo ""
-    echo "Parsing with codanna..."
+    echo "Parsing with quarry..."
 
     # Capture both output and exit code
     # Note: Using default behavior (named nodes only) to match tree-sitter
     # Add --all-nodes flag if you want to see all nodes including punctuation
-    CODANNA_OUTPUT=$(cargo run --quiet -- parse "$FILE_PATH" 2>&1)
-    CODANNA_EXIT=$?
+    QUARRY_OUTPUT=$(cargo run --quiet -- parse "$FILE_PATH" 2>&1)
+    QUARRY_EXIT=$?
 
-    if [ $CODANNA_EXIT -eq 0 ]; then
+    if [ $QUARRY_EXIT -eq 0 ]; then
         # Success - extract nodes
-        echo "$CODANNA_OUTPUT" | jq -r .node | sort -u > /tmp/codanna-nodes.txt
-        echo "✅ Codanna parsed successfully"
+        echo "$QUARRY_OUTPUT" | jq -r .node | sort -u > /tmp/quarry-nodes.txt
+        echo "✅ Quarry parsed successfully"
         echo "" >> "$LOG_FILE"
         echo "=== Comparison Results ===" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
     else
         # Handle specific error codes
-        case $CODANNA_EXIT in
+        case $QUARRY_EXIT in
             3)
-                echo "⚠️ File not found by codanna (exit code 3)"
+                echo "⚠️ File not found by quarry (exit code 3)"
                 ;;
             4)
-                echo "⚠️ Parse error in codanna (exit code 4)"
+                echo "⚠️ Parse error in quarry (exit code 4)"
                 ;;
             8)
-                echo "⚠️ Language not supported by codanna (exit code 8)"
+                echo "⚠️ Language not supported by quarry (exit code 8)"
                 ;;
             *)
-                echo "❌ Codanna failed with exit code $CODANNA_EXIT"
+                echo "❌ Quarry failed with exit code $QUARRY_EXIT"
                 ;;
         esac
 
         # Show the actual error
-        echo "Error details: $CODANNA_OUTPUT" | head -2
+        echo "Error details: $QUARRY_OUTPUT" | head -2
 
         echo "Falling back to tree-sitter-only mode."
         echo "" >> "$LOG_FILE"
-        echo "NOTE: Codanna parse failed (exit code $CODANNA_EXIT). Showing tree-sitter AST only." >> "$LOG_FILE"
-        echo "Error: $CODANNA_OUTPUT" >> "$LOG_FILE"
+        echo "NOTE: Quarry parse failed (exit code $QUARRY_EXIT). Showing tree-sitter AST only." >> "$LOG_FILE"
+        echo "Error: $QUARRY_OUTPUT" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
     fi
 
-    # Check if codanna parse succeeded
-    if [ -f /tmp/codanna-nodes.txt ] && [ -s /tmp/codanna-nodes.txt ]; then
+    # Check if quarry parse succeeded
+    if [ -f /tmp/quarry-nodes.txt ] && [ -s /tmp/quarry-nodes.txt ]; then
         # We have both - do comparison
-        echo "=== Nodes in tree-sitter but not in codanna ===" >> "$LOG_FILE"
-        comm -23 /tmp/cli-nodes.txt /tmp/codanna-nodes.txt >> "$LOG_FILE"
+        echo "=== Nodes in tree-sitter but not in quarry ===" >> "$LOG_FILE"
+        comm -23 /tmp/cli-nodes.txt /tmp/quarry-nodes.txt >> "$LOG_FILE"
 
         echo "" >> "$LOG_FILE"
-        echo "=== Nodes in codanna but not in tree-sitter ===" >> "$LOG_FILE"
-        comm -13 /tmp/cli-nodes.txt /tmp/codanna-nodes.txt >> "$LOG_FILE"
+        echo "=== Nodes in quarry but not in tree-sitter ===" >> "$LOG_FILE"
+        comm -13 /tmp/cli-nodes.txt /tmp/quarry-nodes.txt >> "$LOG_FILE"
 
         echo "" >> "$LOG_FILE"
         echo "=== Tree-sitter nodes ===" >> "$LOG_FILE"
         cat /tmp/cli-nodes.txt >> "$LOG_FILE"
 
         echo "" >> "$LOG_FILE"
-        echo "=== Codanna nodes ===" >> "$LOG_FILE"
-        cat /tmp/codanna-nodes.txt >> "$LOG_FILE"
+        echo "=== Quarry nodes ===" >> "$LOG_FILE"
+        cat /tmp/quarry-nodes.txt >> "$LOG_FILE"
 
         # Summary with comparison
         TS_COUNT=$(wc -l < /tmp/cli-nodes.txt | tr -d ' ')
-        CODANNA_COUNT=$(wc -l < /tmp/codanna-nodes.txt | tr -d ' ')
-        COMMON_COUNT=$(comm -12 /tmp/cli-nodes.txt /tmp/codanna-nodes.txt | wc -l | tr -d ' ')
+        QUARRY_COUNT=$(wc -l < /tmp/quarry-nodes.txt | tr -d ' ')
+        COMMON_COUNT=$(comm -12 /tmp/cli-nodes.txt /tmp/quarry-nodes.txt | wc -l | tr -d ' ')
 
         echo "" >> "$LOG_FILE"
         echo "=== Summary ===" >> "$LOG_FILE"
         echo "Tree-sitter nodes: $TS_COUNT" >> "$LOG_FILE"
-        echo "Codanna nodes: $CODANNA_COUNT" >> "$LOG_FILE"
+        echo "Quarry nodes: $QUARRY_COUNT" >> "$LOG_FILE"
         echo "Common nodes: $COMMON_COUNT" >> "$LOG_FILE"
 
         echo "✅ Comparison saved to: $LOG_FILE"
         echo ""
-        echo "Tree-sitter: $TS_COUNT nodes, Codanna: $CODANNA_COUNT nodes, Common: $COMMON_COUNT"
+        echo "Tree-sitter: $TS_COUNT nodes, Quarry: $QUARRY_COUNT nodes, Common: $COMMON_COUNT"
         echo "Full comparison saved to: $LOG_FILE"
     else
         # Tree-sitter only mode
@@ -200,12 +200,12 @@ else
 
     # Get nodes from our parser (this triggers audit report generation)
     cargo test comprehensive_${LANG}_analysis 2>&1 | \
-        grep "✓" | awk '{print $2}' | sort -u > /tmp/codanna-nodes.txt
+        grep "✓" | awk '{print $2}' | sort -u > /tmp/quarry-nodes.txt
 
-    echo "=== Nodes in CLI but not in Codanna ==="
-    comm -23 /tmp/cli-nodes.txt /tmp/codanna-nodes.txt
+    echo "=== Nodes in CLI but not in Quarry ==="
+    comm -23 /tmp/cli-nodes.txt /tmp/quarry-nodes.txt
 
     echo ""
-    echo "=== Nodes in Codanna but not in CLI ==="
-    comm -13 /tmp/cli-nodes.txt /tmp/codanna-nodes.txt
+    echo "=== Nodes in Quarry but not in CLI ==="
+    comm -13 /tmp/cli-nodes.txt /tmp/quarry-nodes.txt
 fi

@@ -1,6 +1,6 @@
 //! Tests for project manifest parsing
 
-use codanna::profiles::project::ProjectManifest;
+use quarry::profiles::project::ProjectManifest;
 use tempfile::tempdir;
 
 #[test]

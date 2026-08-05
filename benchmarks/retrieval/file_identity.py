@@ -28,7 +28,7 @@ n_max = int(sys.argv[5]) if len(sys.argv) > 5 else 250
 POOL = int(os.environ.get("FI_POOL", "50"))
 
 rows = [json.loads(line) for line in open(evalset)][:n_max]
-ENV = {"CI_INDEXING__INCLUDE_TESTS": "true"}
+ENV = {"QUARRY_INDEXING__INCLUDE_TESTS": "true"}
 
 # Definition sites across the four languages in the suite. Deliberately shallow: this is a
 # probe of whether the signal exists, not a parser - the product would read the real symbols

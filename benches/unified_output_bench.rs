@@ -2,10 +2,10 @@
 //!
 //! Verifies zero-cost abstractions and measures allocation overhead
 
-use codanna::io::{EntityType, UnifiedOutputBuilder};
-use codanna::symbol::Symbol;
-use codanna::types::{FileId, Range, SymbolId, SymbolKind};
 use criterion::{Criterion, criterion_group, criterion_main};
+use quarry::io::{EntityType, UnifiedOutputBuilder};
+use quarry::symbol::Symbol;
+use quarry::types::{FileId, Range, SymbolId, SymbolKind};
 use std::hint::black_box;
 
 fn create_test_symbols(count: usize) -> Vec<Symbol> {

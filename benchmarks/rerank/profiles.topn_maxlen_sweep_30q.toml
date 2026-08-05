@@ -1,5 +1,5 @@
 # Top-N / max_length sweep for Jina v1 on 30-query set.
-# baseline_current_default is auto-added by codanna benchmark-rerank.
+# baseline_current_default is auto-added by quarry benchmark-rerank.
 
 [defaults]
 model = "JINARerankerV1TurboEn"

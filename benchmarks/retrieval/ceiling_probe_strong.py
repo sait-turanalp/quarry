@@ -33,13 +33,13 @@ QUERY_PREFIX = os.environ.get("PROBE_PREFIX", "")
 
 rows = [json.loads(line) for line in open(evalset)][:n_max]
 ENV = {
-    "CI_INDEXING__INCLUDE_TESTS": "true",
-    "CI_CHUNK_SEARCH__TOP_K_VECTOR": "200",
-    "CI_CHUNK_SEARCH__TOP_K_BM25": "200",
-    "CI_CHUNK_SEARCH__TOP_K_FUSED": "200",
+    "QUARRY_INDEXING__INCLUDE_TESTS": "true",
+    "QUARRY_CHUNK_SEARCH__TOP_K_VECTOR": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_BM25": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_FUSED": "200",
     # One chunk per file: the probe compares orderings of *files*, so letting one file
     # occupy the whole candidate list would cap the pool before the model ever sees it.
-    "CI_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": "1",
+    "QUARRY_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": "1",
 }
 
 print(f"loading {MODEL_NAME} ...", file=sys.stderr)

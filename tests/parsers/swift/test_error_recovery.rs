@@ -3,12 +3,12 @@
 //! Tests for recovering class declarations from ERROR nodes caused by
 //! tree-sitter-swift grammar limitations (e.g., @unchecked Sendable).
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::swift::SwiftParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, SymbolKind, Visibility};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::swift::SwiftParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, SymbolKind, Visibility};
 
-fn parse_swift(code: &str) -> Vec<codanna::Symbol> {
+fn parse_swift(code: &str) -> Vec<quarry::Symbol> {
     let mut parser = SwiftParser::new().expect("Failed to create Swift parser");
     let mut counter = SymbolCounter::new();
     parser.parse(code, FileId(1), &mut counter)

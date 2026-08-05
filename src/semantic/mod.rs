@@ -14,9 +14,9 @@ mod worker;
 pub use metadata::SemanticMetadata;
 pub use pool::EmbeddingPool;
 pub use simple::{SemanticSearchError, SimpleSemanticSearch};
+pub use static_model::OptimizedStaticModel;
 pub use storage::SemanticVectorStorage;
 pub use vector_backend::SymbolVectorBackend;
-pub use static_model::OptimizedStaticModel;
 pub use worker::{SemanticWorkerClient, SemanticWorkerClientConfig, run_worker_stdio};
 
 // Re-export key types

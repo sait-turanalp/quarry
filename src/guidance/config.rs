@@ -76,7 +76,7 @@ fn default_confidence() -> f32 {
 
 fn default_global_vars() -> HashMap<String, String> {
     let mut vars = HashMap::new();
-    vars.insert("project_name".to_string(), "codanna".to_string());
+    vars.insert("project_name".to_string(), "quarry".to_string());
     vars
 }
 

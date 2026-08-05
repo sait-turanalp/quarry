@@ -21,9 +21,9 @@ pub fn run(query: RetrieveQuery, indexer: &IndexFacade) -> ExitCode {
                 .or_else(|| params.get("symbol_id").map(|id| format!("symbol_id:{id}")))
                 .unwrap_or_else(|| {
                     eprintln!("Error: symbol requires a name or symbol_id");
-                    eprintln!("Usage: codanna retrieve symbol main");
-                    eprintln!("   or: codanna retrieve symbol name:main");
-                    eprintln!("   or: codanna retrieve symbol symbol_id:1771");
+                    eprintln!("Usage: quarry retrieve symbol main");
+                    eprintln!("   or: quarry retrieve symbol name:main");
+                    eprintln!("   or: quarry retrieve symbol symbol_id:1771");
                     std::process::exit(1);
                 });
 
@@ -45,9 +45,9 @@ pub fn run(query: RetrieveQuery, indexer: &IndexFacade) -> ExitCode {
                 .or_else(|| params.get("symbol_id").map(|id| format!("symbol_id:{id}")))
                 .unwrap_or_else(|| {
                     eprintln!("Error: callers requires a function name or symbol_id");
-                    eprintln!("Usage: codanna retrieve callers main");
-                    eprintln!("   or: codanna retrieve callers function:main");
-                    eprintln!("   or: codanna retrieve callers symbol_id:1771");
+                    eprintln!("Usage: quarry retrieve callers main");
+                    eprintln!("   or: quarry retrieve callers function:main");
+                    eprintln!("   or: quarry retrieve callers symbol_id:1771");
                     std::process::exit(1);
                 });
 
@@ -69,9 +69,9 @@ pub fn run(query: RetrieveQuery, indexer: &IndexFacade) -> ExitCode {
                 .or_else(|| params.get("symbol_id").map(|id| format!("symbol_id:{id}")))
                 .unwrap_or_else(|| {
                     eprintln!("Error: calls requires a function name or symbol_id");
-                    eprintln!("Usage: codanna retrieve calls process_file");
-                    eprintln!("   or: codanna retrieve calls function:process_file");
-                    eprintln!("   or: codanna retrieve calls symbol_id:1771");
+                    eprintln!("Usage: quarry retrieve calls process_file");
+                    eprintln!("   or: quarry retrieve calls function:process_file");
+                    eprintln!("   or: quarry retrieve calls symbol_id:1771");
                     std::process::exit(1);
                 });
 
@@ -92,8 +92,8 @@ pub fn run(query: RetrieveQuery, indexer: &IndexFacade) -> ExitCode {
                 .or_else(|| params.get("trait").cloned())
                 .unwrap_or_else(|| {
                     eprintln!("Error: implementations requires a trait name");
-                    eprintln!("Usage: codanna retrieve implementations Parser");
-                    eprintln!("   or: codanna retrieve implementations trait:Parser");
+                    eprintln!("Usage: quarry retrieve implementations Parser");
+                    eprintln!("   or: quarry retrieve implementations trait:Parser");
                     std::process::exit(1);
                 });
 
@@ -121,8 +121,8 @@ pub fn run(query: RetrieveQuery, indexer: &IndexFacade) -> ExitCode {
                 .or_else(|| params.get("query").cloned())
                 .unwrap_or_else(|| {
                     eprintln!("Error: search requires a query");
-                    eprintln!("Usage: codanna retrieve search \"query\" [options]");
-                    eprintln!("   or: codanna retrieve search query:\"search text\" [options]");
+                    eprintln!("Usage: quarry retrieve search \"query\" [options]");
+                    eprintln!("   or: quarry retrieve search query:\"search text\" [options]");
                     std::process::exit(1);
                 });
 
@@ -165,9 +165,9 @@ pub fn run(query: RetrieveQuery, indexer: &IndexFacade) -> ExitCode {
                 .or_else(|| params.get("symbol_id").map(|id| format!("symbol_id:{id}")))
                 .unwrap_or_else(|| {
                     eprintln!("Error: describe requires a symbol name or symbol_id");
-                    eprintln!("Usage: codanna retrieve describe SimpleIndexer");
-                    eprintln!("   or: codanna retrieve describe symbol:SimpleIndexer");
-                    eprintln!("   or: codanna retrieve describe symbol_id:1771");
+                    eprintln!("Usage: quarry retrieve describe SimpleIndexer");
+                    eprintln!("   or: quarry retrieve describe symbol:SimpleIndexer");
+                    eprintln!("   or: quarry retrieve describe symbol_id:1771");
                     std::process::exit(1);
                 });
 

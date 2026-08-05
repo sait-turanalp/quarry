@@ -50,8 +50,8 @@ use tree_sitter::{Language, Node, Parser};
 /// # Example Usage
 ///
 /// ```no_run
-/// use codanna::parsing::csharp::parser::CSharpParser;
-/// use codanna::parsing::LanguageParser;
+/// use quarry::parsing::csharp::parser::CSharpParser;
+/// use quarry::parsing::LanguageParser;
 ///
 /// let mut parser = CSharpParser::new().expect("Failed to create parser");
 /// let code = "class Foo { void Bar() { } }";
@@ -1876,7 +1876,7 @@ impl LanguageParser for CSharpParser {
     /// Extract variable type bindings from C# code
     ///
     /// This method implements variable type tracking for C#, which is essential for
-    /// resolving method calls on local variables. Without this, codanna cannot resolve
+    /// resolving method calls on local variables. Without this, quarry cannot resolve
     /// relationships like `var service = new MyService(); service.DoWork();` because
     /// it doesn't know that `service` is of type `MyService`.
     ///
@@ -1894,7 +1894,7 @@ impl LanguageParser for CSharpParser {
     /// ```csharp
     /// public void Example() {
     ///     var helper = new Helper();  // → ("helper", "Helper", Range)
-    ///     helper.DoWork();             // Now codanna can resolve DoWork() on Helper type
+    ///     helper.DoWork();             // Now quarry can resolve DoWork() on Helper type
     /// }
     /// ```
     ///

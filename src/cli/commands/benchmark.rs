@@ -16,11 +16,11 @@ use console::style;
 pub fn run(language: &str, custom_file: Option<PathBuf>) {
     // Print styled header
     if Theme::should_disable_colors() {
-        println!("\n=== Codanna Parser Benchmarks ===\n");
+        println!("\n=== Quarry Parser Benchmarks ===\n");
     } else {
         println!(
             "\n{}\n",
-            style("=== Codanna Parser Benchmarks ===").cyan().bold()
+            style("=== Quarry Parser Benchmarks ===").cyan().bold()
         );
     }
 

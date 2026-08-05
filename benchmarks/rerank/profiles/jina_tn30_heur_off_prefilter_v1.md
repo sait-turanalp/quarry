@@ -37,8 +37,8 @@ Fark yaratanlar:
 
 ## 30 Query Benchmark (2026-02-09)
 Kaynak:
-- `/tmp/codanna-prefilter-v1-30q/summary_table.md`
-- `/tmp/codanna-prefilter-v1-30q/summary.json`
+- `/tmp/quarry-prefilter-v1-30q/summary_table.md`
+- `/tmp/quarry-prefilter-v1-30q/summary.json`
 
 | Profil | Hit@1 | MRR@10 | nDCG@10 | Warm p50 | Warm p95 | TimeoutQ |
 |---|---:|---:|---:|---:|---:|---:|

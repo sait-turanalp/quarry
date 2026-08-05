@@ -52,7 +52,7 @@ jobs:
       
       # Build debug binary for integration tests
       - name: Build debug binary
-        run: cargo build --bin codanna
+        run: cargo build --bin quarry
 
       # Run tests
       - name: Run tests
@@ -64,9 +64,9 @@ jobs:
       
       # Cache the binary path for subsequent steps
       - name: Set binary path
-        run: echo "CODANNA_BIN=./target/release/codanna" >> $GITHUB_ENV
+        run: echo "QUARRY_BIN=./target/release/quarry" >> $GITHUB_ENV
       
-      # Codanna-specific checks
+      # Quarry-specific checks
       - name: Check tree-sitter queries compile
         run: |
           # Ensure all tree-sitter queries are valid
@@ -75,15 +75,15 @@ jobs:
       - name: Verify CLI commands
         run: |
           # Test basic CLI functionality using the built binary
-          $CODANNA_BIN --help
-          $CODANNA_BIN index --help
-          $CODANNA_BIN retrieve --help
+          $QUARRY_BIN --help
+          $QUARRY_BIN index --help
+          $QUARRY_BIN retrieve --help
       
       # Performance checks
       - name: Check binary size
         run: |
-          ls -lh $CODANNA_BIN
-          size=$(stat -c%s $CODANNA_BIN 2>/dev/null || stat -f%z $CODANNA_BIN)
+          ls -lh $QUARRY_BIN
+          size=$(stat -c%s $QUARRY_BIN 2>/dev/null || stat -f%z $QUARRY_BIN)
           echo "Binary size: $size bytes"
           if [ $size -gt 50000000 ]; then  # 50MB limit
             echo "::warning::Binary larger than 50MB"

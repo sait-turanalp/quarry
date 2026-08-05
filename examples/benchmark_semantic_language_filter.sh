@@ -5,7 +5,7 @@
 #
 # Prerequisites:
 # 1. Build the project: cargo build --release
-# 2. Index the test files: ./target/release/codanna index examples --progress
+# 2. Index the test files: ./target/release/quarry index examples --progress
 #
 # Test files required (included in examples/ directory):
 #   - examples/test_language_filter.rs   (Rust implementation)
@@ -77,7 +77,7 @@ safe_json_extract() {
 clear
 echo
 printf "${BOLD}${CYAN}"
-print_centered "CODANNA SEMANTIC SEARCH LANGUAGE FILTER BENCHMARK"
+print_centered "QUARRY SEMANTIC SEARCH LANGUAGE FILTER BENCHMARK"
 printf "${NC}"
 print_separator
 echo
@@ -102,7 +102,7 @@ printf "  ${DOT} Function: ${YELLOW}send_email_notification${NC} with identical 
 # Baseline test
 print_header "BASELINE: NO LANGUAGE FILTER"
 
-baseline_json=$(./target/release/codanna mcp semantic_search_docs query:"Process user authentication validate credentials" limit:20 --json 2>/dev/null)
+baseline_json=$(./target/release/quarry mcp semantic_search_docs query:"Process user authentication validate credentials" limit:20 --json 2>/dev/null)
 
 if [ -z "$baseline_json" ] || ! echo "$baseline_json" | jq empty 2>/dev/null; then
     printf "${RED}${CROSS} Failed to get baseline results${NC}\n"
@@ -156,7 +156,7 @@ for lang in rust python typescript php; do
     print_separator
     
     # Run query with language filter
-    lang_json=$(./target/release/codanna mcp semantic_search_docs query:"Process user authentication validate credentials" lang:$lang limit:20 --json 2>/dev/null)
+    lang_json=$(./target/release/quarry mcp semantic_search_docs query:"Process user authentication validate credentials" lang:$lang limit:20 --json 2>/dev/null)
     
     if [ -z "$lang_json" ] || ! echo "$lang_json" | jq empty 2>/dev/null; then
         printf "  ${RED}${CROSS} No results or error${NC}\n"
@@ -244,7 +244,7 @@ printf "across languages create semantic search noise.${NC}\n"
 echo
 print_separator
 printf "${BOLD}${CYAN}"
-print_centered "Codanna - X-ray vision for your code"
+print_centered "Quarry - X-ray vision for your code"
 printf "${NC}"
 print_separator
 echo

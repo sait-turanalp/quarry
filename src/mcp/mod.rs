@@ -450,7 +450,7 @@ impl CodeIntelligenceServer {
             let _ = peer
                 .notify_logging_message(LoggingMessageNotificationParam {
                     level: LoggingLevel::Info,
-                    logger: Some("codanna".to_string()),
+                    logger: Some("quarry".to_string()),
                     data: serde_json::json!({
                         "action": "re-indexed",
                         "file": file_path
@@ -1416,7 +1416,7 @@ impl CodeIntelligenceServer {
                     let preview: String =
                         item.snippet.lines().take(6).collect::<Vec<_>>().join("\n");
                     result.push_str("   Snippet:\n");
-                    result.push_str(&format!("{}\n\n", preview));
+                    result.push_str(&format!("{preview}\n\n"));
                 }
                 if !outcome.pruned_by.is_empty() {
                     result.push_str(&format!(
@@ -2268,7 +2268,7 @@ impl CodeIntelligenceServer {
         let all_symbols = indexer.get_all_symbols();
         if all_symbols.is_empty() {
             return Ok(CallToolResult::error(vec![Content::text(
-                "No symbols indexed. Run 'codanna index <directory>' first.".to_string(),
+                "No symbols indexed. Run 'quarry index <directory>' first.".to_string(),
             )]));
         }
 
@@ -2359,7 +2359,7 @@ impl CodeIntelligenceServer {
             .as_ref()
             .map(|d| d.package_name.as_str())
             .unwrap_or("project");
-        output.push_str(&format!("║ PROJECT: {}\n", project_name));
+        output.push_str(&format!("║ PROJECT: {project_name}\n"));
 
         // Build indexed_symbols map for filtering
         let mut indexed_symbols: HashMap<PathBuf, Vec<&crate::symbol::Symbol>> = HashMap::new();
@@ -2387,7 +2387,7 @@ impl CodeIntelligenceServer {
         ));
 
         let lang_dist = format_language_distribution(&lang_counts);
-        output.push_str(&format!("║ Primary Language: {}\n", lang_dist));
+        output.push_str(&format!("║ Primary Language: {lang_dist}\n"));
 
         if let Some(ref workspace_root) = indexer.settings().workspace_root {
             let arch = detect_architecture(workspace_root);
@@ -2398,12 +2398,12 @@ impl CodeIntelligenceServer {
                     workspace_packages.len()
                 ));
             } else {
-                output.push_str(&format!("║ Architecture: {}\n", arch));
+                output.push_str(&format!("║ Architecture: {arch}\n"));
             }
         }
 
         let proj_type = detect_project_type(&dep_info);
-        output.push_str(&format!("║ Type: {}\n", proj_type));
+        output.push_str(&format!("║ Type: {proj_type}\n"));
 
         output.push_str(
             "╚══════════════════════════════════════════════════════════════════════\n\n",
@@ -2427,7 +2427,7 @@ impl CodeIntelligenceServer {
                         .dependencies
                         .iter()
                         .take(10)
-                        .map(|(name, ver)| format!("{} {}", name, ver))
+                        .map(|(name, ver)| format!("{name} {ver}"))
                         .collect();
                     output.push_str(&format!("  Dependencies: {}\n", top_deps.join(", ")));
                     if info.dependencies.len() > 10 {
@@ -2544,8 +2544,7 @@ impl CodeIntelligenceServer {
                 output.push_str("  No inter-module relationships detected.\n\n");
             } else {
                 let threshold = 20;
-                let graph_output =
-                    format_relationship_graph(&relations, threshold);
+                let graph_output = format_relationship_graph(&relations, threshold);
                 output.push_str(&graph_output);
             }
         }
@@ -2611,15 +2610,14 @@ fn format_impact_graph(
         return output;
     }
 
-    output.push_str(&format!("\n### Impact Analysis (depth: {})\n\n", depth));
+    output.push_str(&format!("\n### Impact Analysis (depth: {depth})\n\n"));
 
     let total = impact_ids.len();
     let showing = symbols.len();
 
     if total > 100 {
         output.push_str(&format!(
-            "⚠️  WARNING: High impact symbol! {} dependents detected.\n\n",
-            total
+            "⚠️  WARNING: High impact symbol! {total} dependents detected.\n\n"
         ));
     }
 
@@ -2627,7 +2625,7 @@ fn format_impact_graph(
         "Changing this symbol will affect {} symbol(s){}:\n\n",
         total,
         if showing < total {
-            format!(" (showing first {})", showing)
+            format!(" (showing first {showing})")
         } else {
             String::new()
         }
@@ -2735,7 +2733,7 @@ fn format_call_examples(
                 .and_then(|e| e.to_str())
                 .unwrap_or("text");
 
-            output.push_str(&format!("```{}\n", lang));
+            output.push_str(&format!("```{lang}\n"));
             output.push_str(&snippet);
             output.push_str("```\n\n");
         }
@@ -2779,7 +2777,7 @@ fn is_trivial_call(qualified_name: &str, symbol_kind: &crate::types::SymbolKind)
 
     // Collection utilities (common patterns)
     let is_collection_util =
-        qualified_name.contains("::merge") || qualified_name.contains("::symbols_in_file"); // Codanna-specific getter
+        qualified_name.contains("::merge") || qualified_name.contains("::symbols_in_file"); // Quarry-specific getter
 
     // UI/Display utilities - progress bars, status lines, formatting
     let is_ui_display = qualified_name.starts_with("status_line::")
@@ -3231,7 +3229,7 @@ fn read_source_snippet(symbol: &crate::Symbol, context_lines: u32) -> Option<Str
 // Helper functions for get_project_overview
 
 /// Module statistics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct ModuleStats {
     total_files: usize,
     total_symbols: usize,
@@ -3240,20 +3238,6 @@ struct ModuleStats {
     interfaces: usize,
     structs: usize,
     methods: usize,
-}
-
-impl Default for ModuleStats {
-    fn default() -> Self {
-        Self {
-            total_files: 0,
-            total_symbols: 0,
-            functions: 0,
-            classes: 0,
-            interfaces: 0,
-            structs: 0,
-            methods: 0,
-        }
-    }
 }
 
 /// Group files by module based on parent directory structure
@@ -3398,8 +3382,10 @@ fn get_module_path(path: &Path, depth: usize) -> PathBuf {
 
 /// Count symbols by kind for a module
 fn count_symbols_by_module(facade: &IndexFacade, module_files: &[PathBuf]) -> ModuleStats {
-    let mut stats = ModuleStats::default();
-    stats.total_files = module_files.len();
+    let mut stats = ModuleStats {
+        total_files: module_files.len(),
+        ..Default::default()
+    };
 
     for file_path in module_files {
         // Get file ID - need to convert PathBuf to &str
@@ -3463,8 +3449,18 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
 
     // Generic auxiliary keywords — universal test/mock/script/CI patterns
     let auxiliary_keywords = [
-        "test", "spec", "mock", "fixture", "example", "script", "bench",
-        "eval", ".github", "ci", "integration-test", "__test",
+        "test",
+        "spec",
+        "mock",
+        "fixture",
+        "example",
+        "script",
+        "bench",
+        "eval",
+        ".github",
+        "ci",
+        "integration-test",
+        "__test",
     ];
 
     for symbol in symbols {
@@ -3495,18 +3491,18 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
         }
 
         // P1: bin/ directory executables (CLI tools)
-        if file_path_lower.contains("/bin/") || file_path_lower.starts_with("bin/") {
-            if matches!(symbol.visibility, crate::symbol::Visibility::Public) {
-                entry_points.push(EntryPoint {
-                    symbol_id: symbol.id.value(),
-                    name: symbol_name.to_string(),
-                    file_path: symbol.file_path.to_string(),
-                    line: symbol.range.start_line + 1,
-                    entry_type: "cli".to_string(),
-                    priority: if is_auxiliary { 3 } else { 1 },
-                });
-                break; // Only first public function in bin files
-            }
+        if (file_path_lower.contains("/bin/") || file_path_lower.starts_with("bin/"))
+            && matches!(symbol.visibility, crate::symbol::Visibility::Public)
+        {
+            entry_points.push(EntryPoint {
+                symbol_id: symbol.id.value(),
+                name: symbol_name.to_string(),
+                file_path: symbol.file_path.to_string(),
+                line: symbol.range.start_line + 1,
+                entry_type: "cli".to_string(),
+                priority: if is_auxiliary { 3 } else { 1 },
+            });
+            break; // Only first public function in bin files
         }
 
         // Skip auxiliary paths for framework patterns (P2)
@@ -3533,9 +3529,7 @@ fn detect_entry_points(symbols: &[crate::Symbol]) -> Vec<EntryPoint> {
         }
 
         // P2: React entry points (createRoot, render, ReactDOM.render)
-        if (symbol_name == "createRoot"
-            || symbol_name == "render"
-            || symbol_name == "hydrateRoot")
+        if (symbol_name == "createRoot" || symbol_name == "render" || symbol_name == "hydrateRoot")
             && (file_path_lower.contains("index.tsx")
                 || file_path_lower.contains("index.jsx")
                 || file_path_lower.contains("index.ts")
@@ -3628,7 +3622,7 @@ fn detect_workspace_entry_points(
     for ws_pkg in workspace_packages {
         let pkg_str = ws_pkg.to_string_lossy();
         for ext in &["index.ts", "index.tsx", "index.js"] {
-            let index_path = format!("{}/src/{}", pkg_str, ext);
+            let index_path = format!("{pkg_str}/src/{ext}");
             if existing_files.contains(&index_path) {
                 continue;
             }
@@ -3642,7 +3636,7 @@ fn detect_workspace_entry_points(
                     .unwrap_or("package");
                 entry_points.push(EntryPoint {
                     symbol_id: symbol.id.value(),
-                    name: format!("{} bootstrap", pkg_name),
+                    name: format!("{pkg_name} bootstrap"),
                     file_path: symbol.file_path.to_string(),
                     line: 1,
                     entry_type: "bootstrap".to_string(),
@@ -3698,7 +3692,9 @@ fn detect_cargo_bin_entry_points(
                 // Find matching main() symbol in the bin source file
                 if let Some(symbol) = all_symbols.iter().find(|s| {
                     let fp = s.file_path.as_ref();
-                    fp.ends_with(bin_path) && s.name.as_ref() == "main" && !existing_files.contains(fp)
+                    fp.ends_with(bin_path)
+                        && s.name.as_ref() == "main"
+                        && !existing_files.contains(fp)
                 }) {
                     entry_points.push(EntryPoint {
                         symbol_id: symbol.id.value(),
@@ -3720,10 +3716,7 @@ fn collect_bin_entries(json: &serde_json::Value, entries: &mut Vec<(String, Stri
         match bin {
             serde_json::Value::String(path) => {
                 // "bin": "path/to/file" — use package name
-                let name = json
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("main");
+                let name = json.get("name").and_then(|n| n.as_str()).unwrap_or("main");
                 entries.push((name.to_string(), path.clone()));
             }
             serde_json::Value::Object(map) => {
@@ -3749,8 +3742,8 @@ fn infer_source_from_bin(bin_path: &str) -> Vec<String> {
         .and_then(|s| s.to_str())
         .unwrap_or("index");
 
-    candidates.push(format!("src/{}.ts", filename));
-    candidates.push(format!("src/{}.tsx", filename));
+    candidates.push(format!("src/{filename}.ts"));
+    candidates.push(format!("src/{filename}.tsx"));
     candidates.push("src/index.ts".to_string());
     candidates.push("src/index.tsx".to_string());
     candidates
@@ -3927,10 +3920,9 @@ impl Layer {
 }
 
 // Layer detection thresholds for two-dimensional classification
-const HIGH_ACTIVITY_THRESHOLD: usize = 50;   // Total activity indicating core module
-const HIGH_FAN_IN_THRESHOLD: usize = 25;     // Significant incoming calls
-const HIGH_FAN_OUT_THRESHOLD: usize = 30;    // Significant outgoing calls
-const DATA_RATIO_THRESHOLD: f64 = 0.75;      // Strong bias toward being called
+const HIGH_FAN_IN_THRESHOLD: usize = 25; // Significant incoming calls
+const HIGH_FAN_OUT_THRESHOLD: usize = 30; // Significant outgoing calls
+const DATA_RATIO_THRESHOLD: f64 = 0.75; // Strong bias toward being called
 
 /// Detect architectural layer using two-dimensional fan-in/fan-out classification
 ///
@@ -3944,8 +3936,18 @@ fn detect_layer_enhanced(module_path: &Path, fan_in: usize, fan_out: usize) -> L
 
     // Infrastructure tie-breaker: universal test/mock/script/CI patterns only
     let infra_keywords = [
-        "test", "mock", "fixture", "script", ".github", "ci", "spec", "bench",
-        "example", "third_party", "third-party", "vendor",
+        "test",
+        "mock",
+        "fixture",
+        "script",
+        ".github",
+        "ci",
+        "spec",
+        "bench",
+        "example",
+        "third_party",
+        "third-party",
+        "vendor",
     ];
     if infra_keywords.iter().any(|kw| path_str.contains(kw)) {
         return Layer::Infrastructure;
@@ -3990,10 +3992,7 @@ fn detect_layer_enhanced(module_path: &Path, fan_in: usize, fan_out: usize) -> L
 }
 
 /// Calculate fan-in and fan-out for a module from relations
-fn calculate_fan_metrics(
-    module_path: &Path,
-    relations: &[ModuleRelation],
-) -> (usize, usize) {
+fn calculate_fan_metrics(module_path: &Path, relations: &[ModuleRelation]) -> (usize, usize) {
     let fan_out: usize = relations
         .iter()
         .filter(|r| r.from_module == module_path)
@@ -4043,9 +4042,13 @@ fn format_layer_table(
 
     for layer in &layer_order {
         if let Some(mods) = layers.get(layer) {
-            output.push_str(&format!("  [{}] ({} modules)\n", layer.as_str(), mods.len()));
+            output.push_str(&format!(
+                "  [{}] ({} modules)\n",
+                layer.as_str(),
+                mods.len()
+            ));
             for m in mods {
-                output.push_str(&format!("    {}\n", m));
+                output.push_str(&format!("    {m}\n"));
             }
             output.push('\n');
         }
@@ -4055,10 +4058,7 @@ fn format_layer_table(
 }
 
 /// Format blast radius section showing high-impact modules
-fn format_blast_radius(
-    modules: &HashMap<PathBuf, Vec<PathBuf>>,
-    facade: &IndexFacade,
-) -> String {
+fn format_blast_radius(modules: &HashMap<PathBuf, Vec<PathBuf>>, facade: &IndexFacade) -> String {
     let mut output = String::new();
     let mut results: Vec<(PathBuf, usize, usize)> = Vec::new();
 
@@ -4120,11 +4120,10 @@ fn format_blast_radius(
 
         output.push_str(&format!("  {}\n", module.display()));
         output.push_str(&format!(
-            "  ├─ Called by: {} modules ({} total incoming calls)\n",
-            calling_mods, rev_deps
+            "  ├─ Called by: {calling_mods} modules ({rev_deps} total incoming calls)\n"
         ));
-        output.push_str(&format!("  ├─ Risk: {}\n", risk));
-        output.push_str(&format!("  └─ {}\n\n", warning));
+        output.push_str(&format!("  ├─ Risk: {risk}\n"));
+        output.push_str(&format!("  └─ {warning}\n\n"));
     }
 
     output
@@ -4138,13 +4137,30 @@ fn is_trivial_for_critical_path(symbol: &crate::Symbol) -> bool {
 
     // Trivial function names (logging, debugging, serialization, formatting)
     let trivial_names = [
-        "log", "debug", "info", "warn", "error", "trace",
-        "println", "print", "eprintln",
-        "fmt", "format", "display",
-        "serialize", "deserialize",
-        "clone", "drop", "into", "from", "to_string",
-        "unwrap", "expect",
-        "console.log", "console.warn", "console.error",
+        "log",
+        "debug",
+        "info",
+        "warn",
+        "error",
+        "trace",
+        "println",
+        "print",
+        "eprintln",
+        "fmt",
+        "format",
+        "display",
+        "serialize",
+        "deserialize",
+        "clone",
+        "drop",
+        "into",
+        "from",
+        "to_string",
+        "unwrap",
+        "expect",
+        "console.log",
+        "console.warn",
+        "console.error",
     ];
 
     if trivial_names.iter().any(|t| name_lower.contains(t)) {
@@ -4153,8 +4169,14 @@ fn is_trivial_for_critical_path(symbol: &crate::Symbol) -> bool {
 
     // Logging/telemetry/tracing modules
     let trivial_modules = [
-        "telemetry", "logging", "tracing", "log", "metrics",
-        "observability", "monitoring", "analytics",
+        "telemetry",
+        "logging",
+        "tracing",
+        "log",
+        "metrics",
+        "observability",
+        "monitoring",
+        "analytics",
     ];
 
     if trivial_modules.iter().any(|m| file_lower.contains(m)) {
@@ -4168,8 +4190,12 @@ fn is_trivial_for_critical_path(symbol: &crate::Symbol) -> bool {
 fn is_utility_module(symbol: &crate::Symbol) -> bool {
     let file_lower = symbol.file_path.to_lowercase();
     let utility_patterns = [
-        "/utils/", "/helpers/", "/events/",
-        "/common/", "/shared/", "/lib/",
+        "/utils/",
+        "/helpers/",
+        "/events/",
+        "/common/",
+        "/shared/",
+        "/lib/",
     ];
     utility_patterns.iter().any(|p| file_lower.contains(p))
 }
@@ -4227,8 +4253,12 @@ fn format_critical_paths(entry_points: &[EntryPoint], facade: &IndexFacade) -> S
 
         // Format path
         for (i, (name, file, line)) in path_nodes.iter().enumerate() {
-            let branch = if i == path_nodes.len() - 1 { "└─>" } else { "├─>" };
-            output.push_str(&format!("    {} {}  {}:{}\n", branch, name, file, line));
+            let branch = if i == path_nodes.len() - 1 {
+                "└─>"
+            } else {
+                "├─>"
+            };
+            output.push_str(&format!("    {branch} {name}  {file}:{line}\n"));
         }
 
         if path_nodes.is_empty() {
@@ -4239,8 +4269,6 @@ fn format_critical_paths(entry_points: &[EntryPoint], facade: &IndexFacade) -> S
 
     output
 }
-
-
 
 /// Build module relationship graph
 fn build_module_graph(
@@ -4295,10 +4323,7 @@ fn build_module_graph(
 }
 
 /// Format relationship graph with compact arrow format
-fn format_relationship_graph(
-    relations: &[ModuleRelation],
-    threshold: usize,
-) -> String {
+fn format_relationship_graph(relations: &[ModuleRelation], threshold: usize) -> String {
     let mut output = String::new();
 
     // Filter by threshold and collect edges
@@ -4316,8 +4341,7 @@ fn format_relationship_graph(
     filtered_relations.truncate(15);
 
     output.push_str(&format!(
-        "  Internal Call Graph (threshold: {}+ calls)\n\n",
-        threshold
+        "  Internal Call Graph (threshold: {threshold}+ calls)\n\n"
     ));
 
     // Calculate max source module length for alignment
@@ -4462,7 +4486,6 @@ fn extract_keywords_from_symbols(symbols: &[crate::Symbol]) -> Vec<String> {
     keywords
 }
 
-
 /// Analyze keyword frequency and return top keywords
 fn analyze_keyword_frequency(keywords: &[String], top_n: usize) -> Vec<(String, usize)> {
     let mut frequency: HashMap<String, usize> = HashMap::new();
@@ -4481,7 +4504,7 @@ fn analyze_keyword_frequency(keywords: &[String], top_n: usize) -> Vec<(String, 
 fn keywords_to_domains(keywords: &[(String, usize)]) -> Vec<String> {
     let mut domains = Vec::new();
 
-    // Domain keyword mapping (based on codanna-domains.toml spec)
+    // Domain keyword mapping (based on quarry-domains.toml spec)
     for (keyword, _) in keywords {
         let domain = match keyword.as_str() {
             // Authentication & Security
@@ -4568,7 +4591,7 @@ fn detect_external_calls(module_files: &[PathBuf], facade: &IndexFacade) -> Vec<
                         // Check if called symbol is external (not in our module files)
                         let is_external = !module_files
                             .iter()
-                            .any(|f| f.to_str().map_or(false, |s| s == called_file_path));
+                            .any(|f| f.to_str() == Some(called_file_path));
 
                         if is_external {
                             // Extract library/package name from symbol name or file path
@@ -4789,10 +4812,9 @@ fn infer_description_from_dependencies(
     if all_deps
         .iter()
         .any(|n| n.contains("express") || n.contains("axios") || n.contains("fetch"))
+        && (path_str.contains("api") || path_str.contains("route"))
     {
-        if path_str.contains("api") || path_str.contains("route") {
-            domains.push("HTTP API");
-        }
+        domains.push("HTTP API");
     }
 
     // Email
@@ -4807,10 +4829,9 @@ fn infer_description_from_dependencies(
     if all_deps
         .iter()
         .any(|n| n.contains("jest") || n.contains("mocha") || n.contains("test"))
+        && path_str.contains("test")
     {
-        if path_str.contains("test") {
-            domains.push("Testing");
-        }
+        domains.push("Testing");
     }
 
     if !domains.is_empty() {
@@ -5073,7 +5094,7 @@ impl CodeIntelligenceServer {
         let total = fields.len() + methods.len();
         if total == 0 {
             return Ok(CallToolResult::success(vec![Content::text(format!(
-                "{:?} {} [symbol_id:{}] has no indexed fields or methods.\nHint: Re-index after parser updates with 'codanna index <path>'",
+                "{:?} {} [symbol_id:{}] has no indexed fields or methods.\nHint: Re-index after parser updates with 'quarry index <path>'",
                 symbol.kind, symbol.name, symbol_id
             ))]));
         }
@@ -5220,8 +5241,8 @@ impl CodeIntelligenceServer {
                 return Ok(CallToolResult::error(vec![Content::text(
                     "Document search not available. No document collections are indexed.\n\n\
                     To enable:\n\
-                    1. Add a collection: codanna documents add-collection docs docs/\n\
-                    2. Index it: codanna documents index\n\
+                    1. Add a collection: quarry documents add-collection docs docs/\n\
+                    2. Index it: quarry documents index\n\
                     3. Restart the MCP server",
                 )]));
             }
@@ -5297,9 +5318,9 @@ impl ServerHandler for CodeIntelligenceServer {
                 .enable_tools()
                 .build(),
             server_info: Implementation {
-                name: "codanna".to_string(),
+                name: "quarry".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
-                title: Some("Codanna Code Intelligence".to_string()),
+                title: Some("Quarry Code Intelligence".to_string()),
                 website_url: Some("https://github.com/bartolli/codanna".to_string()),
                 icons: None,
             },
@@ -5339,8 +5360,8 @@ impl ServerHandler for CodeIntelligenceServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<CustomResult, McpError> {
         match request.method.as_str() {
-            "requests/codanna/force-reindex" => self.handle_force_reindex(request).await,
-            "requests/codanna/index-stats" => self.handle_index_stats().await,
+            "requests/quarry/force-reindex" => self.handle_force_reindex(request).await,
+            "requests/quarry/index-stats" => self.handle_index_stats().await,
             _ => Err(McpError::new(
                 ErrorCode::METHOD_NOT_FOUND,
                 format!("Unknown method: {}", request.method),
@@ -5507,7 +5528,7 @@ fn format_language_distribution(lang_counts: &HashMap<String, usize>) -> String 
         .take(3)
         .map(|(lang, count)| {
             let pct = (**count as f64 / total as f64 * 100.0).round() as u32;
-            format!("{} ({}%)", lang, pct)
+            format!("{lang} ({pct}%)")
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -5672,9 +5693,9 @@ fn detect_project_type(dep_info: &Option<DependencyInfo>) -> &'static str {
     "Application"
 }
 
-/// Load knowledge base from .codanna/knowledge directory
+/// Load knowledge base from .quarry/knowledge directory
 fn load_knowledge_base(workspace_root: &Path) -> Option<knowledge::KnowledgeBase> {
-    let knowledge_path = workspace_root.join(".codanna").join("knowledge");
+    let knowledge_path = workspace_root.join(".quarry").join("knowledge");
     knowledge::KnowledgeBase::load_from_dir(&knowledge_path).ok()
 }
 
@@ -5794,13 +5815,22 @@ fn generate_module_description_with_kb(
     let mut candidates: Vec<&crate::Symbol> = all_symbols
         .iter()
         .filter(|s| matches!(s.visibility, crate::symbol::Visibility::Public))
-        .filter(|s| matches!(s.kind,
-            crate::SymbolKind::Class | crate::SymbolKind::Interface |
-            crate::SymbolKind::Struct | crate::SymbolKind::Enum |
-            crate::SymbolKind::Function
-        ))
+        .filter(|s| {
+            matches!(
+                s.kind,
+                crate::SymbolKind::Class
+                    | crate::SymbolKind::Interface
+                    | crate::SymbolKind::Struct
+                    | crate::SymbolKind::Enum
+                    | crate::SymbolKind::Function
+            )
+        })
         .collect();
-    candidates.sort_by(|a, b| kind_priority(a).cmp(&kind_priority(b)).then(a.name.cmp(&b.name)));
+    candidates.sort_by(|a, b| {
+        kind_priority(a)
+            .cmp(&kind_priority(b))
+            .then(a.name.cmp(&b.name))
+    });
     candidates.dedup_by(|a, b| a.name == b.name);
     candidates.truncate(20);
 
@@ -5893,9 +5923,19 @@ fn format_tech_stack(
 
         if !categorized.is_empty() {
             let category_order = [
-                "runtime", "frontend", "backend", "ai_ml", "protocol",
-                "cli_tools", "parsing", "search", "database",
-                "services", "testing", "build", "infrastructure",
+                "runtime",
+                "frontend",
+                "backend",
+                "ai_ml",
+                "protocol",
+                "cli_tools",
+                "parsing",
+                "search",
+                "database",
+                "services",
+                "testing",
+                "build",
+                "infrastructure",
             ];
 
             for category in category_order {
@@ -5922,7 +5962,7 @@ fn format_tech_stack(
                             if version.is_empty() {
                                 pkg.clone()
                             } else {
-                                format!("{} {}", pkg, version)
+                                format!("{pkg} {version}")
                             }
                         })
                         .collect();

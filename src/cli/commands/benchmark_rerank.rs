@@ -3,9 +3,9 @@
 //! Runs chunk-search quality/latency evaluation in-process so reranker/model
 //! initialization is not repeated per query.
 
-use crate::indexing::facade::IndexFacade;
 use crate::IndexPersistence;
 use crate::Settings;
+use crate::indexing::facade::IndexFacade;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -768,7 +768,7 @@ fn write_decision_md(
 
     let mut out = String::new();
     out.push_str("# Reranker Benchmark Decision\n\n");
-    out.push_str(&format!("- Baseline: `{}`\n", baseline_name));
+    out.push_str(&format!("- Baseline: `{baseline_name}`\n"));
     out.push_str("- SLO target: warm p95 <= 500ms\n\n");
 
     out.push_str("## Baseline Metrics\n\n");
@@ -786,14 +786,14 @@ fn write_decision_md(
         out.push_str("(none)\n\n");
     } else {
         for name in pareto {
-            out.push_str(&format!("- `{}`\n", name));
+            out.push_str(&format!("- `{name}`\n"));
         }
         out.push('\n');
     }
 
     out.push_str("## Recommendation\n\n");
     if let Some(name) = recommended {
-        out.push_str(&format!("- Recommended profile: `{}`\n", name));
+        out.push_str(&format!("- Recommended profile: `{name}`\n"));
         if let Some(sel) = summaries.iter().find(|s| &s.profile == name) {
             out.push_str(&format!(
                 "- Quality: Hit@1 {:.3}, MRR@10 {:.3}, nDCG@10 {:.3}\n",

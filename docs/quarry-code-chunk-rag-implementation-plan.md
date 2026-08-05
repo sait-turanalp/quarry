@@ -1,10 +1,10 @@
-# Codanna Code Chunk RAG Implementation Plan (Approved)
+# Quarry Code Chunk RAG Implementation Plan (Approved)
 
 **Date:** 2026-02-08  
 **Status:** APPROVED
 
 ## Summary
-Bu plan, mevcut symbol-level aramayı bozmadan Codanna'ya code chunk-level RAG hattı ekler.  
+Bu plan, mevcut symbol-level aramayı bozmadan Quarry'ya code chunk-level RAG hattı ekler.  
 Mevcut stack korunur: Tantivy + model2vec/semantic + RRF + reranker + confidence gate.
 
 ## Verified Baseline Facts
@@ -36,7 +36,7 @@ Mevcut stack korunur: Tantivy + model2vec/semantic + RRF + reranker + confidence
 1. `semantic_search_docs` mevcut davranışı korunur (backward-compatible).
 2. Yeni güçlü code-RAG hattı `semantic_search_chunks` olarak eklenir.
 3. V1 chunk birimi: `symbol-range chunk` (AST-aware, mevcut parser verisi reuse).
-4. `documents` (md/txt) sistemi ayrı kalır; code chunk index `.codanna/index/code_chunks/` altında tutulur.
+4. `documents` (md/txt) sistemi ayrı kalır; code chunk index `.quarry/index/code_chunks/` altında tutulur.
 5. Chunk retrieval zorunlu pipeline: `BM25 + vector + RRF + reranker + chunk confidence gate`.
 6. `rerank_timeout_ms` default değeri `1000` ms olur.
 
@@ -80,11 +80,11 @@ Mevcut stack korunur: Tantivy + model2vec/semantic + RRF + reranker + confidence
      - `doc_comment`
      - `indexed_at`
      - `file_hash`
-   - Persist path: `.codanna/index/code_chunks/tantivy`
+   - Persist path: `.quarry/index/code_chunks/tantivy`
    - V1 kimlik kararı: `chunk_id == symbol_id`
 
 3. Chunk vector index'i ekle (ayrı semantic storage).
-   - Path: `.codanna/index/code_chunks/semantic`
+   - Path: `.quarry/index/code_chunks/semantic`
    - Model: `semantic_search.model` ile aynı
    - Gerekli düzeltme:
      - Chunk embedding generator model2vec desteklemeli

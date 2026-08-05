@@ -25,7 +25,7 @@ impl ResolvedProfileSource {
             Self::Local { path } => path.join(profile_name),
             Self::Git { temp_dir, .. } => temp_dir
                 .path()
-                .join(".codanna-profile")
+                .join(".quarry-profile")
                 .join("profiles")
                 .join(profile_name),
         }
@@ -61,7 +61,7 @@ pub fn resolve_profile_source(
 /// Resolve local provider source
 fn resolve_local_source(path: &str, profile_name: &str) -> ProfileResult<ResolvedProfileSource> {
     let base_path = Path::new(path);
-    let profiles_path = base_path.join(".codanna-profile").join("profiles");
+    let profiles_path = base_path.join(".quarry-profile").join("profiles");
     let profile_path = profiles_path.join(profile_name);
 
     if !profile_path.exists() {
@@ -86,7 +86,7 @@ fn resolve_git_source(url: &str, profile_name: &str) -> ProfileResult<ResolvedPr
     // Verify profile exists in cloned repo
     let profile_path = temp_dir
         .path()
-        .join(".codanna-profile")
+        .join(".quarry-profile")
         .join("profiles")
         .join(profile_name);
 
@@ -117,7 +117,7 @@ mod tests {
         let provider_dir = temp.path().join("my-provider");
 
         // Create profile structure
-        let profiles_dir = provider_dir.join(".codanna-profile/profiles");
+        let profiles_dir = provider_dir.join(".quarry-profile/profiles");
         let profile_dir = profiles_dir.join("test-profile");
         fs::create_dir_all(&profile_dir).unwrap();
 
@@ -171,7 +171,7 @@ mod tests {
         // This test requires an actual GitHub repo with proper structure
         // Skip in normal test runs
         let source = ProviderSource::Github {
-            repo: "codanna/test-profiles".to_string(),
+            repo: "quarry/test-profiles".to_string(),
         };
 
         let result = resolve_profile_source(&source, "test-profile");
@@ -187,7 +187,7 @@ mod tests {
     fn test_resolved_source_commit() {
         let temp = tempdir().unwrap();
         let provider_dir = temp.path().join("my-provider");
-        let profiles_dir = provider_dir.join(".codanna-profile/profiles");
+        let profiles_dir = provider_dir.join(".quarry-profile/profiles");
         let profile_dir = profiles_dir.join("test-profile");
         fs::create_dir_all(&profile_dir).unwrap();
 
@@ -205,7 +205,7 @@ mod tests {
     fn test_profile_dir_path_construction() {
         let temp = tempdir().unwrap();
         let provider_dir = temp.path().join("my-provider");
-        let profiles_dir = provider_dir.join(".codanna-profile/profiles");
+        let profiles_dir = provider_dir.join(".quarry-profile/profiles");
         let profile_dir = profiles_dir.join("my-profile");
         fs::create_dir_all(&profile_dir).unwrap();
 

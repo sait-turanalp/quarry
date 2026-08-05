@@ -185,10 +185,10 @@ pub struct EmbeddingRuntimeConfig {
 impl Default for EmbeddingRuntimeConfig {
     fn default() -> Self {
         let mut execution_provider = EmbeddingExecutionProviderConfig::Cpu;
-        if std::env::var("CODANNA_ENABLE_COREML").ok().as_deref() == Some("1") {
+        if std::env::var("QUARRY_ENABLE_COREML").ok().as_deref() == Some("1") {
             execution_provider = EmbeddingExecutionProviderConfig::Coreml;
         }
-        if std::env::var("CODANNA_DISABLE_COREML").ok().as_deref() == Some("1") {
+        if std::env::var("QUARRY_DISABLE_COREML").ok().as_deref() == Some("1") {
             execution_provider = EmbeddingExecutionProviderConfig::Cpu;
         }
         Self {
@@ -440,7 +440,7 @@ pub fn model_to_string(model: &EmbeddingModel) -> String {
 
 /// Load the Granite Small English R2 model from local files.
 ///
-/// Expects model files at `~/.codanna/models/granite-small-r2/`:
+/// Expects model files at `~/.quarry/models/granite-small-r2/`:
 /// - `model_fp16.onnx` - The ONNX model file (fp16)
 /// - `tokenizer.json` - Tokenizer definition
 /// - `config.json` - Model configuration
@@ -452,7 +452,7 @@ pub fn model_to_string(model: &EmbeddingModel) -> String {
 fn load_granite_small() -> Result<UserDefinedEmbeddingModel, VectorError> {
     let model_dir = dirs::home_dir()
         .ok_or_else(|| VectorError::EmbeddingFailed("Cannot determine home directory".to_string()))?
-        .join(".codanna/models/granite-small-r2");
+        .join(".quarry/models/granite-small-r2");
 
     if !model_dir.exists() {
         return Err(VectorError::EmbeddingFailed(format!(

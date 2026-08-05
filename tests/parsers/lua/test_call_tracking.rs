@@ -1,5 +1,5 @@
-use codanna::parsing::LanguageParser;
-use codanna::parsing::lua::LuaParser;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::lua::LuaParser;
 
 #[test]
 fn test_lua_basic_function_calls() {

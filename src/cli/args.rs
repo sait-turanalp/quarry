@@ -29,15 +29,15 @@ fn create_custom_help() -> String {
     } else {
         help.push_str(&format!("{}\n", style("Quick Start:").cyan().bold()));
     }
-    help.push_str("  $ codanna init                      # Initialize in current directory\n");
-    help.push_str("  $ codanna index src lib            # Index multiple directories\n");
-    help.push_str("  $ codanna add-dir tests            # Add tests directory to indexed paths\n");
-    help.push_str("  $ codanna list-dirs                # List all indexed directories\n");
-    help.push_str("  $ codanna serve                    # Persistent MCP server (low-latency)\n");
-    help.push_str("  $ codanna serve --http --watch     # HTTP server with OAuth\n");
-    help.push_str("  $ codanna serve --https --watch    # HTTPS server with TLS\n");
-    help.push_str("  $ codanna documents add-collection docs ./docs  # Add doc collection\n");
-    help.push_str("  $ codanna documents index          # Index all document collections\n\n");
+    help.push_str("  $ quarry init                      # Initialize in current directory\n");
+    help.push_str("  $ quarry index src lib            # Index multiple directories\n");
+    help.push_str("  $ quarry add-dir tests            # Add tests directory to indexed paths\n");
+    help.push_str("  $ quarry list-dirs                # List all indexed directories\n");
+    help.push_str("  $ quarry serve                    # Persistent MCP server (low-latency)\n");
+    help.push_str("  $ quarry serve --http --watch     # HTTP server with OAuth\n");
+    help.push_str("  $ quarry serve --https --watch    # HTTPS server with TLS\n");
+    help.push_str("  $ quarry documents add-collection docs ./docs  # Add doc collection\n");
+    help.push_str("  $ quarry documents index          # Index all document collections\n\n");
 
     // About section
     help.push_str("Index code and query relationships, symbols, and dependencies.\n\n");
@@ -48,7 +48,7 @@ fn create_custom_help() -> String {
     } else {
         help.push_str(&format!("{}", style("Usage:").cyan().bold()));
     }
-    help.push_str(" codanna [OPTIONS] <COMMAND>\n\n");
+    help.push_str(" quarry [OPTIONS] <COMMAND>\n\n");
 
     // Commands
     if Theme::should_disable_colors() {
@@ -56,7 +56,7 @@ fn create_custom_help() -> String {
     } else {
         help.push_str(&format!("{}\n", style("Commands:").cyan().bold()));
     }
-    help.push_str("  init          Set up .codanna directory\n");
+    help.push_str("  init          Set up .quarry directory\n");
     help.push_str("  index         Build searchable index from codebase\n");
     help.push_str("  add-dir       Add a directory to be indexed\n");
     help.push_str("  remove-dir    Remove a directory from indexed paths\n");
@@ -74,7 +74,7 @@ fn create_custom_help() -> String {
     help.push_str("  documents     Index and search document collections\n");
     help.push_str("  help          Print this message or the help of the given subcommand(s)\n\n");
 
-    help.push_str("See 'codanna help <command>' for more information on a specific command.\n\n");
+    help.push_str("See 'quarry help <command>' for more information on a specific command.\n\n");
 
     // Options
     if Theme::should_disable_colors() {
@@ -101,7 +101,7 @@ fn create_custom_help() -> String {
 /// Code intelligence system
 #[derive(Parser)]
 #[command(
-    name = "codanna",
+    name = "quarry",
     version = env!("CARGO_PKG_VERSION"),
     about = "Code intelligence system",
     long_about = "Index code and query relationships, symbols, and dependencies.",
@@ -126,7 +126,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize project
-    #[command(about = "Set up .codanna directory with default configuration")]
+    #[command(about = "Set up .quarry directory with default configuration")]
     Init {
         /// Force overwrite existing configuration
         #[arg(short, long)]
@@ -183,7 +183,7 @@ pub enum Commands {
     #[command(
         about = "Search symbols, find callers/callees, analyze impact",
         long_about = "Query indexed symbols, relationships, and dependencies.",
-        after_help = "Examples:\n  codanna retrieve symbol main\n  codanna retrieve callers process_file\n  codanna retrieve callers symbol_id:1771\n  codanna retrieve calls init\n  codanna retrieve calls symbol_id:1771\n  codanna retrieve implementations Parser\n  codanna retrieve describe OutputManager\n  codanna retrieve search \"parse\" --limit 10\n\nJSON paths:\n  retrieve symbol     .data.items[0].symbol.name\n  retrieve search     .data.items[].symbol.name\n  retrieve callers    .data.items[].symbol.name\n  retrieve describe   .data.items[0].symbol.name"
+        after_help = "Examples:\n  quarry retrieve symbol main\n  quarry retrieve callers process_file\n  quarry retrieve callers symbol_id:1771\n  quarry retrieve calls init\n  quarry retrieve calls symbol_id:1771\n  quarry retrieve implementations Parser\n  quarry retrieve describe OutputManager\n  quarry retrieve search \"parse\" --limit 10\n\nJSON paths:\n  retrieve symbol     .data.items[0].symbol.name\n  retrieve search     .data.items[].symbol.name\n  retrieve callers    .data.items[].symbol.name\n  retrieve describe   .data.items[0].symbol.name"
     )]
     Retrieve {
         #[command(subcommand)]
@@ -191,14 +191,14 @@ pub enum Commands {
     },
 
     /// Show current configuration settings
-    #[command(about = "Display active settings from .codanna/settings.toml")]
+    #[command(about = "Display active settings from .quarry/settings.toml")]
     Config,
 
     /// Start MCP server (persistent, recommended for low-latency queries)
     #[command(
         about = "Start persistent MCP server (recommended for low-latency)",
         long_about = "Start a long-lived MCP server. Recommended for repeated low-latency queries.",
-        after_help = "Examples:\n  codanna serve\n  codanna serve --http --watch\n  codanna serve --https --watch\n  codanna serve --http --bind 0.0.0.0:3000\n\nModes:\n  Default: stdio\n  --http: HTTP with OAuth\n  --https: HTTPS with TLS"
+        after_help = "Examples:\n  quarry serve\n  quarry serve --http --watch\n  quarry serve --https --watch\n  quarry serve --http --bind 0.0.0.0:3000\n\nModes:\n  Default: stdio\n  --http: HTTP with OAuth\n  --https: HTTPS with TLS"
     )]
     Serve {
         /// Watch index file for changes and auto-reload
@@ -265,8 +265,8 @@ pub enum Commands {
     /// Call MCP tools directly (one-shot, advanced)
     #[command(
         about = "Execute MCP tools directly (one-shot)",
-        long_about = "Execute MCP tools directly in one-shot mode. For repeated low-latency queries, prefer `codanna serve`.\n\nSupports positional arguments, key=value pairs, and JSON arguments.",
-        after_help = "Tools:\n  find_symbol       <name>              Exact name lookup\n  search_symbols    query:<text>        Fuzzy text search (kind:<type> limit:<n>)\n  get_calls         <name|symbol_id:N>  What this symbol calls\n  find_callers      <name|symbol_id:N>  What calls this symbol\n  analyze_impact    <name|symbol_id:N>  Full dependency graph\n  semantic_search_docs query:<text>     Symbol-based, for code navigation\n  semantic_search_chunks query:<text>   Chunk-based, for code flow/logic understanding\n  semantic_search_with_context query:<text>  Search with relationships\n  search_documents  query:<text>        Search markdown/text docs\n  get_index_info                        Index stats\n\nExamples:\n  codanna mcp find_symbol <name>\n  codanna mcp search_symbols query:<text> kind:function\n  codanna mcp get_calls <name>\n  codanna mcp get_calls symbol_id:<N>\n  codanna mcp semantic_search_docs query:\"<text>\" limit:5\n  codanna mcp semantic_search_chunks query:\"<text>\" limit:5\n  codanna mcp search_symbols query:<text> --json | jq '.data[].symbol_id'"
+        long_about = "Execute MCP tools directly in one-shot mode. For repeated low-latency queries, prefer `quarry serve`.\n\nSupports positional arguments, key=value pairs, and JSON arguments.",
+        after_help = "Tools:\n  find_symbol       <name>              Exact name lookup\n  search_symbols    query:<text>        Fuzzy text search (kind:<type> limit:<n>)\n  get_calls         <name|symbol_id:N>  What this symbol calls\n  find_callers      <name|symbol_id:N>  What calls this symbol\n  analyze_impact    <name|symbol_id:N>  Full dependency graph\n  semantic_search_docs query:<text>     Symbol-based, for code navigation\n  semantic_search_chunks query:<text>   Chunk-based, for code flow/logic understanding\n  semantic_search_with_context query:<text>  Search with relationships\n  search_documents  query:<text>        Search markdown/text docs\n  get_index_info                        Index stats\n\nExamples:\n  quarry mcp find_symbol <name>\n  quarry mcp search_symbols query:<text> kind:function\n  quarry mcp get_calls <name>\n  quarry mcp get_calls symbol_id:<N>\n  quarry mcp semantic_search_docs query:\"<text>\" limit:5\n  quarry mcp semantic_search_chunks query:\"<text>\" limit:5\n  quarry mcp search_symbols query:<text> --json | jq '.data[].symbol_id'"
     )]
     Mcp {
         /// Tool to call
@@ -310,7 +310,7 @@ pub enum Commands {
         name = "benchmark-rerank",
         about = "Persistent reranker benchmark (quality + latency)",
         long_about = "Run chunk-search reranker benchmarks in persistent in-process mode (no one-shot model reload per query).\n\nProduces JSON and Markdown reports with quality metrics (Hit@1, MRR@10, nDCG@10, Recall@5/10), cold/warm latency, timeout miss split, and Pareto frontier.",
-        after_help = "Examples:\n  codanna benchmark-rerank --queries ./bench/queries.jsonl --qrels ./bench/qrels.jsonl --profiles ./bench/profiles.toml --out ./bench/out\n  codanna benchmark-rerank --queries ./bench/queries.jsonl --qrels ./bench/qrels.jsonl --profiles ./bench/profiles.toml --cold-runs 1 --warm-runs 3 --limit 10"
+        after_help = "Examples:\n  quarry benchmark-rerank --queries ./bench/queries.jsonl --qrels ./bench/qrels.jsonl --profiles ./bench/profiles.toml --out ./bench/out\n  quarry benchmark-rerank --queries ./bench/queries.jsonl --qrels ./bench/qrels.jsonl --profiles ./bench/profiles.toml --cold-runs 1 --warm-runs 3 --limit 10"
     )]
     BenchmarkRerank {
         /// Query set JSONL path ({\"id\":\"...\",\"query\":\"...\"})
@@ -357,7 +357,7 @@ pub enum Commands {
     /// Quick reranker latency benchmark (no qrels needed)
     #[command(
         name = "benchmark-rerank-quick",
-        about = "Quick reranker latency benchmark (10 built-in queries, no qrels needed)",
+        about = "Quick reranker latency benchmark (10 built-in queries, no qrels needed)"
     )]
     BenchmarkRerankQuick {
         /// Number of warm runs per query (median selected)
@@ -391,8 +391,8 @@ pub enum Commands {
     /// Manage Claude Code plugins
     #[command(
         about = "Install, update, and manage Claude Code plugins from marketplaces",
-        long_about = "Manage Claude Code plugins by installing from Git-based marketplaces.\n\nPlugins extend Claude Code with custom commands, agents, hooks, and MCP servers.\n\nNote: Plugins are installed and managed by codanna per-project in .claude/plugins, not managed by claude code CLI directly.",
-        after_help = "Examples:\n  codanna plugin add https://github.com/user/marketplace plugin-name\n  codanna plugin remove plugin-name\n  codanna plugin update plugin-name --ref v2.0\n  codanna plugin list\n  codanna plugin verify plugin-name"
+        long_about = "Manage Claude Code plugins by installing from Git-based marketplaces.\n\nPlugins extend Claude Code with custom commands, agents, hooks, and MCP servers.\n\nNote: Plugins are installed and managed by quarry per-project in .claude/plugins, not managed by claude code CLI directly.",
+        after_help = "Examples:\n  quarry plugin add https://github.com/user/marketplace plugin-name\n  quarry plugin remove plugin-name\n  quarry plugin update plugin-name --ref v2.0\n  quarry plugin list\n  quarry plugin verify plugin-name"
     )]
     Plugin {
         #[command(subcommand)]
@@ -403,7 +403,7 @@ pub enum Commands {
     #[command(
         about = "Index and search document collections",
         long_about = "Index markdown and text documents for semantic search.\n\nDocuments are chunked, embedded, and stored separately from code symbols.",
-        after_help = "Examples:\n  codanna documents index --collection docs\n  codanna documents search \"error handling\" --collection docs\n  codanna documents list\n  codanna documents stats docs"
+        after_help = "Examples:\n  quarry documents index --collection docs\n  quarry documents search \"error handling\" --collection docs\n  quarry documents list\n  quarry documents stats docs"
     )]
     Documents {
         #[command(subcommand)]
@@ -415,7 +415,7 @@ pub enum Commands {
         name = "index-parallel",
         about = "Index using parallel pipeline with two-phase resolution",
         long_about = "Index source code using the parallel pipeline architecture.\n\nPhase 1: Parallel file discovery, reading, parsing, and indexing.\nPhase 2: Two-pass cross-file relationship resolution.",
-        after_help = "Examples:\n  codanna index-parallel src\n  codanna index-parallel --no-progress\n  codanna index-parallel src lib --force"
+        after_help = "Examples:\n  quarry index-parallel src\n  quarry index-parallel --no-progress\n  quarry index-parallel src lib --force"
     )]
     IndexParallel {
         /// Paths to directories to index (uses settings.toml indexed_paths if empty)
@@ -435,7 +435,7 @@ pub enum Commands {
     #[command(
         about = "Initialize and manage project profiles",
         long_about = "Manage project profiles for provider-specific initialization.\n\nProfiles set up project structure, configuration files, and provider integration.",
-        after_help = "Examples:\n  codanna profile init claude\n  codanna profile install claude --source git@github.com:codanna/profiles.git\n  codanna profile list\n  codanna profile status"
+        after_help = "Examples:\n  quarry profile init claude\n  quarry profile install claude --source git@github.com:quarry/profiles.git\n  quarry profile list\n  quarry profile status"
     )]
     Profile {
         #[command(subcommand)]
@@ -449,7 +449,7 @@ pub enum PluginAction {
     /// Install a plugin from a marketplace
     #[command(
         about = "Install a plugin from a marketplace repository",
-        after_help = "Examples:\n  codanna plugin add https://github.com/user/marketplace plugin-name\n  codanna plugin add ./local-marketplace my-plugin --ref v1.0"
+        after_help = "Examples:\n  quarry plugin add https://github.com/user/marketplace plugin-name\n  quarry plugin add ./local-marketplace my-plugin --ref v1.0"
     )]
     Add {
         /// Marketplace repository URL or local path
@@ -474,7 +474,7 @@ pub enum PluginAction {
     /// Remove an installed plugin
     #[command(
         about = "Remove an installed plugin and clean up its files",
-        after_help = "Example:\n  codanna plugin remove plugin-name"
+        after_help = "Example:\n  quarry plugin remove plugin-name"
     )]
     Remove {
         /// Plugin name to remove
@@ -492,7 +492,7 @@ pub enum PluginAction {
     /// Update an installed plugin
     #[command(
         about = "Update a plugin to a newer version",
-        after_help = "Examples:\n  codanna plugin update plugin-name\n  codanna plugin update plugin-name --ref v2.0"
+        after_help = "Examples:\n  quarry plugin update plugin-name\n  quarry plugin update plugin-name --ref v2.0"
     )]
     Update {
         /// Plugin name to update
@@ -514,7 +514,7 @@ pub enum PluginAction {
     /// List installed plugins
     #[command(
         about = "List all installed plugins with their versions",
-        after_help = "Example:\n  codanna plugin list"
+        after_help = "Example:\n  quarry plugin list"
     )]
     List {
         /// Show detailed information
@@ -529,7 +529,7 @@ pub enum PluginAction {
     /// Verify plugin integrity
     #[command(
         about = "Verify that a plugin's files match their expected checksums",
-        after_help = "Examples:\n  codanna plugin verify plugin-name\n  codanna plugin verify --all"
+        after_help = "Examples:\n  quarry plugin verify plugin-name\n  quarry plugin verify --all"
     )]
     Verify {
         /// Plugin name to verify (omit to verify all)
@@ -551,7 +551,7 @@ pub enum DocumentAction {
     /// Index documents from a collection
     #[command(
         about = "Index documents from a configured collection",
-        after_help = "Examples:\n  codanna documents index --collection docs\n  codanna documents index --all\n  codanna documents index --no-progress"
+        after_help = "Examples:\n  quarry documents index --collection docs\n  quarry documents index --all\n  quarry documents index --no-progress"
     )]
     Index {
         /// Collection name to index (from settings.toml)
@@ -574,7 +574,7 @@ pub enum DocumentAction {
     /// Search documents
     #[command(
         about = "Search indexed documents using natural language",
-        after_help = "Examples:\n  codanna documents search \"error handling\"\n  codanna documents search \"authentication\" --collection docs --limit 5\n  codanna documents search query:\"auth\" limit:3 --json"
+        after_help = "Examples:\n  quarry documents search \"error handling\"\n  quarry documents search \"authentication\" --collection docs --limit 5\n  quarry documents search query:\"auth\" limit:3 --json"
     )]
     Search {
         /// Positional arguments (query and/or key:value pairs like limit:5)
@@ -601,7 +601,7 @@ pub enum DocumentAction {
     /// List collections
     #[command(
         about = "List all document collections",
-        after_help = "Example:\n  codanna documents list"
+        after_help = "Example:\n  quarry documents list"
     )]
     List {
         /// Output in JSON format
@@ -612,7 +612,7 @@ pub enum DocumentAction {
     /// Show collection statistics
     #[command(
         about = "Show statistics for a collection",
-        after_help = "Example:\n  codanna documents stats docs"
+        after_help = "Example:\n  quarry documents stats docs"
     )]
     Stats {
         /// Collection name
@@ -626,7 +626,7 @@ pub enum DocumentAction {
     /// Add a collection to settings.toml
     #[command(
         about = "Add a document collection to settings.toml",
-        after_help = "Examples:\n  codanna documents add-collection docs ./docs\n  codanna documents add-collection api-docs ./api --pattern \"**/*.md\""
+        after_help = "Examples:\n  quarry documents add-collection docs ./docs\n  quarry documents add-collection api-docs ./api --pattern \"**/*.md\""
     )]
     AddCollection {
         /// Collection name
@@ -643,7 +643,7 @@ pub enum DocumentAction {
     /// Remove a collection from settings.toml
     #[command(
         about = "Remove a document collection from settings.toml",
-        after_help = "Examples:\n  codanna documents remove-collection docs\n\nNote: Run 'codanna documents index' after to clean the index."
+        after_help = "Examples:\n  quarry documents remove-collection docs\n\nNote: Run 'quarry documents index' after to clean the index."
     )]
     RemoveCollection {
         /// Collection name to remove
@@ -658,7 +658,7 @@ pub enum DocumentAction {
 pub enum RetrieveQuery {
     /// Find a symbol by name
     #[command(
-        after_help = "Examples:\n  codanna retrieve symbol main\n  codanna retrieve symbol symbol_id:1771\n  codanna retrieve symbol name:main --json\n  codanna retrieve symbol MyStruct --json | jq '.file'\n  codanna retrieve symbol main --json --fields=id,name,file_path"
+        after_help = "Examples:\n  quarry retrieve symbol main\n  quarry retrieve symbol symbol_id:1771\n  quarry retrieve symbol name:main --json\n  quarry retrieve symbol MyStruct --json | jq '.file'\n  quarry retrieve symbol main --json --fields=id,name,file_path"
     )]
     Symbol {
         /// Positional arguments (symbol name and/or key:value pairs)
@@ -674,7 +674,7 @@ pub enum RetrieveQuery {
 
     /// Show what functions a given function calls
     #[command(
-        after_help = "Examples:\n  codanna retrieve calls process_file\n  codanna retrieve calls symbol_id:1771\n  codanna retrieve calls function:process_file --json\n  codanna retrieve calls main --json --fields=name,file_path"
+        after_help = "Examples:\n  quarry retrieve calls process_file\n  quarry retrieve calls symbol_id:1771\n  quarry retrieve calls function:process_file --json\n  quarry retrieve calls main --json --fields=name,file_path"
     )]
     Calls {
         /// Positional arguments (function name and/or key:value pairs)
@@ -690,7 +690,7 @@ pub enum RetrieveQuery {
 
     /// Show what functions call a given function
     #[command(
-        after_help = "Examples:\n  codanna retrieve callers main\n  codanna retrieve callers symbol_id:1771\n  codanna retrieve callers function:main --json\n  codanna retrieve callers main --json --fields=name,file_path"
+        after_help = "Examples:\n  quarry retrieve callers main\n  quarry retrieve callers symbol_id:1771\n  quarry retrieve callers function:main --json\n  quarry retrieve callers main --json --fields=name,file_path"
     )]
     Callers {
         /// Positional arguments (function name and/or key:value pairs)
@@ -706,7 +706,7 @@ pub enum RetrieveQuery {
 
     /// Show what types implement a given trait
     #[command(
-        after_help = "Examples:\n  codanna retrieve implementations Parser\n  codanna retrieve implementations trait:Parser --json\n  codanna retrieve implementations Parser --json --fields=name,file_path"
+        after_help = "Examples:\n  quarry retrieve implementations Parser\n  quarry retrieve implementations trait:Parser --json\n  quarry retrieve implementations Parser --json --fields=name,file_path"
     )]
     Implementations {
         /// Positional arguments (trait name and/or key:value pairs)
@@ -722,7 +722,7 @@ pub enum RetrieveQuery {
 
     /// Search for symbols using full-text search
     #[command(
-        after_help = "Examples:\n  # Traditional flag format\n  codanna retrieve search \"parse\" --limit 5 --kind function\n  \n  # Key:value format (Unix-style)\n  codanna retrieve search query:parse limit:5 kind:function\n  \n  # Mixed format\n  codanna retrieve search \"parse\" limit:5 --json\n  codanna retrieve search \"parse\" --json --fields=name,file_path"
+        after_help = "Examples:\n  # Traditional flag format\n  quarry retrieve search \"parse\" --limit 5 --kind function\n  \n  # Key:value format (Unix-style)\n  quarry retrieve search query:parse limit:5 kind:function\n  \n  # Mixed format\n  quarry retrieve search \"parse\" limit:5 --json\n  quarry retrieve search \"parse\" --json --fields=name,file_path"
     )]
     Search {
         /// Positional arguments (query and/or key:value pairs)
@@ -752,7 +752,7 @@ pub enum RetrieveQuery {
 
     /// Show information about a symbol
     #[command(
-        after_help = "Examples:\n  codanna retrieve describe SimpleIndexer\n  codanna retrieve describe symbol:SimpleIndexer --json\n  codanna retrieve describe main --json --fields=name,kind,calls"
+        after_help = "Examples:\n  quarry retrieve describe SimpleIndexer\n  quarry retrieve describe symbol:SimpleIndexer --json\n  quarry retrieve describe main --json --fields=name,kind,calls"
     )]
     Describe {
         /// Positional arguments (symbol name and/or key:value pairs)

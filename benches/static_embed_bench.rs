@@ -1,14 +1,11 @@
 //! Benchmark: OptimizedStaticModel (int8 runtime) — sequential vs rayon.
 //!
-//! Requires a local model at `~/.codanna/models/potion-retrieval-32M-int8/`.
+//! Requires a local model at `~/.quarry/models/potion-retrieval-32M-int8/`.
 //! Run with: `cargo bench --bench static_embed_bench`
 
 use criterion::Criterion;
 
-const MODEL_PATH: &str = concat!(
-    env!("HOME"),
-    "/.codanna/models/potion-retrieval-32M-int8"
-);
+const MODEL_PATH: &str = concat!(env!("HOME"), "/.quarry/models/potion-retrieval-32M-int8");
 
 /// Read current process RSS in bytes (macOS) via `ps`.
 fn rss_bytes() -> usize {
@@ -26,7 +23,7 @@ fn rss_bytes() -> usize {
 
 fn bench_single_short(c: &mut Criterion) {
     let rss_before = rss_bytes();
-    let model = codanna::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
+    let model = quarry::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
         .expect("optimized model not found");
     let rss_after = rss_bytes();
     let delta_mb = (rss_after.saturating_sub(rss_before)) as f64 / 1_048_576.0;
@@ -38,9 +35,10 @@ fn bench_single_short(c: &mut Criterion) {
 }
 
 fn bench_single_long(c: &mut Criterion) {
-    let model = codanna::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
+    let model = quarry::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
         .expect("optimized model not found");
-    let long_text = "fn process_data(input: &[u8]) -> Result<Vec<OutputRecord>, ProcessingError> { \
+    let long_text =
+        "fn process_data(input: &[u8]) -> Result<Vec<OutputRecord>, ProcessingError> { \
         let mut results = Vec::with_capacity(input.len() / 64); \
         for chunk in input.chunks(64) { \
             let parsed = Parser::new(chunk).parse_record()?; \
@@ -51,14 +49,14 @@ fn bench_single_long(c: &mut Criterion) {
         } \
         Ok(results) \
     }"
-    .repeat(5);
+        .repeat(5);
     c.bench_function("optimized/single_long", |b| {
         b.iter(|| model.encode_single(&long_text));
     });
 }
 
 fn bench_batch_100_sequential(c: &mut Criterion) {
-    let model = codanna::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
+    let model = quarry::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
         .expect("optimized model not found");
     let texts: Vec<String> = (0..100)
         .map(|i| format!("fn symbol_{i}(arg: &str) -> Result<(), Error> {{ process(arg) }}"))
@@ -69,7 +67,7 @@ fn bench_batch_100_sequential(c: &mut Criterion) {
 }
 
 fn bench_batch_100_rayon(c: &mut Criterion) {
-    let model = codanna::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
+    let model = quarry::semantic::OptimizedStaticModel::from_local(MODEL_PATH)
         .expect("optimized model not found");
     let texts: Vec<String> = (0..100)
         .map(|i| format!("fn symbol_{i}(arg: &str) -> Result<(), Error> {{ process(arg) }}"))

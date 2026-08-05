@@ -1,10 +1,10 @@
-use codanna::parsing::gdscript::{
+use quarry::parsing::gdscript::{
     GdscriptBehavior, GdscriptInheritanceResolver, GdscriptResolutionContext,
 };
-use codanna::parsing::{
+use quarry::parsing::{
     InheritanceResolver, LanguageBehavior, ResolutionScope, ScopeLevel, ScopeType,
 };
-use codanna::{FileId, SymbolId};
+use quarry::{FileId, SymbolId};
 
 #[test]
 fn test_gdscript_resolution_context_basic() {

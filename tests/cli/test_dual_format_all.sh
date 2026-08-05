@@ -7,7 +7,7 @@ echo "=== DUAL FORMAT COMPREHENSIVE TEST SUITE ==="
 echo "Testing all retrieve commands with both formats"
 echo ""
 
-BINARY="./target/release/codanna"
+BINARY="./target/release/quarry"
 
 # Color codes for output
 GREEN='\033[0;32m'

@@ -1,7 +1,7 @@
 /target
-.codanna/
-.codanna/index/
-.codanna-test-local/
+.quarry/
+.quarry/index/
+.quarry-test-local/
 .fastembed_cache
 .logs/
 
@@ -85,3 +85,7 @@ vendors/fastembed-rs
 .venv-quant/
 .tmp-static-int8/
 *.data
+
+# stray build artifacts
+codanna-new
+quarry-new

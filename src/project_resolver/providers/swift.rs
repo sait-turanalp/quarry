@@ -59,8 +59,8 @@ impl SwiftProvider {
     /// Example: /project/Sources/MyModule/Types/User.swift -> MyModule.Types
     pub fn module_path_for_file(&self, file_path: &Path) -> Option<String> {
         // Load cached resolution rules
-        let codanna_dir = Path::new(crate::init::local_dir_name());
-        let persistence = ResolutionPersistence::new(codanna_dir);
+        let quarry_dir = Path::new(crate::init::local_dir_name());
+        let persistence = ResolutionPersistence::new(quarry_dir);
 
         let index = persistence.load("swift").ok()?;
 
@@ -311,7 +311,7 @@ let package = Package(
         // Given a Package.swift and settings
         let temp_dir = TempDir::new().unwrap();
         let package_path = temp_dir.path().join("Package.swift");
-        let codanna_dir = temp_dir.path().join(crate::init::local_dir_name());
+        let quarry_dir = temp_dir.path().join(crate::init::local_dir_name());
 
         let package_content = r#"// swift-tools-version:5.5
 import PackageDescription
@@ -346,7 +346,7 @@ config_files = ["{}"]
         let provider = SwiftProvider::new();
 
         std::env::set_current_dir(&temp_dir).unwrap();
-        fs::create_dir_all(&codanna_dir).unwrap();
+        fs::create_dir_all(&quarry_dir).unwrap();
 
         provider.rebuild_cache(&settings).unwrap();
 
@@ -354,7 +354,7 @@ config_files = ["{}"]
         std::env::set_current_dir(&original_dir).unwrap();
 
         // Then swift_resolution.json should exist
-        let cache_path = codanna_dir.join("index/resolvers/swift_resolution.json");
+        let cache_path = quarry_dir.join("index/resolvers/swift_resolution.json");
         assert!(
             cache_path.exists(),
             "Cache file should be created at {}",

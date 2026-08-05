@@ -1,6 +1,6 @@
-use codanna::parsing::LanguageParser;
-use codanna::parsing::csharp::CSharpParser;
-use codanna::types::{FileId, SymbolCounter};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::csharp::CSharpParser;
+use quarry::types::{FileId, SymbolCounter};
 
 #[test]
 fn test_csharp_parser_basic() {

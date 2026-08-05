@@ -53,7 +53,7 @@ pub fn install_profile(
     provider_id: Option<&str>,
     source: Option<ProviderSource>,
 ) -> ProfileResult<()> {
-    let lockfile_path = workspace.join(".codanna/profiles.lock.json");
+    let lockfile_path = workspace.join(".quarry/profiles.lock.json");
     let mut lockfile = ProfileLockfile::load(&lockfile_path)?;
     let mut backup: Option<ProfileBackup> = None;
 
@@ -166,7 +166,7 @@ pub fn install_profile(
     }
 
     // 8. Update team profiles configuration (with rollback on error)
-    let profiles_config_path = workspace.join(".codanna/profiles.json");
+    let profiles_config_path = workspace.join(".quarry/profiles.json");
     let mut profiles_config = ProfilesConfig::load(&profiles_config_path)?;
 
     // Build profile reference (name@provider or just name)

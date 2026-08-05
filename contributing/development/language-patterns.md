@@ -1409,7 +1409,7 @@ fn extract_signature(&self, node: Node, code: &str) -> String {
 
 - [ ] Register in `src/parsing/registry.rs:initialize_registry()`
 - [ ] Export in `src/parsing/mod.rs`
-- [ ] Add to `.codanna/settings.toml` default generation
+- [ ] Add to `.quarry/settings.toml` default generation
 - [ ] Run full test suite: `cargo test`
 - [ ] Run audit: `cargo test audit_{language} -- --nocapture`
 

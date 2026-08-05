@@ -82,8 +82,8 @@ jobs:
         run: |
           set -euxo pipefail
 
-          bin="target/${{ matrix.target }}/release/codanna"
-          dst="codanna-${{ env.version }}-${{ matrix.name }}"
+          bin="target/${{ matrix.target }}/release/quarry"
+          dst="quarry-${{ env.version }}-${{ matrix.name }}"
 
           mkdir "$dst"
           cp "$bin" "$dst/"
@@ -106,8 +106,8 @@ jobs:
         run: |
           set -euxo pipefail
 
-          bin="target/${{ matrix.target }}/release/codanna.exe"
-          dst="codanna-${{ env.version }}-${{ matrix.name }}"
+          bin="target/${{ matrix.target }}/release/quarry.exe"
+          dst="quarry-${{ env.version }}-${{ matrix.name }}"
 
           mkdir "$dst"
           cp "$bin" "$dst/"
@@ -125,8 +125,8 @@ jobs:
           name: ${{ matrix.name }}
           retention-days: 1
           path: |
-            codanna-*.tar.xz
-            codanna-*.zip
+            quarry-*.tar.xz
+            quarry-*.zip
             *.sha256
             *.sha512
 
@@ -146,8 +146,8 @@ jobs:
 
       - name: Generate bulk checksums
         run: |
-          shasum -a 256 codanna-* | tee SHA256SUMS
-          shasum -a 512 codanna-* | tee SHA512SUMS
+          shasum -a 256 quarry-* | tee SHA256SUMS
+          shasum -a 512 quarry-* | tee SHA512SUMS
 
       - name: Create manifest
         run: |
@@ -160,11 +160,11 @@ jobs:
             echo "  \"artifacts\": ["
 
             first=true
-            for file in codanna-*.tar.xz codanna-*.zip; do
+            for file in quarry-*.tar.xz quarry-*.zip; do
               [[ -f "$file" ]] || continue
 
-              # Extract platform from filename: codanna-0.8.9-linux-x64.tar.xz -> linux-x64
-              platform=$(echo "$file" | sed -n 's/codanna-[^-]*-\([^.]*\)\..*/\1/p')
+              # Extract platform from filename: quarry-0.8.9-linux-x64.tar.xz -> linux-x64
+              platform=$(echo "$file" | sed -n 's/quarry-[^-]*-\([^.]*\)\..*/\1/p')
               sha256=$(shasum -a 256 "$file" | cut -d' ' -f1)
               url="https://github.com/${repo}/releases/download/v${version}/${file}"
 
@@ -191,8 +191,8 @@ jobs:
           draft: true
           files: |
             dist-manifest.json
-            codanna-*.tar.xz
-            codanna-*.zip
+            quarry-*.tar.xz
+            quarry-*.zip
             *SUMS
             *.sha256
             *.sha512

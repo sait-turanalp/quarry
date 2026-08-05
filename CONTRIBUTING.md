@@ -1,4 +1,4 @@
-# Contributing to Codanna
+# Contributing to Quarry
 
 See our [Contributing Guide](./contributing/README.md) for:
 
@@ -13,7 +13,7 @@ See our [Contributing Guide](./contributing/README.md) for:
 ```bash
 # Fork and clone
 git clone https://github.com/bartolli/codanna.git
-cd codanna
+cd quarry
 
 # Build
 cargo build --release --all-features

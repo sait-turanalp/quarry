@@ -1,6 +1,6 @@
 //! Tests for profile resolution
 
-use codanna::profiles::resolver::ProfileResolver;
+use quarry::profiles::resolver::ProfileResolver;
 
 #[test]
 fn test_resolve_from_manifest_only() {

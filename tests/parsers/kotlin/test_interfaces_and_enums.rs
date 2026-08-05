@@ -1,6 +1,6 @@
-use codanna::parsing::kotlin::parser::KotlinParser;
-use codanna::parsing::parser::LanguageParser;
-use codanna::types::{FileId, SymbolCounter, SymbolKind};
+use quarry::parsing::kotlin::parser::KotlinParser;
+use quarry::parsing::parser::LanguageParser;
+use quarry::types::{FileId, SymbolCounter, SymbolKind};
 
 #[test]
 fn test_interface_declaration() {

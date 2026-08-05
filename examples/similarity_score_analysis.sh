@@ -18,7 +18,7 @@ RESET='\033[0m'
 # Clear screen for better presentation
 printf '\033[3J\033[H\033[2J'
 
-echo -e "${BOLD}${CYAN}                    CODANNA SIMILARITY SCORE ANALYSIS"
+echo -e "${BOLD}${CYAN}                    QUARRY SIMILARITY SCORE ANALYSIS"
 echo -e "${RESET}${DIM}────────────────────────────────────────────────────────────────────────────────${RESET}"
 echo
 echo -e "${DIM}Understanding how language filtering affects similarity scores${RESET}"
@@ -53,7 +53,7 @@ echo -e "${DIM}Computing similarity against ALL symbols in the index${RESET}"
 echo
 
 # Run without filter and capture results
-NO_FILTER_RESULTS=$(./target/release/codanna mcp semantic_search_docs query:"$QUERY" limit:8 --json 2>/dev/null)
+NO_FILTER_RESULTS=$(./target/release/quarry mcp semantic_search_docs query:"$QUERY" limit:8 --json 2>/dev/null)
 
 # Parse and display results
 echo "$NO_FILTER_RESULTS" | python3 -c "
@@ -107,7 +107,7 @@ for LANG in rust python typescript php; do
     echo -e "${DIM}────────────────────────────────────────────────────────────────────────────────${RESET}"
     
     # Run with language filter
-    FILTERED_RESULTS=$(./target/release/codanna mcp semantic_search_docs query:"$QUERY" lang:$LANG limit:5 --json 2>/dev/null)
+    FILTERED_RESULTS=$(./target/release/quarry mcp semantic_search_docs query:"$QUERY" lang:$LANG limit:5 --json 2>/dev/null)
     
     # Parse and display
     echo "$FILTERED_RESULTS" | python3 -c "
@@ -245,5 +245,5 @@ EOF
 
 echo
 echo -e "${DIM}────────────────────────────────────────────────────────────────────────────────${RESET}"
-echo -e "${BOLD}${CYAN}                      Codanna - X-ray vision for your code"
+echo -e "${BOLD}${CYAN}                      Quarry - X-ray vision for your code"
 echo -e "${RESET}${DIM}────────────────────────────────────────────────────────────────────────────────${RESET}"

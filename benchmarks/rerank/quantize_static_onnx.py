@@ -372,7 +372,7 @@ def main() -> None:
     )
     nodes_to_exclude = _resolve_nodes_to_exclude(src_model, pattern_list)
 
-    # Build destination layout expected by codanna custom model loader.
+    # Build destination layout expected by quarry custom model loader.
     _copy_metadata_files(model_dir, out_dir)
     out_onnx_dir = out_dir / "onnx"
     out_onnx_dir.mkdir(parents=True, exist_ok=True)

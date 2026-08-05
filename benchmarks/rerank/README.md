@@ -18,7 +18,7 @@ Generate labeling candidates (`top-30` by default):
 
 ```bash
 python3 benchmarks/rerank/prepare_candidates.py \
-  --bin /path/to/codanna \
+  --bin /path/to/quarry \
   --config /path/to/settings.toml \
   --queries /path/to/queries.v1.jsonl \
   --out /tmp/rerank-labeling \
@@ -69,11 +69,11 @@ Validation requires:
 
 ```bash
 benchmarks/rerank/run_stage1_benchmark.sh \
-  /path/to/codanna \
+  /path/to/quarry \
   /path/to/settings.toml \
   /path/to/queries.v1.jsonl \
   /path/to/qrels.v1.jsonl \
-  /tmp/codanna-rerank-real \
+  /tmp/quarry-rerank-real \
   benchmarks/rerank/profiles.stage1.toml
 ```
 
@@ -93,7 +93,7 @@ During execution, benchmark writes partial outputs so long runs are observable:
 ## 6) Profile matrix
 
 `profiles.stage1.toml` defines Jina sweep profiles.
-`baseline_current_default` is auto-included by `codanna benchmark-rerank`.
+`baseline_current_default` is auto-included by `quarry benchmark-rerank`.
 
 ## 7) One-command static INT8 pipeline (Jina v1)
 
@@ -135,14 +135,14 @@ benchmarks/rerank/run_static_int8_pipeline.sh --mode prod
 ```bash
 benchmarks/rerank/run_static_int8_pipeline.sh \
   --mode fast \
-  --model-src ~/.codanna/models/models--jinaai--jina-reranker-v1-turbo-en/snapshots/<hash> \
-  --config /tmp/codanna-rerank-realdata/settings.bench.toml \
-  --queries /tmp/codanna-rerank-realdata/queries.v1.jsonl \
-  --qrels /tmp/codanna-rerank-realdata/qrels.v1.jsonl \
-  --calibration-jsonl /tmp/codanna-rerank-realdata/candidates.raw.jsonl \
+  --model-src ~/.quarry/models/models--jinaai--jina-reranker-v1-turbo-en/snapshots/<hash> \
+  --config /tmp/quarry-rerank-realdata/settings.bench.toml \
+  --queries /tmp/quarry-rerank-realdata/queries.v1.jsonl \
+  --qrels /tmp/quarry-rerank-realdata/qrels.v1.jsonl \
+  --calibration-jsonl /tmp/quarry-rerank-realdata/candidates.raw.jsonl \
   --calibration-method minmax \
   --quant-max-length 512 \
-  --out-root /tmp/codanna-static-int8
+  --out-root /tmp/quarry-static-int8
 ```
 
 Notes:
@@ -181,15 +181,15 @@ Runner:
 
 ```bash
 benchmarks/rerank/run_dynamic_runtime_pipeline.sh \
-  --out /tmp/codanna-dynamic-runtime
+  --out /tmp/quarry-dynamic-runtime
 ```
 
 Outputs:
 
-- `/tmp/codanna-dynamic-runtime/summary_table.md`
-- `/tmp/codanna-dynamic-runtime/summary.json`
-- `/tmp/codanna-dynamic-runtime/per_query.json`
-- `/tmp/codanna-dynamic-runtime/decision.md`
+- `/tmp/quarry-dynamic-runtime/summary_table.md`
+- `/tmp/quarry-dynamic-runtime/summary.json`
+- `/tmp/quarry-dynamic-runtime/per_query.json`
+- `/tmp/quarry-dynamic-runtime/decision.md`
 
 ## 9) Compare track-1 vs track-2
 
@@ -201,9 +201,9 @@ Generate one markdown table comparing:
 
 ```bash
 python3 benchmarks/rerank/compare_track_results.py \
-  --dynamic-summary /tmp/codanna-dynamic-runtime/summary.json \
-  --static-summary /tmp/codanna-static-int8/run-<ts>/benchmark/summary.json \
-  --out /tmp/codanna-rerank-final-decision.md
+  --dynamic-summary /tmp/quarry-dynamic-runtime/summary.json \
+  --static-summary /tmp/quarry-static-int8/run-<ts>/benchmark/summary.json \
+  --out /tmp/quarry-rerank-final-decision.md
 ```
 
 ## 10) Prefilter v1 sweep vs current Jina TN30
@@ -220,11 +220,11 @@ Matrix:
 Example:
 
 ```bash
-codanna -c /tmp/codanna-rerank-realdata/settings.bench_baseline_off_tmpindex.toml benchmark-rerank \
-  --queries /tmp/codanna-rerank-realdata/queries.v1x2.jsonl \
-  --qrels /tmp/codanna-rerank-realdata/qrels.v1x2.jsonl \
+quarry -c /tmp/quarry-rerank-realdata/settings.bench_baseline_off_tmpindex.toml benchmark-rerank \
+  --queries /tmp/quarry-rerank-realdata/queries.v1x2.jsonl \
+  --qrels /tmp/quarry-rerank-realdata/qrels.v1x2.jsonl \
   --profiles benchmarks/rerank/profiles.prefilter_v1_vs_base.toml \
-  --out /tmp/codanna-prefilter-v1-30q \
+  --out /tmp/quarry-prefilter-v1-30q \
   --cold-runs 1 \
   --warm-runs 2 \
   --limit 10 \

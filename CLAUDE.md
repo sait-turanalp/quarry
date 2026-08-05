@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Codanna is a Rust-based code intelligence tool that provides semantic search, call graph analysis, and relationship tracking for AI coding assistants via the MCP (Model Context Protocol). It parses source code using tree-sitter, indexes symbols into Tantivy, generates vector embeddings (optimized int8 static model for model2vec, fastembed for transformer models), and exposes everything through MCP tools.
+Quarry is a Rust-based code intelligence tool that provides semantic search, call graph analysis, and relationship tracking for AI coding assistants via the MCP (Model Context Protocol). It parses source code using tree-sitter, indexes symbols into Tantivy, generates vector embeddings (optimized int8 static model for model2vec, fastembed for transformer models), and exposes everything through MCP tools.
 
 ## Build & Development Commands
 
@@ -82,9 +82,9 @@ cargo run -- parse file.rs --all-nodes  # include anonymous nodes
 
 ### Configuration
 
-Settings live in `.codanna/settings.toml`. Key config sections: `indexing`, `semantic_search`, `mcp`, `server`, `file_watch`, `logging`, `documents`, `guidance`, and per-language `[languages.*]` with optional `config_files` for project resolution.
+Settings live in `.quarry/settings.toml`. Key config sections: `indexing`, `semantic_search`, `mcp`, `server`, `file_watch`, `logging`, `documents`, `guidance`, and per-language `[languages.*]` with optional `config_files` for project resolution.
 
-Environment variable overrides use `CI_` prefix with double underscore nesting: `CI_INDEXING__PARALLELISM=8`.
+Environment variable overrides use `CI_` prefix with double underscore nesting: `QUARRY_INDEXING__PARALLELISM=8`.
 
 ## Rust Coding Conventions (Project-Specific)
 
@@ -143,14 +143,14 @@ Foot-guns learned the hard way:
   (measured d=0.000) and doubles latency.
 - **int8 quantization of a model2vec table must use a single global symmetric scale.**
   Per-row scales do not cancel under L2 normalisation and corrupt the model.
-- A static embedding model must live at `~/.codanna/models/<name>-int8/` with
+- A static embedding model must live at `~/.quarry/models/<name>-int8/` with
   `model.safetensors` (I8 `embeddings` tensor), `tokenizer.json`, `config.json`.
 - Noise floor on the 123-query holdout is **±0.016**; treat anything under 0.05 as noise
   and confirm with paired win/loss counts, never with a mean difference alone.
-- **`codanna init` freezes every default into `settings.toml`** (`toml::to_string_pretty`
+- **`quarry init` freezes every default into `settings.toml`** (`toml::to_string_pretty`
   over the whole `Settings::default()`), so changing a Rust default reaches new projects
   only — every already-initialised project stays pinned to the config it got on day one.
-  After changing a default, update the eval repos' `.codanna/settings.toml` too, or the
+  After changing a default, update the eval repos' `.quarry/settings.toml` too, or the
   measurement silently reports the old behaviour.
 - **`top_k_fused` is the ceiling on file-level recall,** not a ranking knob. With
   `diversity_max_per_file = 1` the fused pool caps how many *distinct files* can ever be

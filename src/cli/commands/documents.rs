@@ -90,8 +90,8 @@ pub fn run(action: DocumentAction, config: &Settings, cli_config: Option<&PathBu
                 .or_else(|| params.get("query").cloned())
                 .unwrap_or_else(|| {
                     eprintln!("Error: search requires a query");
-                    eprintln!("Usage: codanna documents search \"query\" [options]");
-                    eprintln!("   or: codanna documents search query:\"search text\" [options]");
+                    eprintln!("Usage: quarry documents search \"query\" [options]");
+                    eprintln!("   or: quarry documents search query:\"search text\" [options]");
                     std::process::exit(1);
                 });
 
@@ -111,7 +111,7 @@ pub fn run(action: DocumentAction, config: &Settings, cli_config: Option<&PathBu
                 Err(e) => {
                     if json {
                         let envelope: Envelope<()> = Envelope::error(ResultCode::IndexError, &e)
-                            .with_hint("Run 'codanna documents index' to create the index");
+                            .with_hint("Run 'quarry documents index' to create the index");
                         print_json(&envelope);
                         std::process::exit(2);
                     }
@@ -141,7 +141,7 @@ pub fn run(action: DocumentAction, config: &Settings, cli_config: Option<&PathBu
                                 .with_query(&query_text)
                                 .with_duration_ms(duration_ms)
                                 .with_entity_type(EnvelopeEntityType::Document)
-                                .with_hint("Try a different query or check indexed collections with 'codanna documents list'")
+                                .with_hint("Try a different query or check indexed collections with 'quarry documents list'")
                         } else {
                             Envelope::success(results)
                                 .with_message(format!("Found {count} matching documents"))
@@ -348,7 +348,7 @@ fn run_index<F>(
         if stale_collections.is_empty() {
             eprintln!("No collections configured in settings.toml");
             eprintln!("\nTo add a collection:");
-            eprintln!("  codanna documents add-collection <name> <path>");
+            eprintln!("  quarry documents add-collection <name> <path>");
         } else {
             eprintln!("Cleaned stale collections. No collections to index.");
         }
@@ -469,7 +469,7 @@ fn run_add_collection(
         custom_path.clone()
     } else {
         Settings::find_workspace_config().unwrap_or_else(|| {
-            eprintln!("Error: No configuration file found. Run 'codanna init' first.");
+            eprintln!("Error: No configuration file found. Run 'quarry init' first.");
             std::process::exit(1);
         })
     };
@@ -554,8 +554,8 @@ fn run_add_collection(
 
     println!("Configuration saved to: {}", config_path.display());
     println!("\nTo index this collection:");
-    println!("  codanna documents index --collection {name}");
-    println!("  codanna documents index  # indexes all collections");
+    println!("  quarry documents index --collection {name}");
+    println!("  quarry documents index  # indexes all collections");
 }
 
 fn run_remove_collection(_config: &Settings, cli_config: Option<&PathBuf>, name: String) {
@@ -564,7 +564,7 @@ fn run_remove_collection(_config: &Settings, cli_config: Option<&PathBuf>, name:
         custom_path.clone()
     } else {
         Settings::find_workspace_config().unwrap_or_else(|| {
-            eprintln!("Error: No configuration file found. Run 'codanna init' first.");
+            eprintln!("Error: No configuration file found. Run 'quarry init' first.");
             std::process::exit(1);
         })
     };
@@ -614,5 +614,5 @@ fn run_remove_collection(_config: &Settings, cli_config: Option<&PathBuf>, name:
     }
 
     println!("\nTo clean the index, run:");
-    println!("  codanna documents index");
+    println!("  quarry documents index");
 }

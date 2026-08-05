@@ -4,7 +4,7 @@
 
 LINKS fazi Tantivy'ye 642K relationship documani yaziyor. Darbogazin %80'i Tantivy `commit_batch()` ve per-call overhead'iydi. Bu dokuman Tantivy write path'inde yapilan 3 optimizasyonu anlatir.
 
-Codanna'nin indeksleme pipeline'i 3 ana fazdan olusuyor:
+Quarry'nin indeksleme pipeline'i 3 ana fazdan olusuyor:
 
 ```
 Phase 1 (PARSE+COLLECT+EMBED)  →  Phase 2 (LINKS)  →  Chunk Rebuild

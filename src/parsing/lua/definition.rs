@@ -1,6 +1,6 @@
 //! Lua language definition and registration
 //!
-//! This module defines the Lua language support for Codanna, providing
+//! This module defines the Lua language support for Quarry, providing
 //! tree-sitter-based parsing and symbol extraction for Lua codebases.
 //!
 //! ## AST Node Types and Symbol Mappings

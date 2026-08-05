@@ -1,7 +1,7 @@
-# Codanna ignore patterns (gitignore syntax)
+# Quarry ignore patterns (gitignore syntax)
 # https://git-scm.com/docs/gitignore
 #
-# This file tells codanna which files to exclude from indexing.
+# This file tells quarry which files to exclude from indexing.
 # Each line specifies a pattern. Patterns follow the same rules as .gitignore.
 
 # Build artifacts
@@ -34,8 +34,8 @@ dist/
 *~
 .DS_Store
 
-# Codanna's own directory
-.codanna/
+# Quarry's own directory
+.quarry/
 
 # Dependency directories
 node_modules/

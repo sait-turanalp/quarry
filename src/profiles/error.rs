@@ -35,22 +35,22 @@ pub enum ProfileError {
     AlreadyInstalled { name: String, version: String },
 
     #[error(
-        "Profile '{name}' is not installed\nSuggestion: Use 'codanna profile install' to install it first"
+        "Profile '{name}' is not installed\nSuggestion: Use 'quarry profile install' to install it first"
     )]
     NotInstalled { name: String },
 
     #[error(
-        "Provider '{provider}' not found\nSuggestion: Use 'codanna profile provider list' to see registered providers"
+        "Provider '{provider}' not found\nSuggestion: Use 'quarry profile provider list' to see registered providers"
     )]
     ProviderNotFound { provider: String },
 
     #[error(
-        "Profile '{profile}' not found in provider '{provider}'\nSuggestion: Check available profiles with 'codanna profile provider list --verbose'"
+        "Profile '{profile}' not found in provider '{provider}'\nSuggestion: Check available profiles with 'quarry profile provider list --verbose'"
     )]
     ProfileNotFoundInProvider { profile: String, provider: String },
 
     #[error(
-        "Profile '{profile}' not found in any registered provider\nSuggestion: Register a provider with 'codanna profile provider add <source>'"
+        "Profile '{profile}' not found in any registered provider\nSuggestion: Register a provider with 'quarry profile provider add <source>'"
     )]
     ProfileNotFoundInAnyProvider { profile: String },
 

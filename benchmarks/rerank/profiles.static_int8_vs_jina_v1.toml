@@ -1,5 +1,5 @@
 # Static INT8 vs current Jina v1 baseline.
-# baseline_current_default is auto-added by codanna benchmark-rerank.
+# baseline_current_default is auto-added by quarry benchmark-rerank.
 
 [defaults]
 timeout_ms = 15000
@@ -18,7 +18,7 @@ post_rerank_heuristics_enabled = false
 [[profiles]]
 name = "jina_v1_static_int8_tn30_heur_off"
 # Replace with your generated static model path.
-model = "custom:/tmp/codanna-static-int8/latest/model_static_int8"
+model = "custom:/tmp/quarry-static-int8/latest/model_static_int8"
 top_n = 30
 post_rerank_heuristics_enabled = false
 

@@ -1,9 +1,9 @@
 //! Integration test for C resolution using real C code
 
-use codanna::parsing::LanguageBehavior;
-use codanna::parsing::c::parser::CParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, SymbolKind};
+use quarry::parsing::LanguageBehavior;
+use quarry::parsing::c::parser::CParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, SymbolKind};
 
 #[test]
 fn test_c_resolution_with_real_code() {
@@ -16,7 +16,7 @@ fn test_c_resolution_with_real_code() {
 
     // Create parser and behavior
     let mut parser = CParser::new().expect("Failed to create CParser");
-    let behavior = codanna::parsing::c::behavior::CBehavior::new();
+    let behavior = quarry::parsing::c::behavior::CBehavior::new();
     let file_id = FileId(1);
     let mut symbol_counter = SymbolCounter::new();
 
@@ -39,7 +39,7 @@ fn test_c_resolution_with_real_code() {
         context.add_symbol(
             symbol.name.to_string(),
             symbol.id,
-            codanna::parsing::resolution::ScopeLevel::Module,
+            quarry::parsing::resolution::ScopeLevel::Module,
         );
     }
 
@@ -170,16 +170,16 @@ fn test_c_resolution_with_real_code() {
 #[test]
 fn test_c_resolution_context_basic() {
     // Basic unit test for context creation
-    let behavior = codanna::parsing::c::behavior::CBehavior::new();
+    let behavior = quarry::parsing::c::behavior::CBehavior::new();
     let file_id = FileId(1);
     let mut context = behavior.create_resolution_context(file_id);
 
     // Add a test symbol manually
-    let symbol_id = codanna::SymbolId(100);
+    let symbol_id = quarry::SymbolId(100);
     context.add_symbol(
         "test_func".to_string(),
         symbol_id,
-        codanna::parsing::resolution::ScopeLevel::Module,
+        quarry::parsing::resolution::ScopeLevel::Module,
     );
 
     // Test resolution

@@ -16,19 +16,19 @@ This benchmark compares indexing runtime between two profiles:
 
 ```bash
 benchmarks/index/run_force_index_ab.sh \
-  --bin /Users/sait/Documents/lut-app/codanna/target/release/codanna \
+  --bin /Users/sait/Documents/lut-app/quarry/target/release/quarry \
   --repo /Users/sait/Documents/opencode-dev \
-  --config /Users/sait/Documents/opencode-dev/.codanna/settings.toml \
-  --out /tmp/codanna-index-force-ab
+  --config /Users/sait/Documents/opencode-dev/.quarry/settings.toml \
+  --out /tmp/quarry-index-force-ab
 ```
 
 Dry-run:
 
 ```bash
 benchmarks/index/run_force_index_ab.sh \
-  --bin /Users/sait/Documents/lut-app/codanna/target/release/codanna \
+  --bin /Users/sait/Documents/lut-app/quarry/target/release/quarry \
   --repo /Users/sait/Documents/opencode-dev \
-  --config /Users/sait/Documents/opencode-dev/.codanna/settings.toml \
+  --config /Users/sait/Documents/opencode-dev/.quarry/settings.toml \
   --dry-run
 ```
 

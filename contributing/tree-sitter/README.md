@@ -50,12 +50,12 @@ All scripts are located in `contributing/tree-sitter/scripts/`:
 | `update-grammar-lock.sh` | Generate/update grammar version lockfile | None | `./scripts/update-grammar-lock.sh` |
 | `check-grammar-updates.sh` | Check for remote grammar updates | None | `./scripts/check-grammar-updates.sh` |
 | `explore-ast.sh` | Parse ANY file and display its AST | File path + mode | `./scripts/explore-ast.sh file.ts both` |
-| `compare-nodes.sh` | Compare codanna with tree-sitter | Language or file path | See below |
+| `compare-nodes.sh` | Compare quarry with tree-sitter | Language or file path | See below |
 
 ### explore-ast.sh
-Parse files with codanna and/or tree-sitter:
+Parse files with quarry and/or tree-sitter:
 ```bash
-# Default: Use codanna parse (named nodes only)
+# Default: Use quarry parse (named nodes only)
 ./contributing/tree-sitter/scripts/explore-ast.sh examples/rust/main.rs
 
 # Use tree-sitter
@@ -73,7 +73,7 @@ Parse files with codanna and/or tree-sitter:
   - Shows differences between parsers
 
 - **File mode**: `./contributing/tree-sitter/scripts/compare-nodes.sh path/to/file.ts`
-  - Compares AST nodes between codanna and tree-sitter
+  - Compares AST nodes between quarry and tree-sitter
   - Saves detailed output to `{filename}_comparison.log`
   - Shows matching statistics and differences
 

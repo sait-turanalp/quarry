@@ -1,5 +1,5 @@
-use codanna::parsing::LanguageParser;
-use codanna::parsing::kotlin::KotlinParser;
+use quarry::parsing::LanguageParser;
+use quarry::parsing::kotlin::KotlinParser;
 
 #[test]
 fn test_kotlin_readwritepgclient_example() {

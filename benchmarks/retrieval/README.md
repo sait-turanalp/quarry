@@ -26,7 +26,7 @@ cd eval/django && git checkout $(git rev-parse origin/main~900)
 python3 build_eval_set.py eval/django $(git -C eval/django rev-parse HEAD) eval/all.jsonl 600
 
 # 3) Indexle
-cd eval/django && codanna init && codanna index . --force
+cd eval/django && quarry init && quarry index . --force
 
 # 4) Config süpürmesi (tek process, sorgu ~4ms)
 python3 sweep.py eval/tune.jsonl eval/django <bin> spec.json
@@ -39,7 +39,7 @@ python3 expand_eval.py eval/holdout.jsonl eval/django <bin> per_query.json
 ```
 
 `quantize_static_int8.py` bir model2vec safetensors'ı `OptimizedStaticModel`'in
-beklediği int8 formata çevirir → `~/.codanna/models/<isim>-int8/`.
+beklediği int8 formata çevirir → `~/.quarry/models/<isim>-int8/`.
 
 ## Çok repolu suite (tek repo kanıt değildir)
 
@@ -71,10 +71,10 @@ python3 coverage.py <eval.jsonl> <repo> <bin> [label]   # -> <eval>.checked.json
 ```
 
 Bu tuzağa iki kez düştük:
-1. codanna varsayılan olarak test dosyalarını indekslemiyor; Go ve TypeScript testleri
+1. quarry varsayılan olarak test dosyalarını indekslemiyor; Go ve TypeScript testleri
    kaynağın yanına koyuyor (`pathparser_test.go`, `__tests__/x.spec.ts`), Python/Rust ise
    ayrı `tests/` dizinine. Sonuç: hugo gold'unun %40'ı, vite'ın %26'sı **tanım gereği**
-   bulunamaz durumdaydı. Suite artık `CI_INDEXING__INCLUDE_TESTS=true` ile indeksliyor.
+   bulunamaz durumdaydı. Suite artık `QUARRY_INDEXING__INCLUDE_TESTS=true` ile indeksliyor.
 2. Test desenlerini regex ile tahmin etmek işe yaramadı — dile göre değişiyor. Doğru yöntem
    tahmin değil, **index'e sormak**; `coverage.py` bunu yapar.
 
@@ -126,4 +126,4 @@ metrik matematiksel olarak tavana çarpar (django limit=10 → 0.725, limit=30 �
   MCP stdio oturumuyla koşulmalı → 4 ms.
 - int8 kuantizasyon **global simetrik** olmalı. Satır-bazlı ölçek L2 normalizasyonda
   sadeleşmez, modeli bozar.
-- Model dizini `~/.codanna/models/<name>-int8/` altında olmalı; yoksa index çalışmaz.
+- Model dizini `~/.quarry/models/<name>-int8/` altında olmalı; yoksa index çalışmaz.

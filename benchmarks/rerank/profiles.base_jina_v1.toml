@@ -1,5 +1,5 @@
 # Canonical Jina v1 base profile used as comparison anchor.
-# baseline_current_default is auto-added by codanna benchmark-rerank.
+# baseline_current_default is auto-added by quarry benchmark-rerank.
 
 [defaults]
 model = "JINARerankerV1TurboEn"

@@ -191,7 +191,7 @@ impl JsonResponse<serde_json::Value> {
 ///
 /// # Example
 /// ```
-/// use codanna::io::format::format_utc_timestamp;
+/// use quarry::io::format::format_utc_timestamp;
 ///
 /// let timestamp = format_utc_timestamp();
 /// // Returns something like "2025-09-28 15:30:45 UTC"

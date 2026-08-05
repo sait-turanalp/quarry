@@ -1,4 +1,4 @@
-module github.com/codanna/testproject
+module github.com/quarry/testproject
 
 go 1.21
 

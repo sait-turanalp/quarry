@@ -4,9 +4,9 @@
 //! Uses the cli module for argument parsing and command definitions.
 
 use clap::Parser;
-use codanna::cli::{Cli, Commands, RetrieveQuery};
-use codanna::indexing::facade::IndexFacade;
-use codanna::project_resolver::{
+use quarry::cli::{Cli, Commands, RetrieveQuery};
+use quarry::indexing::facade::IndexFacade;
+use quarry::project_resolver::{
     providers::{
         csharp::CSharpProvider, go::GoProvider, java::JavaProvider, javascript::JavaScriptProvider,
         kotlin::KotlinProvider, php::PhpProvider, python::PythonProvider, swift::SwiftProvider,
@@ -14,8 +14,8 @@ use codanna::project_resolver::{
     },
     registry::SimpleProviderRegistry,
 };
-use codanna::storage::IndexMetadata;
-use codanna::{IndexPersistence, Settings};
+use quarry::storage::IndexMetadata;
+use quarry::{IndexPersistence, Settings};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -63,8 +63,8 @@ fn create_provider_registry() -> SimpleProviderRegistry {
 fn initialize_providers(
     registry: &SimpleProviderRegistry,
     settings: &Settings,
-) -> Result<(), codanna::IndexError> {
-    use codanna::IndexError;
+) -> Result<(), quarry::IndexError> {
+    use quarry::IndexError;
 
     let mut validation_errors = Vec::new();
 
@@ -119,7 +119,7 @@ fn initialize_providers(
                 error_details.push_str(&format!("  • {} not found\n", path.display()));
             }
         }
-        error_details.push_str("\nSuggestion: Check paths in .codanna/settings.toml");
+        error_details.push_str("\nSuggestion: Check paths in .quarry/settings.toml");
         error_details.push_str("\nExample for TypeScript:\n");
         error_details.push_str("  [languages.typescript]\n");
         error_details
@@ -199,8 +199,8 @@ fn should_sync_on_startup(command: &Commands) -> bool {
 /// Auto-initializes config for index command. Persists index after modifications.
 #[tokio::main]
 async fn main() {
-    if std::env::var("CODANNA_SEMANTIC_WORKER").ok().as_deref() == Some("1") {
-        if let Err(e) = codanna::semantic::run_worker_stdio() {
+    if std::env::var("QUARRY_SEMANTIC_WORKER").ok().as_deref() == Some("1") {
+        if let Err(e) = quarry::semantic::run_worker_stdio() {
             eprintln!("Semantic worker failed: {e}");
             std::process::exit(1);
         }
@@ -251,7 +251,7 @@ async fn main() {
 
     // Initialize logging with config (supports RUST_LOG env var override)
     // All logging goes to stderr to avoid polluting stdout (JSON output, piping)
-    codanna::logging::init_with_config(&config.logging);
+    quarry::logging::init_with_config(&config.logging);
 
     // Determine resource requirements based on command type
     // Commands are categorized by what infrastructure they need:
@@ -318,7 +318,7 @@ async fn main() {
 
     // Set up persistence based on config
     // Use global path resolution that handles --config properly
-    let index_path = codanna::init::resolve_index_path(&config, cli.config.as_deref());
+    let index_path = quarry::init::resolve_index_path(&config, cli.config.as_deref());
 
     // Update the config with the resolved index_path so SimpleIndexer uses the correct path
     config.index_path = index_path.clone();
@@ -557,7 +557,7 @@ async fn main() {
                                     eprintln!("  • {suggestion}");
                                 }
                             }
-                            use codanna::io::ExitCode;
+                            use quarry::io::ExitCode;
                             let exit_code = ExitCode::from_error(&e);
                             std::process::exit(exit_code as i32);
                         }
@@ -574,13 +574,13 @@ async fn main() {
                     eprintln!("\nRecovery steps:");
                     let suggestions = e.recovery_suggestions();
                     if suggestions.is_empty() {
-                        eprintln!("  • Run 'codanna index' to rebuild metadata");
+                        eprintln!("  • Run 'quarry index' to rebuild metadata");
                     } else {
                         for suggestion in suggestions {
                             eprintln!("  • {suggestion}");
                         }
                     }
-                    eprintln!("  • Or use 'codanna index --force' for a full rebuild");
+                    eprintln!("  • Or use 'quarry index --force' for a full rebuild");
 
                     sync_made_changes = None;
                 }
@@ -595,11 +595,11 @@ async fn main() {
 
     match cli.command {
         Commands::Init { force } => {
-            codanna::cli::commands::init::run_init(force);
+            quarry::cli::commands::init::run_init(force);
         }
 
         Commands::Config => {
-            codanna::cli::commands::init::run_config(&config);
+            quarry::cli::commands::init::run_config(&config);
         }
 
         Commands::Parse {
@@ -608,7 +608,7 @@ async fn main() {
             max_depth,
             all_nodes,
         } => {
-            codanna::cli::commands::parse::run(&file, output, max_depth, all_nodes);
+            quarry::cli::commands::parse::run(&file, output, max_depth, all_nodes);
         }
 
         Commands::McpTest {
@@ -618,7 +618,7 @@ async fn main() {
             delay,
             repeat,
         } => {
-            use codanna::mcp::client::CodeIntelligenceClient;
+            use quarry::mcp::client::CodeIntelligenceClient;
 
             let server_path = server_binary.unwrap_or_else(|| {
                 std::env::current_exe().expect("Failed to get current executable path")
@@ -646,7 +646,7 @@ async fn main() {
             https,
             bind,
         } => {
-            use codanna::cli::commands::serve::{ServeArgs, run as run_serve};
+            use quarry::cli::commands::serve::{ServeArgs, run as run_serve};
             run_serve(
                 ServeArgs {
                     watch,
@@ -671,7 +671,7 @@ async fn main() {
             max_files,
             ..
         } => {
-            use codanna::cli::commands::index::{IndexArgs, run as run_index};
+            use quarry::cli::commands::index::{IndexArgs, run as run_index};
             // Progress enabled by default from settings, --no-progress overrides
             let progress = config.indexing.show_progress && !no_progress;
             run_index(
@@ -691,19 +691,19 @@ async fn main() {
         }
 
         Commands::AddDir { path } => {
-            codanna::cli::commands::directories::run_add_dir(path, cli.config.as_deref());
+            quarry::cli::commands::directories::run_add_dir(path, cli.config.as_deref());
         }
 
         Commands::RemoveDir { path } => {
-            codanna::cli::commands::directories::run_remove_dir(path, cli.config.as_deref());
+            quarry::cli::commands::directories::run_remove_dir(path, cli.config.as_deref());
         }
 
         Commands::ListDirs => {
-            codanna::cli::commands::directories::run_list_dirs(&config);
+            quarry::cli::commands::directories::run_list_dirs(&config);
         }
 
         Commands::Retrieve { query } => {
-            let exit_code = codanna::cli::commands::retrieve::run(
+            let exit_code = quarry::cli::commands::retrieve::run(
                 query,
                 indexer.as_ref().expect("retrieve requires indexer"),
             );
@@ -750,14 +750,12 @@ async fn main() {
                 }
             }
 
-            codanna::cli::commands::mcp::run(
-                tool, positional, args, json, fields, indexer, &config,
-            )
-            .await;
+            quarry::cli::commands::mcp::run(tool, positional, args, json, fields, indexer, &config)
+                .await;
         }
 
         Commands::Benchmark { language, file } => {
-            codanna::cli::commands::benchmark::run(&language, file);
+            quarry::cli::commands::benchmark::run(&language, file);
         }
 
         Commands::BenchmarkRerank {
@@ -772,8 +770,8 @@ async fn main() {
             checkpoint_every,
             skip_warm_on_timeout,
         } => {
-            codanna::cli::commands::benchmark_rerank::run(
-                codanna::cli::commands::benchmark_rerank::BenchmarkRerankArgs {
+            quarry::cli::commands::benchmark_rerank::run(
+                quarry::cli::commands::benchmark_rerank::BenchmarkRerankArgs {
                     queries,
                     qrels,
                     profiles,
@@ -790,8 +788,8 @@ async fn main() {
         }
 
         Commands::BenchmarkRerankQuick { warm_runs, limit } => {
-            codanna::cli::commands::benchmark_rerank_quick::run(
-                codanna::cli::commands::benchmark_rerank_quick::BenchmarkRerankQuickArgs {
+            quarry::cli::commands::benchmark_rerank_quick::run(
+                quarry::cli::commands::benchmark_rerank_quick::BenchmarkRerankQuickArgs {
                     warm_runs,
                     limit,
                 },
@@ -800,15 +798,15 @@ async fn main() {
         }
 
         Commands::Plugin { action } => {
-            codanna::cli::commands::plugin::run(action, &config);
+            quarry::cli::commands::plugin::run(action, &config);
         }
 
         Commands::Documents { action } => {
-            codanna::cli::commands::documents::run(action, &config, cli.config.as_ref());
+            quarry::cli::commands::documents::run(action, &config, cli.config.as_ref());
         }
 
         Commands::Profile { action } => {
-            codanna::cli::commands::profile::run(action);
+            quarry::cli::commands::profile::run(action);
         }
 
         Commands::IndexParallel {
@@ -816,7 +814,7 @@ async fn main() {
             force,
             no_progress,
         } => {
-            use codanna::cli::commands::index_parallel::{
+            use quarry::cli::commands::index_parallel::{
                 IndexParallelArgs, run as run_index_parallel,
             };
             // Progress enabled by default from settings, --no-progress overrides

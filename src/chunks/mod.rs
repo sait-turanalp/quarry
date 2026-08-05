@@ -3,22 +3,22 @@
 //! Phase 1+2 implementation:
 //! - Builds chunk records from indexed symbols
 //! - Adds mixed chunks (module comments, inter-symbol gaps, config/doc text chunks)
-//! - Persists chunk metadata + semantic vectors under `.codanna/index/code_chunks/`
+//! - Persists chunk metadata + semantic vectors under `.quarry/index/code_chunks/`
 //! - Maintains dedicated chunk Tantivy index for BM25 recall (`doc_type=chunk`)
 //! - Provides vector/BM25 recall helpers for hybrid retrieval
 
 use crate::config::SemanticBackend;
-use crate::parsing::{get_registry, FlowKind};
+use crate::parsing::{FlowKind, get_registry};
+use crate::semantic::OptimizedStaticModel;
 use crate::semantic::{
     EmbeddingPool, SemanticMetadata, SemanticVectorStorage, SimpleSemanticSearch,
 };
 use crate::symbol::ScopeContext;
 use crate::vector::{
+    BinaryVector, EmbeddingRuntimeConfig, MmapVectorStorage, SegmentOrdinal, cosine_similarity,
     create_text_embedding_with_max_length, create_text_embedding_with_runtime,
-    cosine_similarity, BinaryVector, EmbeddingRuntimeConfig, MmapVectorStorage, SegmentOrdinal,
 };
 use crate::{IndexError, Settings, Symbol, SymbolId, SymbolKind};
-use crate::semantic::OptimizedStaticModel;
 use fastembed::TextEmbedding;
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -31,8 +31,8 @@ use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery};
 use tantivy::schema::{
-    Field, IndexRecordOption, NumericOptions, Schema, SchemaBuilder, TextFieldIndexing,
-    TextOptions, Value, FAST, STORED, STRING,
+    FAST, Field, IndexRecordOption, NumericOptions, STORED, STRING, Schema, SchemaBuilder,
+    TextFieldIndexing, TextOptions, Value,
 };
 use tantivy::{Index, IndexReader, IndexSettings, ReloadPolicy, TantivyDocument as Document, Term};
 
@@ -130,11 +130,9 @@ impl RecallBackend for ActiveRecallBackend {
         let mut guard = self.model.lock().map_err(|_| IndexError::lock_error())?;
         match &mut *guard {
             ActiveModel::Fastembed(model) => model
-                .embed(texts.to_vec(), None)
+                .embed(texts, None)
                 .map_err(|e| IndexError::General(format!("fastembed encode failed: {e}"))),
-            ActiveModel::Optimized(model) => {
-                Ok(model.encode_batch_parallel(texts, Some(512)))
-            }
+            ActiveModel::Optimized(model) => Ok(model.encode_batch_parallel(texts, Some(512))),
         }
     }
 }
@@ -330,6 +328,9 @@ impl CodeChunkIndexer {
         }
     }
 
+    // Sixteen parameters because every chunking knob is threaded through explicitly.
+    // The real fix is to pass &Settings alone; that is a wider refactor than a rename.
+    #[allow(clippy::too_many_arguments)]
     pub fn rebuild_from_symbols(
         &self,
         symbols: &[Symbol],
@@ -451,9 +452,7 @@ impl CodeChunkIndexer {
         }
         std::fs::create_dir_all(&semantic_path)?;
 
-        let mut semantic = SimpleSemanticSearch::from_model_name(
-            backend.model_name(),
-        )?;
+        let mut semantic = SimpleSemanticSearch::from_model_name(backend.model_name())?;
         let items: Vec<(SymbolId, Vec<f32>, String)> = chunks
             .iter()
             .zip(embeddings)
@@ -688,9 +687,7 @@ impl CodeChunkIndexer {
         }
         std::fs::create_dir_all(&semantic_path)?;
 
-        let mut semantic = SimpleSemanticSearch::from_model_name(
-            backend.model_name(),
-        )?;
+        let mut semantic = SimpleSemanticSearch::from_model_name(backend.model_name())?;
         let embeddings_indexed = semantic.store_embeddings(items);
         semantic.save(&semantic_path)?;
 
@@ -943,7 +940,6 @@ fn load_existing_chunk_embeddings(path: &Path) -> HashMap<u32, Vec<f32>> {
     }
 }
 
-
 pub fn build_rerank_text(record: &CodeChunkRecord) -> String {
     const MAX_SIGNATURE_CHARS: usize = 256;
     const MAX_DOC_CHARS: usize = 384;
@@ -1147,6 +1143,8 @@ fn write_tantivy_chunk_index(root: &Path, chunks: &[CodeChunkRecord]) -> Result<
         .create(true)
         .read(true)
         .write(true)
+        // A lock file holds no content; truncating it would be meaningless.
+        .truncate(false)
         .open(&lock_path)
         .map_err(|e| {
             IndexError::General(format!(
@@ -1224,7 +1222,9 @@ fn write_tantivy_chunk_index(root: &Path, chunks: &[CodeChunkRecord]) -> Result<
         // Without this, merge threads may still reference temp files when rename() moves
         // the directory, causing "FileDoesNotExist" warnings.
         writer.wait_merging_threads().map_err(|e| {
-            IndexError::General(format!("failed to wait for chunk tantivy merge threads: {e}"))
+            IndexError::General(format!(
+                "failed to wait for chunk tantivy merge threads: {e}"
+            ))
         })?;
 
         Ok(())
@@ -1921,7 +1921,7 @@ fn append_config_doc_chunks(
             .filter_entry(|entry| {
                 let name = entry.file_name().to_string_lossy();
                 !(name == ".git"
-                    || name == ".codanna"
+                    || name == ".quarry"
                     || name == "node_modules"
                     || name == "target"
                     || name == "dist"
@@ -2383,9 +2383,7 @@ fn extract_symbol_snippet(
         if start == 0 && end == len.saturating_sub(1) {
             break;
         }
-        if start > 0 {
-            start -= 1;
-        }
+        start = start.saturating_sub(1);
         if end < len.saturating_sub(1)
             && end.saturating_sub(start).saturating_add(1) < target_min_lines
         {
@@ -2539,8 +2537,7 @@ impl ChunkSearchBackend {
         }
 
         let searcher = self.reader.searcher();
-        let query_obj =
-            build_chunk_bm25_query(&self.index, &self.schema, query, language_filter)?;
+        let query_obj = build_chunk_bm25_query(&self.index, &self.schema, query, language_filter)?;
         let top_docs = searcher
             .search(&query_obj, &TopDocs::with_limit(limit))
             .map_err(|e| IndexError::General(format!("chunk BM25 search failed: {e}")))?;
@@ -2617,7 +2614,11 @@ impl ChunkSearchBackend {
     /// Total number of documents (chunks) in the Tantivy index.
     pub fn doc_count(&self) -> usize {
         let searcher = self.reader.searcher();
-        searcher.segment_readers().iter().map(|r| r.num_docs() as usize).sum()
+        searcher
+            .segment_readers()
+            .iter()
+            .map(|r| r.num_docs() as usize)
+            .sum()
     }
 
     fn doc_to_record(&self, doc: &Document) -> CodeChunkRecord {
@@ -2634,9 +2635,7 @@ impl ChunkSearchBackend {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
         };
-        let u64_val = |f: Field| -> u64 {
-            doc.get_first(f).and_then(|v| v.as_u64()).unwrap_or(0)
-        };
+        let u64_val = |f: Field| -> u64 { doc.get_first(f).and_then(|v| v.as_u64()).unwrap_or(0) };
 
         CodeChunkRecord {
             chunk_id: u64_val(s.chunk_id) as u32,
@@ -2742,10 +2741,7 @@ impl ChunkVectorBackend {
             .binary_index
             .iter()
             .filter(|(id, _)| match language_filter {
-                Some(lang) => self
-                    .languages
-                    .get(id)
-                    .is_some_and(|l| l == lang),
+                Some(lang) => self.languages.get(id).is_some_and(|l| l == lang),
                 None => true,
             })
             .map(|(&id, bv)| (id, query_binary.hamming_distance(bv)))
@@ -2801,8 +2797,8 @@ impl ChunkVectorBackend {
             })?;
             return Ok(ChunkQueryModel::Optimized(opt));
         }
-        let (te, _dims) =
-            create_text_embedding_with_max_length(model_name, false, Some(1024)).map_err(|e| {
+        let (te, _dims) = create_text_embedding_with_max_length(model_name, false, Some(1024))
+            .map_err(|e| {
                 IndexError::General(format!(
                     "failed to load chunk vector model '{model_name}': {e}"
                 ))
@@ -2812,9 +2808,8 @@ impl ChunkVectorBackend {
 
     fn load_binary_index(semantic_path: &Path) -> Result<HashMap<u32, BinaryVector>, IndexError> {
         let bin_path = semantic_path.join("binary_index.bin");
-        let data = std::fs::read(&bin_path).map_err(|e| {
-            IndexError::General(format!("failed to read binary_index.bin: {e}"))
-        })?;
+        let data = std::fs::read(&bin_path)
+            .map_err(|e| IndexError::General(format!("failed to read binary_index.bin: {e}")))?;
         Self::parse_binary_index(&data)
             .ok_or_else(|| IndexError::General("corrupt binary_index.bin".to_string()))
     }
@@ -2833,8 +2828,7 @@ impl ChunkVectorBackend {
             }
             let id = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
             offset += 4;
-            let bv_len =
-                u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
+            let bv_len = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
             offset += 4;
             if offset + bv_len > data.len() {
                 return None;
@@ -2906,9 +2900,11 @@ mod tests {
         let mut cache = HashMap::new();
         let chunk = build_chunk_record(&symbol, None, 2000, 2, 3, &mut cache).unwrap();
         assert!(chunk.snippet.contains("fn b(x: i32) -> i32"));
-        assert!(chunk
-            .embedding_text
-            .contains("# function fn b(x: i32) -> i32"));
+        assert!(
+            chunk
+                .embedding_text
+                .contains("# function fn b(x: i32) -> i32")
+        );
     }
 
     #[test]
@@ -2961,7 +2957,9 @@ mod tests {
         write_tantivy_chunk_index(temp.path(), &chunks).unwrap();
 
         let backend = ChunkSearchBackend::open(temp.path()).unwrap();
-        let hits = backend.bm25_search("authenticate token", 5, Some("rust")).unwrap();
+        let hits = backend
+            .bm25_search("authenticate token", 5, Some("rust"))
+            .unwrap();
         assert!(!hits.is_empty());
         assert_eq!(hits[0].0, 11);
     }
@@ -3116,20 +3114,24 @@ mod tests {
                 4096,
                 96,
                 Some(16),
-                &[file_a.clone()],
-                &[file_b.clone()],
+                std::slice::from_ref(&file_a),
+                std::slice::from_ref(&file_b),
                 false,
             )
             .unwrap();
 
         let backend = ChunkSearchBackend::open(&temp.path().join("code_chunks")).unwrap();
         let chunks = backend.load_all_records().unwrap();
-        assert!(chunks
-            .iter()
-            .any(|c| c.file_path == file_a.to_string_lossy()));
-        assert!(!chunks
-            .iter()
-            .any(|c| c.file_path == file_b.to_string_lossy()));
+        assert!(
+            chunks
+                .iter()
+                .any(|c| c.file_path == file_a.to_string_lossy())
+        );
+        assert!(
+            !chunks
+                .iter()
+                .any(|c| c.file_path == file_b.to_string_lossy())
+        );
     }
 
     #[test]
@@ -3188,7 +3190,7 @@ mod tests {
     #[test]
     fn test_split_chunk_by_token_budget_splits_long_chunk() {
         let mut next_chunk_id = 100u32;
-        let snippet = vec![
+        let snippet = [
             "alpha beta gamma delta epsilon",
             "alpha beta gamma delta epsilon",
             "alpha beta gamma delta epsilon",

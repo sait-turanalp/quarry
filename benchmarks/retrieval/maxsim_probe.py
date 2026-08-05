@@ -28,18 +28,18 @@ from sweep import Session  # noqa: E402
 evalset, repo, binary, label = sys.argv[1:5]
 limit_q = int(sys.argv[5]) if len(sys.argv) > 5 else 150
 
-MODEL = os.path.expanduser("~/.codanna/models/potion-code-16M-v2-int8")
+MODEL = os.path.expanduser("~/.quarry/models/potion-code-16M-v2-int8")
 emb = load_file(os.path.join(MODEL, "model.safetensors"))["embeddings"].astype(np.float32)
 emb /= np.maximum(np.linalg.norm(emb, axis=1, keepdims=True), 1e-6)
 tok = Tokenizer.from_file(os.path.join(MODEL, "tokenizer.json"))
 
 rows = [json.loads(line) for line in open(evalset)][:limit_q]
 ENV = {
-    "CI_INDEXING__INCLUDE_TESTS": "true",
-    "CI_CHUNK_SEARCH__TOP_K_VECTOR": "200",
-    "CI_CHUNK_SEARCH__TOP_K_BM25": "200",
-    "CI_CHUNK_SEARCH__TOP_K_FUSED": "200",
-    "CI_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": "99",
+    "QUARRY_INDEXING__INCLUDE_TESTS": "true",
+    "QUARRY_CHUNK_SEARCH__TOP_K_VECTOR": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_BM25": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_FUSED": "200",
+    "QUARRY_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": "99",
 }
 import re  # noqa: E402
 

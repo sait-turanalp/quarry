@@ -4,7 +4,7 @@
   - create_text_embedding() factory — built-in + user-defined model desteği
   - Tüm pipeline güncellemeleri (EmbeddingPool, SimpleSemanticSearch, IndexFacade, FastEmbedGenerator)
   - Varsayılan model: GraniteSmallEnglishR2
-  - Model dizini: ~/.codanna/models/granite-small-r2/
+  - Model dizini: ~/.quarry/models/granite-small-r2/
 
   ---
   Adım 1: Body'yi Pipeline'a Taşı
@@ -136,7 +136,7 @@
   Adım 6: Lazy Embedding — Hash Bazlı Atlama
 
   - Dosya content_hash değişmediyse embedding'i yeniden üretme
-  - Codanna'da content_hash zaten mevcut, embedding tarafında kullanılmıyor
+  - Quarry'da content_hash zaten mevcut, embedding tarafında kullanılmıyor
   - Incremental index'te sadece değişen dosyaların embedding'leri güncellenir
   - Hash kapsamı: blake3(CHUNK_FORMAT_VERSION + file_content)
     Chunk formatı değiştiğinde (context header yapısı, katman kuralları vb.)
@@ -147,7 +147,7 @@
   - fastembed desteği: RerankerModel enum'unda JINARerankerV1TurboEn yoksa
     UserDefinedRerankingModel pattern'i ile yüklenir (tokenizer + max_length + input names config)
   - model_int8.onnx (37MB)
-  - Model dizini: ~/.codanna/models/jina-reranker-v1-turbo/
+  - Model dizini: ~/.quarry/models/jina-reranker-v1-turbo/
   - 8K token desteği, 37.8M parametre, 6 katman
   - Reranker input: NL query + enriched snippet (context header + signature + doc + body)
   - Sıralama hassasiyetinde int8 kalite kaybı ihmal edilebilir

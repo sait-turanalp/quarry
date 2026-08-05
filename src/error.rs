@@ -166,7 +166,7 @@ impl IndexError {
     pub fn recovery_suggestions(&self) -> Vec<&'static str> {
         match self {
             Self::TantivyError { .. } => vec![
-                "Try running 'codanna index --force' to rebuild the index",
+                "Try running 'quarry index --force' to rebuild the index",
                 "Check disk space and permissions in the index directory",
             ],
             Self::TransactionFailed { .. } => vec![
@@ -175,15 +175,15 @@ impl IndexError {
             ],
             Self::MutexPoisoned => vec![
                 "Restart the application to clear the poisoned state",
-                "If the problem persists, run 'codanna index --force'",
+                "If the problem persists, run 'quarry index --force'",
             ],
             Self::IndexCorrupted { .. } => vec![
-                "Run 'codanna index --force' to rebuild from scratch",
+                "Run 'quarry index --force' to rebuild from scratch",
                 "Check for disk errors or filesystem corruption",
             ],
             Self::LoadError { .. } | Self::PersistenceError { .. } => vec![
                 "The index will be loaded from Tantivy on next start",
-                "Run 'codanna index --force' if you continue to have issues",
+                "Run 'quarry index --force' if you continue to have issues",
             ],
             Self::FileRead { .. } => vec![
                 "Check that the file exists and you have read permissions",

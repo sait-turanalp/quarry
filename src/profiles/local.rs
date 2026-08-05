@@ -1,4 +1,4 @@
-//! Local overrides - personal settings at .codanna/profile.local.json
+//! Local overrides - personal settings at .quarry/profile.local.json
 
 use super::error::ProfileResult;
 use serde::{Deserialize, Serialize};

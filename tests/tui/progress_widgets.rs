@@ -1,4 +1,4 @@
-use codanna::io::{
+use quarry::io::{
     ExitCode, ProgressBar, ProgressBarOptions, ProgressBarStyle, Spinner, SpinnerOptions,
 };
 use std::time::Duration;

@@ -19,14 +19,14 @@ impl ProfileReference {
     /// # Examples
     ///
     /// ```
-    /// use codanna::profiles::reference::ProfileReference;
+    /// use quarry::profiles::reference::ProfileReference;
     ///
-    /// let ref1 = ProfileReference::parse("codanna");
-    /// assert_eq!(ref1.profile, "codanna");
+    /// let ref1 = ProfileReference::parse("quarry");
+    /// assert_eq!(ref1.profile, "quarry");
     /// assert_eq!(ref1.provider, None);
     ///
-    /// let ref2 = ProfileReference::parse("codanna@claude-provider");
-    /// assert_eq!(ref2.profile, "codanna");
+    /// let ref2 = ProfileReference::parse("quarry@claude-provider");
+    /// assert_eq!(ref2.profile, "quarry");
     /// assert_eq!(ref2.provider, Some("claude-provider".to_string()));
     /// ```
     pub fn parse(input: &str) -> Self {
@@ -82,16 +82,16 @@ mod tests {
 
     #[test]
     fn test_parse_profile_only() {
-        let reference = ProfileReference::parse("codanna");
-        assert_eq!(reference.profile, "codanna");
+        let reference = ProfileReference::parse("quarry");
+        assert_eq!(reference.profile, "quarry");
         assert_eq!(reference.provider, None);
         assert!(!reference.has_provider());
     }
 
     #[test]
     fn test_parse_profile_with_provider() {
-        let reference = ProfileReference::parse("codanna@claude-provider");
-        assert_eq!(reference.profile, "codanna");
+        let reference = ProfileReference::parse("quarry@claude-provider");
+        assert_eq!(reference.profile, "quarry");
         assert_eq!(reference.provider, Some("claude-provider".to_string()));
         assert!(reference.has_provider());
     }
@@ -106,20 +106,20 @@ mod tests {
 
     #[test]
     fn test_display_profile_only() {
-        let reference = ProfileReference::new("codanna".to_string(), None);
-        assert_eq!(reference.to_string(), "codanna");
+        let reference = ProfileReference::new("quarry".to_string(), None);
+        assert_eq!(reference.to_string(), "quarry");
     }
 
     #[test]
     fn test_display_profile_with_provider() {
         let reference =
-            ProfileReference::new("codanna".to_string(), Some("claude-provider".to_string()));
-        assert_eq!(reference.to_string(), "codanna@claude-provider");
+            ProfileReference::new("quarry".to_string(), Some("claude-provider".to_string()));
+        assert_eq!(reference.to_string(), "quarry@claude-provider");
     }
 
     #[test]
     fn test_roundtrip_parsing() {
-        let inputs = vec!["codanna", "codanna@provider", "my-profile@my-provider"];
+        let inputs = vec!["quarry", "quarry@provider", "my-profile@my-provider"];
 
         for input in inputs {
             let reference = ProfileReference::parse(input);
@@ -130,16 +130,16 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        let reference: ProfileReference = "codanna@provider".into();
-        assert_eq!(reference.profile, "codanna");
+        let reference: ProfileReference = "quarry@provider".into();
+        assert_eq!(reference.profile, "quarry");
         assert_eq!(reference.provider, Some("provider".to_string()));
     }
 
     #[test]
     fn test_from_string() {
-        let s = String::from("codanna@provider");
+        let s = String::from("quarry@provider");
         let reference: ProfileReference = s.into();
-        assert_eq!(reference.profile, "codanna");
+        assert_eq!(reference.profile, "quarry");
         assert_eq!(reference.provider, Some("provider".to_string()));
     }
 

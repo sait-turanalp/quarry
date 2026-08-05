@@ -91,7 +91,7 @@ impl KnowledgeBase {
                 if file_path.extension().and_then(|s| s.to_str()) == Some("toml") {
                     let content = std::fs::read_to_string(&file_path)?;
                     let knowledge: EcosystemKnowledge = toml::from_str(&content)
-                        .map_err(|e| anyhow::anyhow!("Failed to parse {:?}: {}", file_path, e))?;
+                        .map_err(|e| anyhow::anyhow!("Failed to parse {file_path:?}: {e}"))?;
 
                     // Index by each language in this ecosystem
                     for lang in &knowledge.languages {

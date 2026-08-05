@@ -1,7 +1,7 @@
-use codanna::parsing::typescript::parser::TypeScriptParser;
-use codanna::parsing::typescript::resolution::TypeScriptResolutionContext;
-use codanna::parsing::{LanguageParser, ResolutionScope, ScopeLevel};
-use codanna::{FileId, Range, Symbol, SymbolId, SymbolKind, Visibility};
+use quarry::parsing::typescript::parser::TypeScriptParser;
+use quarry::parsing::typescript::resolution::TypeScriptResolutionContext;
+use quarry::parsing::{LanguageParser, ResolutionScope, ScopeLevel};
+use quarry::{FileId, Range, Symbol, SymbolId, SymbolKind, Visibility};
 
 #[test]
 fn test_typescript_alias_resolution_for_relationships() {

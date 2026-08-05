@@ -2,14 +2,14 @@
 //!
 //! Tests that TypeScript path aliases are properly enhanced during parsing
 
-use codanna::FileId;
-use codanna::config::Settings;
-use codanna::parsing::resolution::ProjectResolutionEnhancer;
-use codanna::parsing::typescript::behavior::TypeScriptBehavior;
-use codanna::parsing::typescript::resolution::TypeScriptProjectEnhancer;
-use codanna::parsing::{Import, LanguageBehavior};
-use codanna::project_resolver::persist::{ResolutionPersistence, ResolutionRules};
-use codanna::project_resolver::providers::typescript::TypeScriptProvider;
+use quarry::FileId;
+use quarry::config::Settings;
+use quarry::parsing::resolution::ProjectResolutionEnhancer;
+use quarry::parsing::typescript::behavior::TypeScriptBehavior;
+use quarry::parsing::typescript::resolution::TypeScriptProjectEnhancer;
+use quarry::parsing::{Import, LanguageBehavior};
+use quarry::project_resolver::persist::{ResolutionPersistence, ResolutionRules};
+use quarry::project_resolver::providers::typescript::TypeScriptProvider;
 use std::path::Path;
 
 #[test]
@@ -131,9 +131,9 @@ fn test_typescript_behavior_add_import() {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    // Setup: Create a temporary .codanna directory for the test
-    let test_codanna_dir = PathBuf::from(".codanna_test");
-    let resolver_dir = test_codanna_dir.join("index").join("resolvers");
+    // Setup: Create a temporary .quarry directory for the test
+    let test_quarry_dir = PathBuf::from(".quarry_test");
+    let resolver_dir = test_quarry_dir.join("index").join("resolvers");
     fs::create_dir_all(&resolver_dir).expect("Failed to create test resolver directory");
 
     // Get the absolute path to our test fixture
@@ -170,29 +170,29 @@ fn test_typescript_behavior_add_import() {
         tsconfig_path.display()
     );
 
-    // Write the resolution rules to our test .codanna directory
+    // Write the resolution rules to our test .quarry directory
     let rules_path = resolver_dir.join("typescript_resolution.json");
     fs::write(&rules_path, test_rules).expect("Failed to write test resolution rules");
 
-    // Temporarily change working directory to use our test .codanna
+    // Temporarily change working directory to use our test .quarry
     let original_dir = env::current_dir().expect("Failed to get current directory");
 
     // Create a test workspace directory
     let test_workspace = PathBuf::from("test_workspace");
     fs::create_dir_all(&test_workspace).ok();
 
-    // Move our test .codanna to the test workspace
-    let test_workspace_codanna = test_workspace.join(".codanna");
-    if test_workspace_codanna.exists() {
-        fs::remove_dir_all(&test_workspace_codanna).ok();
+    // Move our test .quarry to the test workspace
+    let test_workspace_quarry = test_workspace.join(".quarry");
+    if test_workspace_quarry.exists() {
+        fs::remove_dir_all(&test_workspace_quarry).ok();
     }
-    fs::rename(&test_codanna_dir, &test_workspace_codanna)
-        .expect("Failed to move test .codanna directory");
+    fs::rename(&test_quarry_dir, &test_workspace_quarry)
+        .expect("Failed to move test .quarry directory");
 
     // Change to test workspace
     env::set_current_dir(&test_workspace).expect("Failed to change to test workspace");
 
-    // Now create the behavior - it will find .codanna in the current directory
+    // Now create the behavior - it will find .quarry in the current directory
     let behavior = TypeScriptBehavior::new();
     let file_id = FileId::new(1).unwrap();
 
@@ -257,14 +257,14 @@ fn test_resolution_with_project_rules() {
                 // Create provider and build cache
                 let provider = TypeScriptProvider::new();
 
-                use codanna::project_resolver::provider::ProjectResolutionProvider;
+                use quarry::project_resolver::provider::ProjectResolutionProvider;
                 if let Err(e) = provider.rebuild_cache(&settings) {
                     println!("Warning: Could not build cache: {e}");
                     return;
                 }
 
                 // Load the persisted rules
-                let persistence = ResolutionPersistence::new(Path::new(".codanna"));
+                let persistence = ResolutionPersistence::new(Path::new(".quarry"));
                 if let Ok(index) = persistence.load("typescript") {
                     println!("Loaded {} resolution rules", index.rules.len());
 

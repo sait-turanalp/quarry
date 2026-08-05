@@ -5,10 +5,10 @@
 ///
 /// NOTE: These tests do NOT use Tantivy (to avoid lock conflicts).
 /// They test the resolution layer logic only.
-use codanna::parsing::resolution::{ImportBinding, ImportOrigin, ResolutionScope};
-use codanna::parsing::rust::resolution::RustResolutionContext;
-use codanna::parsing::{Import, ScopeLevel};
-use codanna::{FileId, SymbolId};
+use quarry::parsing::resolution::{ImportBinding, ImportOrigin, ResolutionScope};
+use quarry::parsing::rust::resolution::RustResolutionContext;
+use quarry::parsing::{Import, ScopeLevel};
+use quarry::{FileId, SymbolId};
 
 fn register_binding(
     context: &mut RustResolutionContext,

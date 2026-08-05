@@ -1,12 +1,12 @@
 [package]
-name = "codanna"
-version = "0.9.14"
-authors = ["Angel Bartolli <bartolli@gmail.com>"]
+name = "quarry"
+version = "0.1.0"
+authors = ["Sait Turanalp"]
 edition = "2024"
-description = "Code Intelligence for Large Language Models"
-documentation = "https://docs.rs/codanna"
-homepage = "https://github.com/bartolli/codanna"
-repository = "https://github.com/bartolli/codanna"
+description = "Local semantic code search for AI agents - int8 embeddings, no GPU, no network"
+documentation = "https://github.com/sait-turanalp/quarry"
+homepage = "https://github.com/sait-turanalp/quarry"
+repository = "https://github.com/sait-turanalp/quarry"
 license = "Apache-2.0"
 readme = "README.md"
 keywords = ["mcp-server", "code-intelligence", "semantic-search", "llm", "rag"]

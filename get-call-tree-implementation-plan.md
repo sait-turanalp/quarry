@@ -404,16 +404,16 @@ fn test_external_calls_filtering() {
 
 ```bash
 # Test 1: Simple function
-codanna mcp get_call_tree 42
+quarry mcp get_call_tree 42
 
 # Test 2: Deep tree
-codanna mcp get_call_tree 42 max_depth:10
+quarry mcp get_call_tree 42 max_depth:10
 
 # Test 3: With source code
-codanna mcp get_call_tree 42 include_source:true
+quarry mcp get_call_tree 42 include_source:true
 
 # Test 4: Show external calls
-codanna mcp get_call_tree 42 show_external_calls:true
+quarry mcp get_call_tree 42 show_external_calls:true
 ```
 
 ### Deliverables
@@ -706,7 +706,7 @@ fn test_type_resolution_accuracy() {
 Tracks which files import/export what, enabling architectural impact analysis:
 
 ```bash
-codanna mcp get_file_dependencies "auth/utils.ts"
+quarry mcp get_file_dependencies "auth/utils.ts"
 
 Output:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1094,7 +1094,7 @@ pub async fn get_file_dependencies(
 **Use Case 1: Impact Analysis Before Change**
 ```bash
 # Before modifying auth/service.ts, check who uses it
-codanna mcp get_file_dependencies "auth/service.ts"
+quarry mcp get_file_dependencies "auth/service.ts"
 
 # Output shows 7 files across 4 modules import it
 # Agent knows: "This is a high-impact change"
@@ -1103,7 +1103,7 @@ codanna mcp get_file_dependencies "auth/service.ts"
 **Use Case 2: Dead Code Detection**
 ```bash
 # Check if old/deprecated.ts is still used
-codanna mcp get_file_dependencies "old/deprecated.ts"
+quarry mcp get_file_dependencies "old/deprecated.ts"
 
 # If "Imported By" is empty → safe to delete
 ```
@@ -1111,9 +1111,9 @@ codanna mcp get_file_dependencies "old/deprecated.ts"
 **Use Case 3: Circular Dependency Detection**
 ```bash
 # Check for circular imports
-codanna mcp get_file_dependencies "module-a.ts"
+quarry mcp get_file_dependencies "module-a.ts"
 # Shows: module-a → module-b
-codanna mcp get_file_dependencies "module-b.ts"
+quarry mcp get_file_dependencies "module-b.ts"
 # Shows: module-b → module-a
 # Alert: Circular dependency detected!
 ```
@@ -1121,7 +1121,7 @@ codanna mcp get_file_dependencies "module-b.ts"
 **Use Case 4: Module Boundary Analysis**
 ```bash
 # Check if internal module is leaking outside
-codanna mcp get_file_dependencies "auth/internal/utils.ts"
+quarry mcp get_file_dependencies "auth/internal/utils.ts"
 
 # Expected: Only imported by auth/* files
 # If billing/ imports it → architectural violation!
@@ -1189,7 +1189,7 @@ codanna mcp get_file_dependencies "auth/internal/utils.ts"
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Codanna development environment set up
+- Quarry development environment set up
 - Rust 1.70+
 - Familiarity with tree-sitter parsers
 - Understanding of BFS algorithms
@@ -1198,7 +1198,7 @@ codanna mcp get_file_dependencies "auth/internal/utils.ts"
 
 1. **Phase 1 (Week 1):**
    ```bash
-   cd codanna
+   cd quarry
    git checkout -b feature/get-call-tree
 
    # Implement downstream BFS
@@ -1210,7 +1210,7 @@ codanna mcp get_file_dependencies "auth/internal/utils.ts"
    cargo build --release
 
    # Manual testing
-   ./target/release/codanna mcp get_call_tree 42
+   ./target/release/quarry mcp get_call_tree 42
    ```
 
 2. **Phase 2 (Week 2-3):**

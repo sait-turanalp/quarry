@@ -2,12 +2,12 @@
 //!
 //! Tests that visibility modifiers are correctly extracted from AST
 
-use codanna::parsing::LanguageParser;
-use codanna::parsing::swift::SwiftParser;
-use codanna::types::SymbolCounter;
-use codanna::{FileId, Visibility};
+use quarry::parsing::LanguageParser;
+use quarry::parsing::swift::SwiftParser;
+use quarry::types::SymbolCounter;
+use quarry::{FileId, Visibility};
 
-fn parse_swift(code: &str) -> Vec<codanna::Symbol> {
+fn parse_swift(code: &str) -> Vec<quarry::Symbol> {
     let mut parser = SwiftParser::new().expect("Failed to create Swift parser");
     let mut counter = SymbolCounter::new();
     parser.parse(code, FileId(1), &mut counter)
@@ -212,10 +212,10 @@ private protocol PrivateProtocol {
 
 // Tests for resolution-time visibility checking
 mod resolution_visibility {
-    use codanna::parsing::LanguageBehavior;
-    use codanna::parsing::swift::SwiftBehavior;
-    use codanna::types::Range;
-    use codanna::{FileId, Symbol, SymbolId, SymbolKind, Visibility};
+    use quarry::parsing::LanguageBehavior;
+    use quarry::parsing::swift::SwiftBehavior;
+    use quarry::types::Range;
+    use quarry::{FileId, Symbol, SymbolId, SymbolKind, Visibility};
 
     fn make_symbol(name: &str, visibility: Visibility, file_id: FileId) -> Symbol {
         let mut sym = Symbol::new(

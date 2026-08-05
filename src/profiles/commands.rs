@@ -9,17 +9,17 @@ pub enum ProfileAction {
     /// Initialize project with a profile
     #[command(
         about = "Initialize project with a profile",
-        after_help = "Examples:\n  codanna profile init claude\n  codanna profile init claude --source ~/.codanna/profiles"
+        after_help = "Examples:\n  quarry profile init claude\n  quarry profile init claude --source ~/.quarry/profiles"
     )]
     Init {
         /// Profile name to initialize
         profile_name: String,
 
-        /// Profile source directory (defaults to ~/.codanna/profiles)
+        /// Profile source directory (defaults to ~/.quarry/profiles)
         #[arg(long)]
         source: Option<PathBuf>,
 
-        /// Force initialization even if .codanna exists
+        /// Force initialization even if .quarry exists
         #[arg(short, long)]
         force: bool,
     },
@@ -27,7 +27,7 @@ pub enum ProfileAction {
     /// Install a profile to current workspace
     #[command(
         about = "Install a profile to current workspace",
-        after_help = "Examples:\n  codanna profile install claude\n  codanna profile install claude --source git@github.com:codanna/profiles.git"
+        after_help = "Examples:\n  quarry profile install claude\n  quarry profile install claude --source git@github.com:quarry/profiles.git"
     )]
     Install {
         /// Profile name to install
@@ -49,7 +49,7 @@ pub enum ProfileAction {
     /// List available profiles
     #[command(
         about = "List available profiles",
-        after_help = "Example:\n  codanna profile list\n  codanna profile list --verbose"
+        after_help = "Example:\n  quarry profile list\n  quarry profile list --verbose"
     )]
     List {
         /// Show detailed information
@@ -64,7 +64,7 @@ pub enum ProfileAction {
     /// Show profile status for current workspace
     #[command(
         about = "Show active profile and installation status",
-        after_help = "Example:\n  codanna profile status"
+        after_help = "Example:\n  quarry profile status"
     )]
     Status {
         /// Show detailed file tracking information
@@ -75,7 +75,7 @@ pub enum ProfileAction {
     /// Sync team configuration
     #[command(
         about = "Register providers and install profiles from team configuration",
-        after_help = "Examples:\n  codanna profile sync\n  codanna profile sync --force"
+        after_help = "Examples:\n  quarry profile sync\n  quarry profile sync --force"
     )]
     Sync {
         /// Force installation even if profiles exist or files conflict
@@ -86,7 +86,7 @@ pub enum ProfileAction {
     /// Update an installed profile
     #[command(
         about = "Update an installed profile from its provider",
-        after_help = "Examples:\n  codanna profile update codanna\n  codanna profile update codanna --force"
+        after_help = "Examples:\n  quarry profile update quarry\n  quarry profile update quarry --force"
     )]
     Update {
         /// Profile name to update
@@ -100,7 +100,7 @@ pub enum ProfileAction {
     /// Remove an installed profile
     #[command(
         about = "Remove an installed profile from workspace",
-        after_help = "Examples:\n  codanna profile remove codanna\n  codanna profile remove codanna --verbose"
+        after_help = "Examples:\n  quarry profile remove quarry\n  quarry profile remove quarry --verbose"
     )]
     Remove {
         /// Profile name to remove
@@ -114,7 +114,7 @@ pub enum ProfileAction {
     /// Manage profile providers
     #[command(
         about = "Manage profile providers",
-        after_help = "Examples:\n  codanna profile provider add codanna/claude-provider\n  codanna profile provider add ./my-provider --id custom\n  codanna profile provider list\n  codanna profile provider list --verbose\n  codanna profile provider remove claude-provider"
+        after_help = "Examples:\n  quarry profile provider add quarry/claude-provider\n  quarry profile provider add ./my-provider --id custom\n  quarry profile provider list\n  quarry profile provider list --verbose\n  quarry profile provider remove claude-provider"
     )]
     Provider {
         #[command(subcommand)]
@@ -124,7 +124,7 @@ pub enum ProfileAction {
     /// Verify profile integrity
     #[command(
         about = "Verify profile integrity",
-        after_help = "Examples:\n  codanna profile verify claude\n  codanna profile verify --all\n  codanna profile verify --all --verbose"
+        after_help = "Examples:\n  quarry profile verify claude\n  quarry profile verify --all\n  quarry profile verify --all --verbose"
     )]
     Verify {
         /// Profile name to verify (omit for --all)
@@ -146,7 +146,7 @@ pub enum ProviderAction {
     /// Add a provider to the global registry
     #[command(
         about = "Add a provider to the global registry",
-        after_help = "Examples:\n  codanna profile provider add codanna/claude-provider\n  codanna profile provider add https://github.com/codanna/profiles.git\n  codanna profile provider add ./my-provider --id custom"
+        after_help = "Examples:\n  quarry profile provider add quarry/claude-provider\n  quarry profile provider add https://github.com/quarry/profiles.git\n  quarry profile provider add ./my-provider --id custom"
     )]
     Add {
         /// Provider source (GitHub shorthand, git URL, or local path)
@@ -160,7 +160,7 @@ pub enum ProviderAction {
     /// Remove a provider from the global registry
     #[command(
         about = "Remove a provider from the global registry",
-        after_help = "Example:\n  codanna profile provider remove claude-provider"
+        after_help = "Example:\n  quarry profile provider remove claude-provider"
     )]
     Remove {
         /// Provider ID to remove
@@ -170,7 +170,7 @@ pub enum ProviderAction {
     /// List registered providers
     #[command(
         about = "List registered providers",
-        after_help = "Examples:\n  codanna profile provider list\n  codanna profile provider list --verbose"
+        after_help = "Examples:\n  quarry profile provider list\n  quarry profile provider list --verbose"
     )]
     List {
         /// Show detailed information including available profiles

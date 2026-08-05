@@ -120,8 +120,7 @@ impl Reranker {
         let mut reranker =
             TextRerank::try_new_from_user_defined(user_model, options).map_err(|e| {
                 RerankError::InitError(format!(
-                    "Failed to load custom reranker from '{}': {e}",
-                    custom_ref
+                    "Failed to load custom reranker from '{custom_ref}': {e}"
                 ))
             })?;
 

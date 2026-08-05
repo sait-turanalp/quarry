@@ -199,7 +199,7 @@ async fn run_stdio_server(
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        let settings_path = workspace_root.join(".codanna/settings.toml");
+        let settings_path = workspace_root.join(".quarry/settings.toml");
         let debounce_ms = config.file_watch.debounce_ms;
         let facade_arc = server.get_facade_arc();
 

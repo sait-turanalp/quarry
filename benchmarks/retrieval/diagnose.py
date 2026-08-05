@@ -21,12 +21,12 @@ label = sys.argv[4] if len(sys.argv) > 4 else os.path.basename(evalset)
 rows = [json.loads(line) for line in open(evalset)]
 
 ENV = {
-    "CI_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
-    "CI_RERANKING__ENABLED": "false",
+    "QUARRY_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
+    "QUARRY_RERANKING__ENABLED": "false",
     # The pool must be wide enough that depth is not capped by config.
-    "CI_CHUNK_SEARCH__TOP_K_VECTOR": "200",
-    "CI_CHUNK_SEARCH__TOP_K_BM25": "200",
-    "CI_CHUNK_SEARCH__TOP_K_FUSED": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_VECTOR": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_BM25": "200",
+    "QUARRY_CHUNK_SEARCH__TOP_K_FUSED": "200",
 }
 
 session = Session(ENV, binary=binary, repo=repo)

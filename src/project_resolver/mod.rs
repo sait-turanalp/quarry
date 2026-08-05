@@ -70,7 +70,7 @@ impl ResolutionError {
                 "Check permissions and disk space; delete the cache file to rebuild."
             }
             ResolutionError::InvalidCache { .. } => {
-                "Delete the on-disk cache to rebuild; ensure codanna version matches cache format."
+                "Delete the on-disk cache to rebuild; ensure quarry version matches cache format."
             }
             ResolutionError::IoError { .. } => {
                 "Check file permissions and ensure the path is accessible."
@@ -100,7 +100,7 @@ impl ResolutionError {
             ],
             ResolutionError::InvalidCache { .. } => vec![
                 "Delete the on-disk cache to force a rebuild",
-                "Verify codanna version compatibility with cache format",
+                "Verify quarry version compatibility with cache format",
             ],
             ResolutionError::IoError { .. } => vec![
                 "Check file permissions",

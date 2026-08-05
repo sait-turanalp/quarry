@@ -4,10 +4,10 @@
 //! per-stage latency table.  No qrels or profile TOML files needed — just a
 //! pre-built index.
 
-use crate::chunks::ChunkSearchBackend;
-use crate::indexing::facade::{IndexFacade, SearchTimingMs};
 use crate::IndexPersistence;
 use crate::Settings;
+use crate::chunks::ChunkSearchBackend;
+use crate::indexing::facade::{IndexFacade, SearchTimingMs};
 use std::sync::Arc;
 
 const QUERIES: &[(&str, &str)] = &[

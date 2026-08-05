@@ -27,13 +27,13 @@ DEPTH = int(os.environ.get("CEILING_DEPTH", "500"))
 # Pool must not be the thing that limits us — that is exactly the bug this measurement
 # is meant to see past.
 ENV = {
-    "CI_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
-    "CI_RERANKING__ENABLED": "false",
-    "CI_INDEXING__INCLUDE_TESTS": "true",
-    "CI_CHUNK_SEARCH__TOP_K_VECTOR": os.environ.get("CEILING_POOL", "2000"),
-    "CI_CHUNK_SEARCH__TOP_K_BM25": os.environ.get("CEILING_POOL", "2000"),
-    "CI_CHUNK_SEARCH__TOP_K_FUSED": os.environ.get("CEILING_POOL", "2000"),
-    "CI_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": os.environ.get("CEILING_CAP", "1"),
+    "QUARRY_SEMANTIC_SEARCH__MODEL": "minishlab/potion-code-16M-v2",
+    "QUARRY_RERANKING__ENABLED": "false",
+    "QUARRY_INDEXING__INCLUDE_TESTS": "true",
+    "QUARRY_CHUNK_SEARCH__TOP_K_VECTOR": os.environ.get("CEILING_POOL", "2000"),
+    "QUARRY_CHUNK_SEARCH__TOP_K_BM25": os.environ.get("CEILING_POOL", "2000"),
+    "QUARRY_CHUNK_SEARCH__TOP_K_FUSED": os.environ.get("CEILING_POOL", "2000"),
+    "QUARRY_CHUNK_SEARCH__DIVERSITY_MAX_PER_FILE": os.environ.get("CEILING_CAP", "1"),
 }
 
 session = Session(ENV, binary=binary, repo=repo)

@@ -12,10 +12,10 @@ fn test_settings_init_creates_global_resources() {
     let test_path = test_dir.path();
 
     // Create expected directory structure in our test environment
-    let global_dir = test_path.join(".codanna");
+    let global_dir = test_path.join(".quarry");
     let models_dir = global_dir.join("models");
     let cache_path = test_path.join(".fastembed_cache");
-    let local_config_dir = test_path.join("project").join(".codanna");
+    let local_config_dir = test_path.join("project").join(".quarry");
 
     println!("Test: Settings initialization creates expected structure");
     println!("Test environment: {}", test_path.display());

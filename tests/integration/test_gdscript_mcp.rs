@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use codanna::config::{SemanticSearchConfig, Settings};
-use codanna::indexing::facade::IndexFacade;
-use codanna::mcp::{
-    AnalyzeImpactRequest, CodeIntelligenceServer, SemanticSearchWithContextRequest,
-};
+use quarry::config::{SemanticSearchConfig, Settings};
+use quarry::indexing::facade::IndexFacade;
+use quarry::mcp::{AnalyzeImpactRequest, CodeIntelligenceServer, SemanticSearchWithContextRequest};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::RawContent;
 use tempfile::TempDir;
@@ -33,7 +31,7 @@ async fn test_gdscript_semantic_search_and_analyze_impact() {
         std::fs::write(&full_path, contents).expect("write fixture");
     }
 
-    let index_path = workspace_root.join(".codanna-index");
+    let index_path = workspace_root.join(".quarry-index");
     std::fs::create_dir_all(&index_path).expect("create index directory");
 
     let settings = Settings {

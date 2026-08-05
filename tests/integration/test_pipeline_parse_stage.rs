@@ -2,9 +2,9 @@
 //!
 //! Tests the parse stage in isolation (no Tantivy, no indexing).
 
-use codanna::indexing::file_info::calculate_hash;
-use codanna::indexing::pipeline::{FileContent, init_parser_cache, parse_file};
-use codanna::{Settings, SymbolKind};
+use quarry::indexing::file_info::calculate_hash;
+use quarry::indexing::pipeline::{FileContent, init_parser_cache, parse_file};
+use quarry::{Settings, SymbolKind};
 use std::sync::Arc;
 
 /// Parse Rust code and verify specific symbols are extracted.
@@ -236,8 +236,8 @@ fn test_parse_unsupported_file_type() {
 fn test_raw_symbol_has_no_id_field() {
     // This test documents the design: RawSymbol intentionally lacks an ID
     // IDs are assigned in the COLLECT stage, not during parsing
-    use codanna::indexing::pipeline::RawSymbol;
-    use codanna::types::Range;
+    use quarry::indexing::pipeline::RawSymbol;
+    use quarry::types::Range;
 
     let sym = RawSymbol::new("test", SymbolKind::Function, Range::new(1, 0, 1, 10));
 

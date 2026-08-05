@@ -72,7 +72,7 @@ def run_query(bin_path: Path, cfg_path: Path, cwd: Path, query: str, limit: int)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Prepare rerank candidate chunks for qrels")
-    parser.add_argument("--bin", required=True, help="codanna binary path")
+    parser.add_argument("--bin", required=True, help="quarry binary path")
     parser.add_argument("--config", required=True, help="settings.toml path")
     parser.add_argument("--queries", required=True, help="queries.v1.jsonl path")
     parser.add_argument("--out", required=True, help="output directory")
@@ -80,7 +80,7 @@ def main() -> None:
     parser.add_argument(
         "--cwd",
         default=".",
-        help="working directory for codanna command (default: current dir)",
+        help="working directory for quarry command (default: current dir)",
     )
     args = parser.parse_args()
 

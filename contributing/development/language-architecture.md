@@ -456,7 +456,7 @@ Performance Tests (marked #[ignore]):
 
 ### vs. Language Server Protocol (LSP)
 
-| Aspect | Codanna | LSP |
+| Aspect | Quarry | LSP |
 |--------|---------|-----|
 | Scope | Whole codebase | Single file/project |
 | Speed | Batch optimized | Interactive optimized |
@@ -468,7 +468,7 @@ Performance Tests (marked #[ignore]):
 
 ### vs. ctags/Universal CTags
 
-| Aspect | Codanna | ctags |
+| Aspect | Quarry | ctags |
 |--------|---------|-------|
 | Parser | tree-sitter (robust) | Regex (fragile) |
 | Relationships | Full graph | Tag locations only |
@@ -480,7 +480,7 @@ Performance Tests (marked #[ignore]):
 
 ### vs. Sourcegraph/GitHub Code Search
 
-| Aspect | Codanna | Sourcegraph |
+| Aspect | Quarry | Sourcegraph |
 |--------|---------|-------------|
 | Deployment | Local/self-hosted | Cloud/enterprise |
 | Privacy | Fully local | Data sent to server |

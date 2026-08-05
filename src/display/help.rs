@@ -34,10 +34,10 @@ pub fn create_help_text() -> String {
     let mut help = String::new();
 
     // Quick Start section
-    let quick_start = r#"$ codanna init              # Initialize in current directory
-$ codanna index src         # Index your source code
-$ codanna serve --http --watch      # HTTP server with OAuth
-$ codanna serve --https --watch     # HTTPS server with TLS"#;
+    let quick_start = r#"$ quarry init              # Initialize in current directory
+$ quarry index src         # Index your source code
+$ quarry serve --http --watch      # HTTP server with OAuth
+$ quarry serve --https --watch     # HTTPS server with TLS"#;
 
     help.push_str(&format_help_section("QUICK START", quick_start, true));
     help.push('\n');

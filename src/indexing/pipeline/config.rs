@@ -1,7 +1,7 @@
 //! Pipeline configuration
 //!
 //! Controls threading, batching, and channel sizes for the parallel pipeline.
-//! Reads from Settings (.codanna/settings.toml).
+//! Reads from Settings (.quarry/settings.toml).
 
 use crate::Settings;
 
