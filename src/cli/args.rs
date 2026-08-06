@@ -93,7 +93,7 @@ fn create_custom_help() -> String {
     } else {
         help.push_str(&format!("{}\n", style("Learn More:").cyan().bold()));
     }
-    help.push_str("  GitHub: https://github.com/bartolli/codanna");
+    help.push_str("  GitHub: https://github.com/sait-turanalp/quarry");
 
     help
 }
@@ -292,7 +292,7 @@ pub enum Commands {
     /// Call MCP tools directly (one-shot, advanced)
     #[command(
         about = "Execute MCP tools directly (one-shot)",
-        long_about = "Execute MCP tools directly in one-shot mode. For repeated low-latency queries, prefer `quarry serve`.\n\nSupports positional arguments, key=value pairs, and JSON arguments.",
+        long_about = "Execute MCP tools directly in one-shot mode. For repeated low-latency queries, prefer `quarry serve`.\n\nSupports positional arguments, key=value pairs, and JSON arguments.\n\nTOOLS\n  Where is it\n    semantic_search_chunks        behaviour, described in your own words\n    semantic_search_docs          symbols, by what they do\n    semantic_search_with_context  a symbol plus its docs, callers and impact\n    find_symbol                   an exact name\n    search_symbols                fuzzy or partial names\n    search_documents              the same search over markdown\n\n  What is this place\n    get_project_overview          modules, entry points, dependencies (path: to scope it)\n    get_module_exports            a file's public surface\n    get_type_fields               a type's fields and methods\n    get_state_graph               React hooks in a component\n\n  What depends on it\n    find_callers                  what calls this\n    get_calls                     what this calls\n    get_call_tree                 the whole downstream tree\n    analyze_impact                what breaks if you change it\n\n  Reading and status\n    get_source                    one symbol, or several via symbol_ids\n    get_feature_context           everything about one symbol in a single call\n    get_index_info                what is currently indexed",
         after_help = "Tools:\n  find_symbol       <name>              Exact name lookup\n  search_symbols    query:<text>        Fuzzy text search (kind:<type> limit:<n>)\n  get_calls         <name|symbol_id:N>  What this symbol calls\n  find_callers      <name|symbol_id:N>  What calls this symbol\n  analyze_impact    <name|symbol_id:N>  Full dependency graph\n  semantic_search_docs query:<text>     Symbol-based, for code navigation\n  semantic_search_chunks query:<text>   Chunk-based, for code flow/logic understanding\n  semantic_search_with_context query:<text>  Search with relationships\n  search_documents  query:<text>        Search markdown/text docs\n  get_index_info                        Index stats\n\nExamples:\n  quarry mcp find_symbol <name>\n  quarry mcp search_symbols query:<text> kind:function\n  quarry mcp get_calls <name>\n  quarry mcp get_calls symbol_id:<N>\n  quarry mcp semantic_search_docs query:\"<text>\" limit:5\n  quarry mcp semantic_search_chunks query:\"<text>\" limit:5\n  quarry mcp search_symbols query:<text> --json | jq '.data[].symbol_id'"
     )]
     Mcp {

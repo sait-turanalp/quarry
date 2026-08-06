@@ -331,6 +331,12 @@ pub struct GetProjectOverviewRequest {
     /// Example: depth=2 groups src/api/routes/users.rs into src/api/
     #[serde(default = "default_module_depth")]
     pub module_depth: u32,
+
+    /// Restrict the overview to a subtree, e.g. "packages/web/src". Depth is a dial for how
+    /// coarsely modules are grouped; this is the answer to "what is *this* part", which in a
+    /// monorepo no depth setting can express.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 fn default_module_depth() -> u32 {
@@ -2279,16 +2285,35 @@ impl CodeIntelligenceServer {
             include_graph,
             include_dependencies,
             module_depth,
+            path,
         }): Parameters<GetProjectOverviewRequest>,
     ) -> Result<CallToolResult, McpError> {
         let indexer = self.facade.read().await;
 
         // Get all symbols to extract file paths
-        let all_symbols = indexer.get_all_symbols();
+        let mut all_symbols = indexer.get_all_symbols();
         if all_symbols.is_empty() {
             return Ok(CallToolResult::error(vec![Content::text(
                 "No symbols indexed. Run 'quarry index <directory>' first.".to_string(),
             )]));
+        }
+
+        // Scope to a subtree when asked. Matching on the normalised path keeps "src/api",
+        // "./src/api" and "src/api/" all meaning the same thing.
+        if let Some(ref scope) = path {
+            let needle = scope.trim_start_matches("./").trim_end_matches('/');
+            all_symbols.retain(|s| {
+                s.file_path
+                    .as_ref()
+                    .trim_start_matches("./")
+                    .starts_with(needle)
+            });
+            if all_symbols.is_empty() {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Nothing indexed under '{scope}'. Check the path, or drop it to see the \
+                     whole project."
+                ))]));
+            }
         }
 
         // Extract unique file paths from symbols
@@ -5356,16 +5381,30 @@ impl ServerHandler for CodeIntelligenceServer {
                 name: "quarry".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 title: Some("Quarry Code Intelligence".to_string()),
-                website_url: Some("https://github.com/bartolli/codanna".to_string()),
+                website_url: Some("https://github.com/sait-turanalp/quarry".to_string()),
                 icons: None,
             },
             instructions: Some(
-                "This server provides code intelligence tools for analyzing this codebase. \
-                WORKFLOW: Start with 'semantic_search_with_context', 'semantic_search_docs', or 'semantic_search_chunks' to anchor on the right files and APIs. \
-                Then use 'find_symbol' and 'search_symbols' to lock onto exact files and kinds. \
-                Treat 'get_calls', 'find_callers', and 'analyze_impact' as hints; confirm with code reading or tighter queries (unique names, kind filters). \
-                Use 'search_documents' to find relevant project documentation (markdown files). \
-                Use 'get_index_info' to understand what's indexed."
+                "Quarry indexes this codebase: what is where, what calls what, and what a change would touch. \
+                Reach for it first when you need to locate or understand code; it usually answers in one call, \
+                and grep remains the right fallback when it does not, or when you need every literal occurrence.\n\n\
+                WHERE IS IT: 'semantic_search_chunks' for behaviour described in your own words. \
+                'find_symbol' when you know the name, 'search_symbols' for fuzzy or partial names. \
+                'semantic_search_with_context' when you want the symbol plus its docs, callers and impact at once. \
+                Ask for more results (limit 20) rather than rephrasing: recall climbs steeply with the limit.\n\n\
+                WHAT IS THIS PLACE: 'get_project_overview' for module structure, entry points and dependencies. \
+                Pass 'path' to scope it to a subtree, which is how to understand one package of a monorepo. \
+                'get_module_exports' for a file's public surface, 'get_type_fields' for a type's members.\n\n\
+                WHAT DEPENDS ON IT: 'find_callers' and 'get_calls' for one hop, 'get_call_tree' for the whole \
+                downstream, 'analyze_impact' before changing anything whose blast radius you do not know. \
+                One 'analyze_impact' call replaces a read-several-files loop and sees relationships text search \
+                cannot: type usage, trait implementations, composition.\n\n\
+                READING CODE: results carry line ranges and a body, so read the snippet before opening the file. \
+                'get_source' takes 'symbol_ids' as a list; fetch the bodies you decided you need in one call \
+                rather than one call each.\n\n\
+                IF EVERYTHING COMES BACK EMPTY: the project may not be indexed. Run 'quarry index .' in the \
+                project root; this server picks up the new index within a few seconds without a restart. \
+                'get_index_info' says what is currently indexed."
                 .to_string()
             ),
         }

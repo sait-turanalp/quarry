@@ -1488,12 +1488,19 @@ pub async fn run(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(2) as u32;
 
+            let path = arguments
+                .as_ref()
+                .and_then(|m| m.get("path"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             server
                 .get_project_overview(rmcp::handler::server::wrapper::Parameters(
                     GetProjectOverviewRequest {
                         include_graph,
                         include_dependencies,
                         module_depth,
+                        path,
                     },
                 ))
                 .await

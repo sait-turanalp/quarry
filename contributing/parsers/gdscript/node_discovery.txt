@@ -1,5 +1,5 @@
 === GDScript Language ABI-15 COMPREHENSIVE NODE MAPPING ===
-  Generated: 2026-08-06 00:35:30 UTC
+  Generated: 2026-08-06 00:45:18 UTC
   ABI Version: 14
   Node kind count: 76
 

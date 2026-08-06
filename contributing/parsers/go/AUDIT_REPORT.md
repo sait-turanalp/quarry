@@ -1,6 +1,6 @@
 # Go Parser Symbol Extraction Coverage Report
 
-*Generated: 2026-08-06 00:35:30 UTC*
+*Generated: 2026-08-06 00:45:18 UTC*
 
 ## Summary
 - Key nodes: 22/22 (100%)

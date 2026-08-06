@@ -723,8 +723,13 @@ impl IndexFacade {
     ///
     /// Returns empty vec on error for SimpleIndexer API compatibility.
     pub fn get_all_symbols(&self) -> Vec<Symbol> {
+        // Ask for what is actually there. A fixed ceiling here truncated silently: the
+        // project overview reported "Symbols: 10000" on a 12,120-symbol index, and every
+        // figure derived from it - module tree, entry points, blast radius - was computed
+        // from a partial set with nothing in the output to say so.
+        let total = self.symbol_count().max(1);
         self.document_index
-            .get_all_symbols(10000)
+            .get_all_symbols(total)
             .unwrap_or_else(|e| {
                 tracing::warn!(target: "facade", "get_all_symbols error: {e}");
                 Vec::new()
