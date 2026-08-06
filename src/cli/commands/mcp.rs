@@ -1207,10 +1207,29 @@ pub async fn run(
                 .as_ref()
                 .and_then(|m| m.get("symbol_id"))
                 .and_then(|v| v.as_u64())
-                .unwrap_or_else(|| {
-                    eprintln!("Error: get_source requires 'symbol_id' parameter");
-                    std::process::exit(1);
-                }) as u32;
+                .map(|v| v as u32);
+            // Accept a comma-separated list from the shell, where JSON arrays are awkward.
+            let symbol_ids: Vec<u32> = arguments
+                .as_ref()
+                .and_then(|m| m.get("symbol_ids"))
+                .map(|v| match v {
+                    serde_json::Value::Array(items) => items
+                        .iter()
+                        .filter_map(|i| i.as_u64())
+                        .map(|i| i as u32)
+                        .collect(),
+                    other => other
+                        .as_str()
+                        .unwrap_or_default()
+                        .split(',')
+                        .filter_map(|s| s.trim().parse().ok())
+                        .collect(),
+                })
+                .unwrap_or_default();
+            if symbol_id.is_none() && symbol_ids.is_empty() {
+                eprintln!("Error: get_source requires 'symbol_id' or 'symbol_ids'");
+                std::process::exit(1);
+            }
             let context_lines = arguments
                 .as_ref()
                 .and_then(|m| m.get("context_lines"))
@@ -1219,6 +1238,7 @@ pub async fn run(
             server
                 .get_source(Parameters(GetSourceRequest {
                     symbol_id,
+                    symbol_ids,
                     context_lines,
                 }))
                 .await

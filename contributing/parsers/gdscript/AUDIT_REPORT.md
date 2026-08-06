@@ -1,6 +1,6 @@
 # GDScript Parser Symbol Extraction Coverage Report
 
-*Generated: 2026-08-06 00:28:41 UTC*
+*Generated: 2026-08-06 00:35:30 UTC*
 
 ## Summary
 - Key nodes: 14/17 (82%)

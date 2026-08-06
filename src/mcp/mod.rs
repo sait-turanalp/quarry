@@ -190,7 +190,12 @@ pub struct GetIndexInfoRequest {}
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct GetSourceRequest {
     /// Symbol ID to retrieve source code for
-    pub symbol_id: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol_id: Option<u32>,
+    /// Several symbol IDs, fetched in one call. Use this after a search returns candidates
+    /// rather than calling once per result.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbol_ids: Vec<u32>,
     /// Number of context lines to include before and after the symbol (default: 0)
     #[serde(default)]
     pub context_lines: u32,
@@ -4861,73 +4866,89 @@ fn infer_description_from_dependencies(
 
 impl CodeIntelligenceServer {
     #[tool(
-        description = "Get the source code of a symbol by its ID. Returns the actual code from the file. Use after find_symbol or search_symbols to read implementation details."
+        description = "Get the source code of one symbol, or several in a single call. Pass symbol_id \\
+                       for one, or symbol_ids for a list. Use after a search returns candidates: \\
+                       fetching bodies one at a time is a round trip per candidate."
     )]
     pub async fn get_source(
         &self,
         Parameters(GetSourceRequest {
             symbol_id,
+            symbol_ids,
             context_lines,
         }): Parameters<GetSourceRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let indexer = self.facade.read().await;
-
-        let symbol = match indexer.get_symbol(crate::SymbolId(symbol_id)) {
-            Some(s) => s,
-            None => {
-                return Ok(CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found with id: {symbol_id}"
-                ))]));
-            }
-        };
-
-        let file_path = std::path::Path::new(symbol.file_path.as_ref());
-        let content = match std::fs::read_to_string(file_path) {
-            Ok(c) => c,
-            Err(e) => {
-                return Ok(CallToolResult::error(vec![Content::text(format!(
-                    "Failed to read file '{}': {e}",
-                    symbol.file_path
-                ))]));
-            }
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let start = symbol.range.start_line as usize;
-        let end = (symbol.range.end_line as usize).min(lines.len().saturating_sub(1));
-
-        // Apply context lines
-        let ctx = context_lines as usize;
-        let display_start = start.saturating_sub(ctx);
-        let display_end = (end + ctx).min(lines.len().saturating_sub(1));
-
-        let mut output = format!(
-            "{:?} {} at {}:{}-{} [symbol_id:{}]\n\n",
-            symbol.kind,
-            symbol.name,
-            symbol.file_path,
-            start + 1,
-            end + 1,
-            symbol_id
-        );
-
-        // Add language hint for code block
-        let lang_hint = symbol
-            .language_id
-            .map(|l| format!("{l:?}").to_lowercase())
-            .unwrap_or_default();
-        output.push_str(&format!("```{lang_hint}\n"));
-
-        for i in display_start..=display_end {
-            if i < lines.len() {
-                output.push_str(&format!("{:>4} | {}\n", i + 1, lines[i]));
-            }
+        // A search hands back several candidates at once; fetching their bodies one call at
+        // a time is a round trip per candidate for no reason. Either field works, and both
+        // together are merged, so the single-id form callers already know keeps working.
+        let mut wanted: Vec<u32> = symbol_id.into_iter().chain(symbol_ids).collect();
+        wanted.dedup();
+        if wanted.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Pass symbol_id for one symbol, or symbol_ids for several in one call.".to_string(),
+            )]));
         }
 
-        output.push_str("```\n");
+        let indexer = self.facade.read().await;
+        let mut sections = Vec::new();
+        let mut found = 0usize;
+
+        for id in wanted {
+            let Some(symbol) = indexer.get_symbol(crate::SymbolId(id)) else {
+                sections.push(format!("Symbol not found with id: {id}"));
+                continue;
+            };
+
+            let file_path = std::path::Path::new(symbol.file_path.as_ref());
+            let content = match std::fs::read_to_string(file_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    sections.push(format!("Failed to read file '{}': {e}", symbol.file_path));
+                    continue;
+                }
+            };
+
+            let lines: Vec<&str> = content.lines().collect();
+            let start = symbol.range.start_line as usize;
+            let end = (symbol.range.end_line as usize).min(lines.len().saturating_sub(1));
+
+            // Apply context lines
+            let ctx = context_lines as usize;
+            let display_start = start.saturating_sub(ctx);
+            let display_end = (end + ctx).min(lines.len().saturating_sub(1));
+
+            let mut section = format!(
+                "{:?} {} at {}:{}-{} [symbol_id:{}]\n\n",
+                symbol.kind,
+                symbol.name,
+                symbol.file_path,
+                start + 1,
+                end + 1,
+                id
+            );
+
+            // Add language hint for code block
+            let lang_hint = symbol
+                .language_id
+                .map(|l| format!("{l:?}").to_lowercase())
+                .unwrap_or_default();
+            section.push_str(&format!("```{lang_hint}\n"));
+
+            for i in display_start..=display_end {
+                if i < lines.len() {
+                    section.push_str(&format!("{:>4} | {}\n", i + 1, lines[i]));
+                }
+            }
+
+            section.push_str("```\n");
+            sections.push(section);
+            found += 1;
+        }
+
+        let mut output = sections.join("\n");
 
         // Add guidance
-        if let Some(guidance) = generate_mcp_guidance(indexer.settings(), "get_source", 1) {
+        if let Some(guidance) = generate_mcp_guidance(indexer.settings(), "get_source", found) {
             output.push_str("\n---\n💡 ");
             output.push_str(&guidance);
             output.push('\n');

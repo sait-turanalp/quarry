@@ -18,7 +18,7 @@ Requires `quarry` on PATH and an index in the project (`/quarry-index` builds on
 | Which symbol is this, by what it does? | `semantic_search_docs` |
 | Same, plus docs, callers and impact at once | `semantic_search_with_context` |
 | Where is this exact name defined? | `find_symbol` |
-| Show me its source | `get_source` |
+| Show me its source, or several sources at once | `get_source` |
 | What calls this? | `find_callers` |
 | What does this call? | `get_calls` |
 | The whole downstream tree | `get_call_tree` |
@@ -38,6 +38,14 @@ not have to.
 **Read the snippet before opening the file.** Results carry line ranges and a body. Open
 the file only when the snippet is genuinely not enough. This is the entire point: the
 answer costs a hundred tokens instead of twenty thousand.
+
+**Fetch bodies in one call, not one per result.** `get_source` takes `symbol_ids` as well
+as `symbol_id`: decide which candidates are worth reading, then ask for all of them
+together. Calling it per result is a round trip per result for nothing.
+
+Do not ask for every result's body by reflex. The wanted file is first only about half the
+time, so bodies for all twenty is mostly paying for code you will not read. Search returns
+line-ranged snippets precisely so that reading the whole thing is a choice.
 
 **Ask for more results rather than re-phrasing.** Recall climbs steeply with the limit:
 the wanted file is in the first ten about 76% of the time and in the first twenty about
