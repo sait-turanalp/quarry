@@ -1,0 +1,28 @@
+{
+  "name": "quarry",
+  "version": "0.1.0",
+  "description": "Local code intelligence for coding agents. Semantic search, call graphs and impact analysis over fourteen languages, entirely on your machine.",
+  "author": {
+    "name": "Sait Turanalp",
+    "url": "https://github.com/sait-turanalp"
+  },
+  "homepage": "https://github.com/sait-turanalp/quarry#readme",
+  "repository": "https://github.com/sait-turanalp/quarry",
+  "license": "Apache-2.0",
+  "keywords": [
+    "code-search",
+    "semantic-search",
+    "mcp",
+    "code-intelligence",
+    "local",
+    "embeddings",
+    "call-graph",
+    "impact-analysis"
+  ],
+  "mcpServers": {
+    "quarry": {
+      "command": "quarry",
+      "args": ["serve"]
+    }
+  }
+}
