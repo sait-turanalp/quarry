@@ -1,6 +1,6 @@
 {
   "name": "quarry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local code intelligence for coding agents. Semantic search, call graphs and impact analysis over fourteen languages, entirely on your machine.",
   "author": {
     "name": "Sait Turanalp",

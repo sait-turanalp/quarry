@@ -1,6 +1,6 @@
 [package]
 name = "quarry"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sait Turanalp"]
 edition = "2024"
 description = "Local semantic code search for AI agents - int8 embeddings, no GPU, no network"
