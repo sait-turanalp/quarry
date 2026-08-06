@@ -211,8 +211,8 @@ Search is one of seventeen tools. The rest exist because half of an agent's ques
 | tool | the question it answers |
 |---|---|
 | `search` / `semantic_search_chunks` | Where is the code that does *this*? |
-| `semantic_search_docs` | Which symbol is this, by what it does? |
-| `semantic_search_with_context` | Same, plus docs, callers and impact in one call |
+| `semantic_search_docs` ⚠️ | Which symbol is this, by what it does? |
+| `semantic_search_with_context` ⚠️ | Same, plus docs, callers and impact in one call |
 | `search_symbols` | Full-text symbol lookup with fuzzy matching |
 | `find_symbol` | Where is this exact name defined? |
 | `get_source` | Show me the actual code for it |
@@ -227,6 +227,8 @@ Search is one of seventeen tools. The rest exist because half of an agent's ques
 | `get_state_graph` | React hooks in a component: state, effects, callbacks |
 | `search_documents` | The same search over markdown and docs |
 | `get_index_info` | What is indexed, and how much of it |
+
+⚠️ The two marked tools rank unreliably right now: their symbol-level similarity scores sit near 0.016 whatever you ask, which is below chance, so the order they return is close to arbitrary. `semantic_search_chunks`, which every measurement on this page uses, scores in a healthy 0.6-0.95 range and is the one to reach for. Being fixed; said here rather than left for someone to discover.
 
 An agent that can ask *what breaks if I change this* before editing is a different kind of agent from one that can only grep.
 

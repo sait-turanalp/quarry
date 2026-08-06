@@ -15,8 +15,6 @@ Requires `quarry` on PATH and an index in the project (`/quarry-index` builds on
 | the question | tool |
 |---|---|
 | Where is the code that does *this*? | `semantic_search_chunks` |
-| Which symbol is this, by what it does? | `semantic_search_docs` |
-| Same, plus docs, callers and impact at once | `semantic_search_with_context` |
 | Where is this exact name defined? | `find_symbol` |
 | Show me its source, or several sources at once | `get_source` |
 | What calls this? | `find_callers` |
@@ -28,6 +26,13 @@ Requires `quarry` on PATH and an index in the project (`/quarry-index` builds on
 | Architecture, stack, module relationships | `get_project_overview` |
 | React hooks in a component | `get_state_graph` |
 | The same search over markdown and docs | `search_documents` |
+
+**Two tools are currently unreliable: `semantic_search_docs` and
+`semantic_search_with_context`.** Their symbol-level similarity scores come back pinned
+near 0.016 regardless of the query, which is below what two random vectors would score, so
+their ranking is effectively arbitrary. Use `semantic_search_chunks` instead; it is the one
+the measurements are based on and it scores in a healthy 0.6-0.95 range. Tracked, not
+forgotten.
 
 ## How to use it well
 
