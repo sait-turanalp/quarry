@@ -21,7 +21,7 @@
 </p>
 
 <p>
-  <img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-%E2%9C%93%20one%20command-grey?logo=claude&logoColor=fff&labelColor=D97757">
+  <img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-%E2%9C%93%20plugin-grey?logo=claude&logoColor=fff&labelColor=D97757">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-%E2%9C%93%20MCP-grey?logo=openai&logoColor=fff&labelColor=10A37F">
 </p>
 
@@ -71,16 +71,25 @@ That is the honest shape of the promise: **not always first, but almost always i
 ## Install into your agent
 
 <details open>
-<summary><b>Claude Code</b>: one command</summary>
+<summary><b>Claude Code</b>: a plugin</summary>
 
 ```bash
 brew install sait-turanalp/quarry/quarry
-cd your-project && quarry init && quarry index .
-
-claude mcp add quarry -- quarry serve
 ```
 
-That is it. Ask Claude Code *"where do we validate the auth token?"* and it will call Quarry instead of grepping.
+Then, inside Claude Code:
+
+```
+/plugin marketplace add sait-turanalp/quarry
+/plugin install quarry
+/quarry-index
+```
+
+The plugin registers the MCP server, and installs a skill that tells the agent which of the seventeen tools answers which question — and where grep is still the better instrument. `/quarry-index` builds the index for whichever project you are in.
+
+Ask Claude Code *"where do we validate the auth token?"* and it calls Quarry instead of grepping.
+
+Prefer to wire it up yourself: `claude mcp add quarry -- quarry serve`, then `quarry init && quarry index .` in the project.
 </details>
 
 <details>
@@ -101,6 +110,8 @@ args = ["serve"]
 </details>
 
 Any other MCP client works the same way: the server is `quarry serve` over stdio, or `quarry serve --http` if you need a socket.
+
+The index is a snapshot of the code as it was when you built it. `quarry serve --watch` keeps it current as files change.
 
 ## The numbers
 
