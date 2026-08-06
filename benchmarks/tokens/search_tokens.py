@@ -19,8 +19,16 @@ match, which is what a careful agent does and is a strictly harder opponent:
   grep+read     whole files, in rank order
   grep+context  20 lines either side of every match in the file
 
-The Quarry arm asks once and pays for the snippets that come back. All arms are scored
-identically: tokens spent by the time the wanted file is in hand.
+The two sides are charged differently on purpose, because they behave differently:
+
+  grep     cumulative, stopping at the file it wanted. An agent opens files one at a time
+           and can stop as soon as it has the answer, so it is only charged for what it
+           actually read.
+  Quarry   the WHOLE response. One call returns every result at once; there is no reading
+           the third and declining the rest. All of it enters the context window.
+
+Charging Quarry only up to the matching snippet would flatter it by an order of magnitude,
+and an early version of this script did exactly that.
 
 Token counts are real (tiktoken, o200k_base). A chars/4 estimate is reported next to it
 because other projects publish that way and the two should be comparable.
@@ -155,20 +163,19 @@ try:
     for i, row in enumerate(rows, 1):
         gold = row["gold"]
 
-        # --- Quarry: one call, pay for the snippets ---
-        text = session.search(row["query"], limit=max(DEPTHS))
-        blocks = re.split(r"(?=File:\s)", text)
+        # --- Quarry: one call, pay for the entire response ---
+        # The cost does not depend on where in the list the answer sits: the agent is handed
+        # all of it at once. Charged per depth as the full response at that limit.
         q_files, q_tok, q_est = [], [], []
-        running, running_est = 0, 0
-        for b in blocks:
-            m = FILE_LINE.search(b)
-            if not m:
-                continue
-            running += ntok(b)
-            running_est += len(b) // 4
-            q_files.append(m.group(1).lstrip("./"))
-            q_tok.append(running)
-            q_est.append(running_est)
+        by_depth = {}
+        for d in DEPTHS:
+            text = session.search(row["query"], limit=d)
+            by_depth[d] = (ntok(text), len(text) // 4)
+            if d == max(DEPTHS):
+                for b in re.split(r"(?=File:\s)", text):
+                    m = FILE_LINE.search(b)
+                    if m:
+                        q_files.append(m.group(1).lstrip("./"))
 
         # --- grep + read: rank, then read whole files until the wanted one is in hand ---
         ranked, lines_hit = ripgrep_rank(query_terms(row["query"]))
@@ -201,7 +208,8 @@ try:
         rec = {"id": row.get("id", i), "query": row["query"],
                "quarry": {}, "grep": {}, "grep_context": {}}
         for d in DEPTHS:
-            qt, qe = cost_at(q_files, q_tok, q_est, d)
+            found = any(is_gold(f, gold) for f in q_files[:d])
+            qt, qe = by_depth[d] if found else (None, None)
             gt, ge = cost_at(g_files, g_tok, g_est, d)
             ct, ce = cost_at(g_files, c_tok, c_est, d)
             rec["quarry"][str(d)] = {"tokens": qt, "chars4": qe}

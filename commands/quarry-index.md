@@ -18,6 +18,10 @@ Set up Quarry for this project so its search tools have something to search.
    often not what someone searching their own codebase wants, and
    `QUARRY_INDEXING__INCLUDE_TESTS=true` includes them.
 
+5. Wait about five seconds before querying. A running MCP server keeps the index in memory
+   and re-reads it from disk on a short interval, so a search issued the instant indexing
+   finishes can still come back empty. Nothing needs restarting, it just needs a moment.
+
 Then confirm it works with one real query against this codebase, phrased in plain English
 rather than as an identifier, and show the top result.
 

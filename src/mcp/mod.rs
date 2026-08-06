@@ -20,6 +20,7 @@
 pub mod client;
 pub mod http_server;
 pub mod https_server;
+pub mod index_refresh;
 pub mod knowledge;
 pub mod notifications;
 pub mod react_hooks;
@@ -1370,6 +1371,19 @@ impl CodeIntelligenceServer {
         match search {
             Ok(outcome) => {
                 if outcome.results.is_empty() {
+                    // An empty index and a query that matched nothing look identical from
+                    // here, and telling someone to rephrase when there is nothing to search
+                    // sends them in the wrong direction for as long as it takes them to
+                    // doubt the tool. Say which one it is.
+                    if indexer.symbol_count() == 0 {
+                        return Ok(CallToolResult::success(vec![Content::text(
+                            "The index is empty: nothing has been indexed for this project yet.\n\n\
+                             Run `quarry index .` in the project root. This server notices the \
+                             new index on its own within a few seconds, so retry the search \
+                             after a short pause rather than restarting anything."
+                                .to_string(),
+                        )]));
+                    }
                     let mut output = format!("No code chunks found for query: {query}");
                     if outcome.bm25_only_fallback {
                         output.push_str(

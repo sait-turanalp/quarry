@@ -166,6 +166,15 @@ async fn run_stdio_server(
         server
     };
 
+    // Always: notice when the index on disk stops being the one in memory. Not behind
+    // --watch, because the case this exists for is the index being built *after* the
+    // server started, and nobody passes a flag for a problem they have not hit yet.
+    tokio::spawn(crate::mcp::index_refresh::watch_index(
+        server.get_facade_arc(),
+        settings.clone(),
+        index_path.clone(),
+    ));
+
     // If watch mode is enabled, start the hot-reload watcher
     if watch {
         use crate::watcher::HotReloadWatcher;

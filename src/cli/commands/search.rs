@@ -32,8 +32,8 @@ pub fn run(
             .map(|r| {
                 serde_json::json!({
                     "path": r.filepath,
-                    "line_start": r.line_start,
-                    "line_end": r.line_end,
+                    "line_start": r.line_start + 1,
+                    "line_end": r.line_end + 1,
                     "scope": r.parent_scope,
                     "language": r.language,
                     "score": r.score,
@@ -53,7 +53,9 @@ pub fn run(
 
     let colour = std::io::stdout().is_terminal();
     for r in &outcome.results {
-        let location = format!("{}:{}-{}", r.filepath, r.line_start, r.line_end);
+        // Line numbers are stored zero-based; every human-facing surface adds one, and the
+        // MCP formatter already did. Forgetting it here put the whole preview off by a line.
+        let location = format!("{}:{}-{}", r.filepath, r.line_start + 1, r.line_end + 1);
         let scope = r.parent_scope.as_deref().unwrap_or_default();
 
         if colour {
@@ -70,7 +72,7 @@ pub fn run(
         }
 
         for (offset, line) in r.snippet.lines().take(PREVIEW_LINES).enumerate() {
-            let number = r.line_start as usize + offset;
+            let number = r.line_start as usize + 1 + offset;
             if colour {
                 println!("{:>6} {}", number.green(), line);
             } else {

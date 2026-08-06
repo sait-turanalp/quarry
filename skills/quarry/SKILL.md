@@ -59,6 +59,14 @@ thing that does X", Quarry is both more accurate and vastly cheaper.
 
 ## If there is no index
 
-Searches come back empty when the project has never been indexed. Run `/quarry-index`, or
-`quarry init && quarry index .` in the project root. The index is a snapshot: after a large
-change, re-run it, or use `quarry serve --watch` to keep it current.
+Searches come back empty when the project has never been indexed, and the tool says so
+rather than pretending the query was bad. Run `/quarry-index`, or `quarry init && quarry
+index .` in the project root.
+
+**After indexing, wait a moment before searching.** The server holds the index in memory
+and checks the disk every few seconds, so a search fired immediately after `quarry index`
+can still answer from the empty snapshot. Give it five seconds and retry; nothing needs
+restarting.
+
+The index is a snapshot of the code at the time it was built. After a large change, run it
+again, or start the server with `quarry serve --watch` to keep it current automatically.
